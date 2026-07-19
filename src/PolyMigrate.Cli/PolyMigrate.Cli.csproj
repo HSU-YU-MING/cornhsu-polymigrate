@@ -4,10 +4,10 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>polymigrate</AssemblyName>
 
-    <!-- dotnet tool install -g polymigrate(規劃書 §2.2 / §2.10) -->
+    <!-- dotnet tool install -g Cornhsu.PolyMigrate → 指令名仍是 polymigrate(§2.10 定案) -->
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>polymigrate</ToolCommandName>
-    <PackageId>PolyMigrate</PackageId>
+    <PackageId>Cornhsu.PolyMigrate</PackageId>
     <Description>The i18n-first static-site migrator. Config-driven, offline-rerunnable legacy-site to static-site migration with built-in bilingual page pairing.</Description>
     <IsPackable>true</IsPackable>
   </PropertyGroup>

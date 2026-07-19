@@ -63,7 +63,7 @@ render-equivalent or strictly more faithful.
 ## Install & use
 
 ```
-dotnet tool install -g polymigrate          # not yet published; local pack works today
+dotnet tool install -g Cornhsu.PolyMigrate  # not yet published; local pack works today
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
 polymigrate verify out/                     # link/media/frontmatter audit, CI-friendly exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
@@ -93,8 +93,8 @@ pairing:
 
 | Path | Contents |
 |---|---|
-| `src/PolyMigrate.Core` | extraction / pairing / verification library (NuGet: `PolyMigrate.Core`) |
-| `src/PolyMigrate.Cli` | the `polymigrate` CLI (NuGet tool package: `PolyMigrate`) |
+| `src/PolyMigrate.Core` | extraction / pairing / verification library (NuGet: `Cornhsu.PolyMigrate.Core`) |
+| `src/PolyMigrate.Cli` | the `polymigrate` CLI (NuGet tool package: `Cornhsu.PolyMigrate`) |
 | `tests/` | 100 unit/integration tests + an offline fixture site with golden-file baselines |
 | `docs/contracts.md` | file-format contracts between pipeline phases |
 

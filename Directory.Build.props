@@ -6,12 +6,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <!-- 套件共用中繼資料;正式發佈時版本改由 CI/tag 注入 -->
+    <!-- 套件共用中繼資料;正式發佈時版本改由 CI/tag 注入。
+         套件 ID 用 Cornhsu.* 前綴:作者的 NuGet verified prefix(藍勾勾),與既有套件一致 -->
     <Version>1.0.0-preview.1</Version>
-    <Authors>HSU-YU-MING and PolyMigrate contributors</Authors>
+    <Authors>許彧銘 (Cornhsu)</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/polymigrate/polymigrate</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/HSU-YU-MING/cornhsu-polymigrate</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/HSU-YU-MING/cornhsu-polymigrate</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageTags>i18n;migration;multilingual;static-site;markdown;bilingual</PackageTags>
   </PropertyGroup>
 

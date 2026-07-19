@@ -49,7 +49,7 @@ PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品
 ## 安裝與使用
 
 ```
-dotnet tool install -g polymigrate          # 尚未發佈;本機 pack 已可用
+dotnet tool install -g Cornhsu.PolyMigrate  # 尚未發佈;本機 pack 已可用
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
 polymigrate verify out/                     # 連結/媒體/frontmatter 巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
@@ -64,8 +64,8 @@ polymigrate fetch-orphans site.yaml --section news
 
 | 路徑 | 內容 |
 |---|---|
-| `src/PolyMigrate.Core` | 抽取/配對/巡檢核心(NuGet:`PolyMigrate.Core`) |
-| `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`PolyMigrate`) |
+| `src/PolyMigrate.Core` | 抽取/配對/巡檢核心(NuGet:`Cornhsu.PolyMigrate.Core`) |
+| `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
 | `tests/` | 100 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
 
