@@ -12,6 +12,7 @@
     <Authors>許彧銘 (Cornhsu)</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/HSU-YU-MING/cornhsu-polymigrate</PackageProjectUrl>
     <RepositoryUrl>https://github.com/HSU-YU-MING/cornhsu-polymigrate</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -21,5 +22,6 @@
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 </Project>
