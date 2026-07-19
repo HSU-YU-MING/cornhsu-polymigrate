@@ -22,5 +22,10 @@
   與 Pillow 原型逐張比對一致。影像庫用 Magick.NET(ImageSharp 4.x 建置即索取授權金鑰,棄用)。
 - **`probe-orphans` / `fetch-orphans`**:找回「索引移除但頁面還在」的孤兒文章——
   逐日雙日期格式候選 + A–D 後綴鏈、409 bot 防護退避、config 宣告 cookie 繞法、禮貌間隔。
+- **redirect 一鍵可部署**:`redirect_map` 的 `new_path` 以內文連結改寫的同一套路由規則自動填,
+  另出 `redirects.nginx.conf` 與 Netlify `_redirects`(old==new 略過防迴圈)。
+- **重跑快取**:媒體 sha1 以 (大小, mtime) 快取,4.6GB 實站重跑 30s → 5s;快取是內部檔、刪掉不影響輸出。
+- **跨平台路徑防護**:Windows 保留裝置名/非法字元/尾點空白 → 任何平台一致拒寫並記入
+  `path_issues.csv`(兩平台產出必須相同);大小寫碰撞偵測;超長路徑 warning。
 - **工程底盤**:一站一份 YAML config(未知欄位報錯)、Phase 輸出契約文件、
-  離線 fixture 雙語站 + golden-file 測試、100 個單元/整合測試、三平台 CI。
+  離線 fixture 雙語站 + golden-file 測試、119 個單元/整合測試、三平台 CI。
