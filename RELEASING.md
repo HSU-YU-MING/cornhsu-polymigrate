@@ -8,11 +8,15 @@
 1. **把 repo 推上 GitHub**:`HSU-YU-MING/cornhsu-polymigrate`
    (`Directory.Build.props` 的 `RepositoryUrl` 與 `release.yml` 都已指向這個路徑。)
 
-2. **在 nuget.org 設定 Trusted Publisher**(帳號 → Trusted Publishing),兩個套件各一條:
-   - Package:`Cornhsu.PolyMigrate` 與 `Cornhsu.PolyMigrate.Core`(新 ID 可由首次發佈建立)
-   - Repository owner:`HSU-YU-MING`
+2. **在 nuget.org 設定 Trusted Publisher**(帳號 → Trusted Publishing),**一條政策即可**
+   (政策綁的是 repo+workflow;`Cornhsu.PolyMigrate` 與 `Cornhsu.PolyMigrate.Core` 兩個新 ID
+   都會在首次發佈時建立在這條政策下):
+   - Policy Name:`Cornhsu.PolyMigrate`(自由文字;沿用「以主套件 ID 命名」的既有慣例,同 Cornhsu.Parity)
+   - Package Owner:`Cornhsu`
+   - Repository Owner:`HSU-YU-MING`
    - Repository:`cornhsu-polymigrate`
-   - Workflow:`release.yml`
+   - Workflow File:`release.yml`
+   - Environment:留空(workflow 未使用 GitHub environment)
 
 3. 確認 `release.yml` 裡 `NuGet/login` 的 `user:` = nuget.org 使用者名稱(目前 `Cornhsu`)。
 
