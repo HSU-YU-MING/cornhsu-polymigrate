@@ -26,4 +26,5 @@
 - [ ] Big5 編碼頁 + header/meta 宣告不一致(§3.1,待 Phase 0 編碼偵測)
 - [ ] EXIF 方向顛倒的圖片(待縮圖功能)
 - [ ] CSS `url()` 背景圖(待 Phase 1)
-- [ ] Windows 危險檔名(保留字、超長路徑、大小寫碰撞)(§3.4,待 slug 產生器)
+- [x] Windows 危險檔名(保留字、非法字元、尾點空白、大小寫碰撞、超長路徑)(§3.4)
+      ——以純函式單元測試覆蓋(PathSafetyTests):Windows 檔案系統本身建不出 con.* 等檔名,fixture 無法承載

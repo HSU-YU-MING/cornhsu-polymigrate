@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Inventory;
@@ -39,7 +38,15 @@ public sealed class ExtractionReport
     /// <summary>啟發式配對建議的組數(§1.4),待人工覆核。</summary>
     public int SuggestedPairs { get; init; }
 
-    public bool HasWarnings => MissingImages > 0 || NeedFetchMedia > 0;
+    /// <summary>路徑安全問題(§3.4):error = 拒寫並跳過該頁;warning = 照寫但記錄(如超長路徑)。</summary>
+    public required List<(string Severity, string Page, string Issue)> PathIssues { get; init; }
+
+    public int PagesSkippedUnsafe => PathIssues.Count(i => i.Severity == "error");
+
+    public bool HasErrors => PagesSkippedUnsafe > 0;
+
+    public bool HasWarnings => MissingImages > 0 || NeedFetchMedia > 0
+        || PathIssues.Any(i => i.Severity == "warning");
 }
 
 /// <summary>
@@ -75,6 +82,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
     {
         var parser = new RawPageParser(config);
         var extractor = new PageExtractor(config);
+        var links = new LinkRewriter(config);
         var encoding = TextEncodings.Resolve(config.Site.Encoding);
         var locales = config.UrlPattern.LangMap.Values.Distinct().ToList();
 
@@ -84,9 +92,11 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         var inventory = new SortedDictionary<string, InventoryRecord>(StringComparer.Ordinal);
         var mediaRefs = new SortedDictionary<string, (string Orig, SortedSet<string> Refs, SortedSet<string> Alts)>(StringComparer.Ordinal);
-        var redirects = new List<(string OldUrl, string Locale, string TranslationKey)>();
+        var redirects = new List<(string OldUrl, string NewPath, string Locale, string TranslationKey)>();
         var missing = new List<MissingImage>();
         var needFetch = new SortedSet<string>(StringComparer.Ordinal);
+        var pathIssues = new List<(string Severity, string Page, string Issue)>();
+        var seenPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var pagesWritten = 0;
 
         foreach (var file in files)
@@ -94,11 +104,25 @@ public sealed class ExtractionPipeline(SiteConfig config)
             var page = parser.Parse(paths.RawDir, file);
             var extracted = extractor.Extract(page, File.ReadAllText(file, encoding), paths.MediaDir);
 
-            if (!dryRun)
+            // §3.4:不安全路徑在「任何平台」都一致地拒寫並記錄——兩平台產出必須相同
+            var relPath = MarkdownRelativePath(page);
+            var unsafeIssue = PathSafety.Check(relPath) ?? PathSafety.RegisterOrCollide(seenPaths, relPath);
+            if (unsafeIssue is not null)
             {
-                WriteMarkdown(paths.OutDir, extracted);
+                pathIssues.Add(("error", relPath, unsafeIssue));
             }
-            pagesWritten++;
+            else
+            {
+                if (PathSafety.CheckLength(Path.GetFullPath(Path.Combine(paths.OutDir, relPath))) is { } lengthIssue)
+                {
+                    pathIssues.Add(("warning", relPath, lengthIssue));
+                }
+                if (!dryRun)
+                {
+                    WriteMarkdown(paths.OutDir, relPath, extracted);
+                }
+                pagesWritten++;
+            }
 
             // inventory 以 translation_key 聚合各語言版本
             if (!inventory.TryGetValue(page.TranslationKey, out var record))
@@ -132,7 +156,8 @@ public sealed class ExtractionPipeline(SiteConfig config)
             }
             missing.AddRange(extracted.MissingImages);
             needFetch.UnionWith(extracted.NeedFetch);
-            redirects.Add((page.SourceUrl, page.Locale, page.TranslationKey));
+            redirects.Add((page.SourceUrl, links.RouteForPath(new Uri(page.SourceUrl).AbsolutePath),
+                page.Locale, page.TranslationKey));
         }
 
         var suggestions = SuggestPairs(inventory, locales);
@@ -141,21 +166,28 @@ public sealed class ExtractionPipeline(SiteConfig config)
             WriteContentInventory(paths.OutDir, inventory, locales, suggestions);
             WriteMediaManifest(paths.OutDir, paths.MediaDir, mediaRefs);
             WriteRedirectMap(paths.OutDir, redirects);
+            WriteRedirectExports(paths.OutDir, redirects);
             WriteMissingImages(paths.OutDir, missing);
+            WritePathIssues(paths.OutDir, pathIssues);
             File.WriteAllText(Path.Combine(paths.OutDir, "need_fetch_media.txt"),
                 string.Join('\n', needFetch), Utf8NoBom);
         }
 
         return BuildReport(inventory, locales, pagesWritten, mediaRefs.Count, missing.Count, needFetch.Count,
-            suggestions.Count / 2);
+            suggestions.Count / 2, pathIssues);
     }
 
-    private static void WriteMarkdown(string outDir, ExtractedPage extracted)
+    private static string MarkdownRelativePath(RawPage page)
+    {
+        string[] segments = ["content", page.LangPrefix, page.Section, page.Slug + ".md"];
+        return string.Join('/', segments.Where(s => s.Length > 0));
+    }
+
+    private static void WriteMarkdown(string outDir, string relativePath, ExtractedPage extracted)
     {
         var page = extracted.Page;
-        string[] segments = [outDir, "content", page.LangPrefix, page.Section];
-        var dir = Path.Combine([.. segments.Where(s => s.Length > 0)]);
-        Directory.CreateDirectory(dir);
+        var target = Path.Combine(outDir, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
 
         // frontmatter:欄位序 = 規格 fm_data 序(lang 改輸出 BCP-47 locale,§3.3)
         var frontmatter = new Dictionary<string, object?>
@@ -176,8 +208,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             ["videos"] = extracted.Videos,
             ["documents"] = extracted.Documents,
         };
-        File.WriteAllText(
-            Path.Combine(dir, page.Slug + ".md"),
+        File.WriteAllText(target,
             FrontmatterSerializer.ToBlock(frontmatter) + extracted.BodyMarkdown + "\n",
             Utf8NoBom);
     }
@@ -268,6 +299,8 @@ public sealed class ExtractionPipeline(SiteConfig config)
         string outDir, string mediaDir,
         SortedDictionary<string, (string Orig, SortedSet<string> Refs, SortedSet<string> Alts)> mediaRefs)
     {
+        // 雜湊快取:沒動過的檔案免重讀(重跑數 GB 媒體從分鐘級降到秒級)
+        var cache = MediaHashCache.Load(Path.Combine(outDir, ".polymigrate", "media_sha1_cache.csv"));
         var rows = new List<IReadOnlyList<string>>
         {
             new[] { "local_path", "original_url", "referenced_by", "alt", "sha1", "bytes" },
@@ -281,36 +314,52 @@ public sealed class ExtractionPipeline(SiteConfig config)
                 // media 不在輸出目錄下(或跨磁碟)→ 一律用中性的 media/ 相對路徑,輸出不可含機器路徑
                 localPath = "media/" + relative;
             }
-            var (sha1, bytes) = HashFile(localAbs);
+            var (sha1, bytes) = cache.GetOrCompute(relative, localAbs);
             rows.Add(new[] { localPath, entry.Orig,
                 string.Join(" | ", entry.Refs), string.Join(" | ", entry.Alts), sha1, bytes });
         }
         Csv.Write(Path.Combine(outDir, "media_manifest.csv"), rows);
+        cache.Save();
     }
 
-    private static (string Sha1, string Bytes) HashFile(string path)
+    private static void WriteRedirectMap(string outDir,
+        List<(string OldUrl, string NewPath, string Locale, string TranslationKey)> redirects)
     {
-        try
-        {
-            using var stream = File.OpenRead(path);
-            var hash = Convert.ToHexStringLower(SHA1.HashData(stream));
-            return (hash, stream.Length.ToString());
-        }
-        catch (IOException)
-        {
-            return ("", "");
-        }
-    }
-
-    private static void WriteRedirectMap(string outDir, List<(string OldUrl, string Locale, string TranslationKey)> redirects)
-    {
-        // old_url 收滿,new_path 待人工/後續階段補
+        // new_path 由 LinkRewriter 同一套路由規則自動填(與內文連結改寫一致);人工可在 CSV 覆改
         var rows = new List<IReadOnlyList<string>>
         {
             new[] { "old_url", "new_path", "lang", "translation_key" },
         };
-        rows.AddRange(redirects.Select(r => new[] { r.OldUrl, "", r.Locale, r.TranslationKey }));
+        rows.AddRange(redirects.Select(r => new[] { r.OldUrl, r.NewPath, r.Locale, r.TranslationKey }));
         Csv.Write(Path.Combine(outDir, "redirect_map.csv"), rows);
+    }
+
+    /// <summary>301 設定檔直接可用的兩種格式:nginx location 區塊與 Netlify _redirects。</summary>
+    private static void WriteRedirectExports(string outDir,
+        List<(string OldUrl, string NewPath, string Locale, string TranslationKey)> redirects)
+    {
+        var pairs = redirects
+            .Select(r => (Old: new Uri(r.OldUrl).AbsolutePath, New: r.NewPath))
+            .Where(p => p.Old != p.New)          // 相同路徑不出 301,避免轉址迴圈
+            .OrderBy(p => p.Old, StringComparer.Ordinal)
+            .ToList();
+
+        File.WriteAllText(Path.Combine(outDir, "redirects.nginx.conf"),
+            string.Join('\n', pairs.Select(p => $"location = {p.Old} {{ return 301 {p.New}; }}")) + "\n",
+            Utf8NoBom);
+        File.WriteAllText(Path.Combine(outDir, "_redirects"),
+            string.Join('\n', pairs.Select(p => $"{p.Old} {p.New} 301")) + "\n",
+            Utf8NoBom);
+    }
+
+    private static void WritePathIssues(string outDir, List<(string Severity, string Page, string Issue)> issues)
+    {
+        var rows = new List<IReadOnlyList<string>> { new[] { "severity", "page", "issue" } };
+        rows.AddRange(issues
+            .OrderBy(i => i.Severity, StringComparer.Ordinal)
+            .ThenBy(i => i.Page, StringComparer.Ordinal)
+            .Select(i => new[] { i.Severity, i.Page, i.Issue }));
+        Csv.Write(Path.Combine(outDir, "path_issues.csv"), rows);
     }
 
     private static void WriteMissingImages(string outDir, List<MissingImage> missing)
@@ -325,7 +374,8 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
     private static ExtractionReport BuildReport(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
-        int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs)
+        int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs,
+        List<(string Severity, string Page, string Issue)> pathIssues)
     {
         var typeCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var flagCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -354,6 +404,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             MissingImages = missingCount,
             NeedFetchMedia = needFetchCount,
             SuggestedPairs = suggestedPairs,
+            PathIssues = pathIssues,
         };
     }
 }

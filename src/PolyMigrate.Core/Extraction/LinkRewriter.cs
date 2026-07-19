@@ -41,8 +41,16 @@ public sealed class LinkRewriter
         {
             return href;
         }
+        return RouteForPath(resolved.AbsolutePath);
+    }
 
-        var path = resolved.AbsolutePath;
+    /// <summary>
+    /// 站內路徑 → 新路由:去動態副檔名、收攏 index。
+    /// 內文連結改寫與 redirect_map 的 new_path 共用同一套規則(兩者不同步 = 301 打到破頁)。
+    /// </summary>
+    public string RouteForPath(string absolutePath)
+    {
+        var path = absolutePath;
         foreach (var ext in _stripExtensions)
         {
             if (path.EndsWith(ext, StringComparison.Ordinal))

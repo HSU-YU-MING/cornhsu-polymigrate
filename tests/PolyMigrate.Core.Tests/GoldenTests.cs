@@ -93,7 +93,7 @@ public class GoldenTests : IDisposable
     private static List<string> RelativeFiles(string root) =>
         [.. Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
-            .Where(f => f != "verify_report.csv")
+            .Where(f => f != "verify_report.csv" && !f.StartsWith(".polymigrate/", StringComparison.Ordinal))
             .OrderBy(f => f, StringComparer.Ordinal)];
 
     private static string Normalize(string text) => text.Replace("\r", "");

@@ -125,8 +125,13 @@ static int RunExtract(string[] args)
         Console.WriteLine($"  media referenced : {report.MediaReferenced}");
         Console.WriteLine($"  missing images   : {report.MissingImages} (recorded in missing_images.csv, non-blocking)");
         Console.WriteLine($"  need-fetch media : {report.NeedFetchMedia} (recorded in need_fetch_media.txt)");
+        Console.WriteLine($"  path issues      : {report.PathIssues.Count} ({report.PagesSkippedUnsafe} pages skipped as unsafe, see path_issues.csv)");
+        foreach (var (severity, pagePath, issue) in report.PathIssues.Take(10))
+        {
+            Console.WriteLine($"  [{severity}] {pagePath}: {issue}");
+        }
         Console.WriteLine(new string('=', 50));
-        return report.HasWarnings ? 1 : 0;
+        return report.HasErrors ? 2 : report.HasWarnings ? 1 : 0;
     }
     catch (ConfigException ex)
     {

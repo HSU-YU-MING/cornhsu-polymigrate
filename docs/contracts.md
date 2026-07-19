@@ -72,9 +72,23 @@ date: ...             # 正規化 ISO 8601(§2.6:YYYYMMDD vs MMDDYYYY 坑)
 (`shared_media` 共用相簿 / `date` slug 日期正規化後相等 / `title_similarity` bigram Dice ≥ 0.5);
 無任何證據就不硬配(missing),最終決定權在人。
 
-**`redirect_map.csv`**:舊 URL → 新路徑;MVP 出中性 CSV,匯出格式(nginx / `_redirects` / web.config)留擴充位(§3.10)。
+**`redirect_map.csv`**:`old_url, new_path, lang, translation_key`。
+`new_path` 由 LinkRewriter 的同一套路由規則自動填(與內文連結改寫一致,兩者不同步 = 301 打到破頁);
+人工可在 CSV 覆改。另出兩種可直接部署的 301 格式(old==new 略過防迴圈,依 old path 排序):
 
-**執行報告**(§3.8):warning / error 分級、壞圖清單、配不起來的頁面、跳過原因。格式 TODO 0.5 定案。
+- `redirects.nginx.conf` — `location = {old} {{ return 301 {new}; }}`
+- `_redirects` — Netlify 格式 `{old} {new} 301`
+
+**`path_issues.csv`**(§3.4):`severity, page, issue`。
+error(保留裝置名/非法字元/尾點空白/大小寫碰撞)= 該頁在**任何平台**都一致地拒寫並記錄
+——兩平台產出必須相同;warning(超長路徑)照寫但記錄。恆輸出(乾淨站只有表頭)。
+
+**執行報告**(§3.8):warning / error 分級、壞圖清單、配不起來的頁面、跳過原因;
+exit code:0 乾淨 / 1 warning(壞圖、待補媒體、超長路徑)/ 2 error(不安全路徑拒寫)。
+
+**內部加速檔(非交付物)**:`.polymigrate/media_sha1_cache.csv` —
+(路徑, 大小, mtime)→ sha1 快取,沒動過的媒體免重讀(4.6GB 實測重跑 30s → 5s);
+刪掉只會變慢、不影響輸出;golden 比對排除此目錄。
 
 ## Phase 4(verify)
 
