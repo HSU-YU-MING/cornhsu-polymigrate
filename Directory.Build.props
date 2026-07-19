@@ -6,11 +6,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <!-- 套件共用中繼資料;版本先固定 0.1.0-dev,發佈流程建立後改由 CI 注入 -->
-    <Version>0.1.0-dev</Version>
-    <Authors>PolyMigrate contributors</Authors>
+    <!-- 套件共用中繼資料;正式發佈時版本改由 CI/tag 注入 -->
+    <Version>1.0.0-preview.1</Version>
+    <Authors>HSU-YU-MING and PolyMigrate contributors</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/polymigrate/polymigrate</RepositoryUrl>
-    <PackageTags>i18n;migration;multilingual;static-site;markdown</PackageTags>
-    <!-- TODO(1.0 前): 授權定案(MIT / Apache-2.0,見規劃書 §3.7)後補 PackageLicenseExpression -->
+    <PackageTags>i18n;migration;multilingual;static-site;markdown;bilingual</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 </Project>

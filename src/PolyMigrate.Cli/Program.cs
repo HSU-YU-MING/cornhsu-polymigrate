@@ -334,7 +334,7 @@ static async Task<int> RunFetchOrphans(string[] args)
         var slugs = File.ReadAllLines(slugsFile).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
         Console.WriteLine($"Fetching {slugs.Count} orphan slugs × {config.UrlPattern.LangMap.Count} langs...");
 
-        using var http = PolyMigrate.Core.Orphans.OrphanProber.CreateHttpClient(config);
+        using var http = PolyMigrate.Core.Orphans.OrphanProber.CreateHttpClient(config, allowRedirects: true);
         var report = await new PolyMigrate.Core.Orphans.OrphanFetcher(config, http)
             .FetchAsync(slugs, section, Path.Combine(root, "raw"), Path.Combine(root, "media"), Console.WriteLine);
 

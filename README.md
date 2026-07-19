@@ -1,34 +1,104 @@
 # PolyMigrate
 
-> **The i18n-first static-site migrator** — the only site migrator that pairs your bilingual pages automatically.
+> **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
-Config 驅動、可離線重跑的「舊站 → 靜態站」搬遷工具,天生為多語言而生,以 .NET 實作。
+[繁體中文說明](README.zh-Hant.md)
 
-**狀態:0.1 開發中。** Phase 2 抽取管線(`polymigrate extract`)已可運作,並以香雲寺全站
-(516 頁、281 個 translation_key)對照 Python 原型完成端到端驗證。規劃見[評估與規劃書](搬遷工具_評估與規劃書.md)。
+PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, static-site-ready
+Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
+Config-driven, fully offline-rerunnable, built on .NET.
 
-## 為什麼
+**Status: 1.0 preview.** The extraction pipeline, pairing, verification, thumbnails and
+orphan-page recovery are complete and validated against a real full-site migration (see below).
 
-多語言機構站(政府、大學、NGO、宗教組織)遷移時,都在手工對配多語版本 —— 沒有任何現有工具解這個問題。PolyMigrate 用「去語言前綴的路徑」自動配對可配的頁面,並列出配不起來的頁面供人工覆核。背後是一次真實完成的整站搬遷(495 頁、4.6GB 媒體、231 篇雙語文章、全站巡檢 0 錯誤)。
+## Why
 
-## 產品形態
+Every multilingual institution site (governments, universities, NGOs, religious organizations)
+faces the same painful migration step: matching up the language versions of every page by hand.
+No existing tool solves this — general-purpose scrapers extract pages one at a time and leave
+the pairing to you. PolyMigrate:
 
-| | 給誰 | 怎麼裝 |
-|---|---|---|
-| CLI | 只想用的人 | `dotnet tool install -g polymigrate`(尚未發佈) |
-| `PolyMigrate.Core` | 要嵌進自己 pipeline 的人 | NuGet(尚未發佈) |
+- **pairs automatically** where filenames are symmetric (`/ch/news/x` ↔ `/en/news/x` share a
+  `translation_key`),
+- **suggests pairs heuristically** where they are not — shared photo albums, normalized dates
+  hidden in slugs (`20240121` vs `01212024`), title similarity,
+- **honestly reports what it cannot pair**, producing a review-ready gap inventory instead of
+  guessing wrong.
 
-## 指令
+Languages are not limited to two: declare any number in `lang_map` and every output
+(frontmatter, inventories, pairing) expands accordingly. All locale output is standard BCP-47.
 
-| 指令 | 功能 |
+## Battle-tested defaults
+
+The extraction pipeline bakes in fixes for real problems found during a real migration —
+things generic tools and LLM extractors silently get wrong:
+
+| Real-world pit | Built-in handling |
 |---|---|
-| `polymigrate extract <config>` | Phase 2 結構化抽取:鏡像 HTML → frontmatter Markdown + 四份清單 + 雙語配對(含啟發式建議);`--dry-run` 只報告不寫檔 |
-| `polymigrate verify <dir>` | 全站巡檢:frontmatter 欄位、內部連結、媒體引用;已知原站壞圖降為 warning |
-| `polymigrate thumbs <config>` | 縮圖:EXIF 自動轉正(手機直拍坑)、等比縮至 max_width、增量可重跑 |
-| `polymigrate probe-orphans <config>` | 探測「索引移除但頁面還在」的孤兒頁(逐日雙日期格式 + 後綴變體,禮貌間隔) |
-| `polymigrate fetch-orphans <config>` | 抓回探測到的孤兒頁與其媒體進鏡像 |
+| Phone photos sideways/upside-down in thumbnails | EXIF auto-orientation before resizing |
+| Titles with colons / numeric slugs with leading zeros | YAML-library escaping, forced quoting |
+| `%20` double-encoding in image paths | decoded on disk, single-encoded in URLs |
+| Markdown converters dropping videos / iframes / PDFs | placeholder round-trip keeps embeds in place |
+| `<title>` polluted with dates and site name | body-first title extraction + configurable cleanup |
+| Mixed date formats (`YYYYMMDD` / `MMDDYYYY` / `DDMMYYYY`) | all recognized and normalized |
+| Old articles removed from indexes but still served | orphan probing (per-day URL candidates + suffix variants) |
+| Broken images on the source site | detected, recorded, never blocks the run |
+| Bot protection (JS cookie challenge → 409) | declarative cookie workaround in config |
+| Legacy encodings (Big5, GB2312, …) | declared or defaulted per site |
 
-## 開發
+## Case study: full temple-site migration
+
+PolyMigrate's pipeline is the productized version of a completed real migration
+(a bilingual Buddhist temple site, Chinese/English):
+
+- **516 pages** mirrored and extracted, **4.6 GB** of media
+- **281 translation keys**; **231 bilingual articles paired automatically** by symmetric paths
+- built-in verifier: **1,269 internal links + 4,116 media references checked — 0 errors**
+- 13 orphaned articles recovered via date probing; 141 EXIF-rotated photos fixed in thumbnails
+
+The original Python prototype's output was used as the golden baseline while porting: 466/516
+extracted bodies are byte-identical after whitespace normalization, and the remainder are
+render-equivalent or strictly more faithful.
+
+## Install & use
+
+```
+dotnet tool install -g polymigrate          # not yet published; local pack works today
+polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
+polymigrate verify out/                     # link/media/frontmatter audit, CI-friendly exit codes
+polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
+polymigrate probe-orphans site.yaml --section news --years 2021-2023
+polymigrate fetch-orphans site.yaml --section news
+```
+
+One YAML config per site describes everything site-specific — see
+[examples/ibps-austin.yaml](examples/ibps-austin.yaml) for a fully-annotated real example.
+
+```yaml
+config_version: 1
+site:
+  base_url: https://legacy.example.org
+url_pattern:
+  lang_map: { ch: zh-Hant, en: en }     # any number of languages
+  default_lang: zh-Hant
+  strip_extensions: [.php]
+extract:
+  content: "section[id]:not(#header):not(#footer)"
+pairing:
+  strategy: symmetric_path
+  fallback: [shared_media, date, title_similarity]
+```
+
+## Layout
+
+| Path | Contents |
+|---|---|
+| `src/PolyMigrate.Core` | extraction / pairing / verification library (NuGet: `PolyMigrate.Core`) |
+| `src/PolyMigrate.Cli` | the `polymigrate` CLI (NuGet tool package: `PolyMigrate`) |
+| `tests/` | 100 unit/integration tests + an offline fixture site with golden-file baselines |
+| `docs/contracts.md` | file-format contracts between pipeline phases |
+
+## Development
 
 ```
 dotnet build
@@ -36,15 +106,6 @@ dotnet test
 dotnet run --project src/PolyMigrate.Cli -- --help
 ```
 
-依賴授權:全部為 MIT / BSD / Apache 2.0(影像處理用 **Magick.NET**;原規劃的
-ImageSharp 因 4.x 起建置即要求授權金鑰而棄用,見規劃書 §3.7)。
-
-| 目錄 | 內容 |
-|---|---|
-| `src/PolyMigrate.Core` | 抽取 / 配對 / 盤點核心(NuGet lib) |
-| `src/PolyMigrate.Cli` | `polymigrate` CLI(dotnet tool) |
-| `tests/PolyMigrate.Core.Tests` | 單元 + golden-file 測試 |
-| `tests/fixtures/site` | 離線合成雙語 fixture 站(每個坑一頁) |
-| `docs/contracts.md` | Phase 之間的輸出檔案契約 |
-
-授權:1.0 前定案(MIT / Apache-2.0)。
+License: [MIT](LICENSE). All dependencies are MIT/BSD/Apache-2.0
+(imaging via **Magick.NET**; ImageSharp was dropped when its 4.x line began requiring a
+license key at build time).

@@ -1,0 +1,81 @@
+# PolyMigrate
+
+> **The i18n-first static-site migrator** — 唯一會自動配對多語言頁面的網站搬遷工具。
+
+[English](README.md)
+
+把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
+並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
+
+**狀態:1.0 preview。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
+並以一次真實的整站搬遷驗證(見下)。
+
+## 為什麼
+
+多語言機構站(政府、大學、NGO、宗教組織)遷移時都在手工對配各語言版本——沒有現成工具解這個問題。PolyMigrate:
+
+- 檔名對稱的頁面**自動配對**(`/ch/news/x` ↔ `/en/news/x` 共用 `translation_key`)
+- 配不起來的**啟發式建議**:共用相簿、slug 內日期正規化(`20240121` vs `01212024`)、標題相似度
+- 真的配不到的**誠實列出**,產出待人工覆核的缺漏清單,絕不亂猜
+
+語言不限兩種:`lang_map` 宣告幾組就支援幾語,frontmatter、清單、配對全部跟著展開,輸出一律 BCP-47 標準代碼。
+
+## 內建的實戰坑
+
+| 真實踩過的坑 | 內建處理 |
+|---|---|
+| 手機直拍照片縮圖顛倒/側躺 | 縮圖前先依 EXIF 轉正 |
+| 標題含冒號、數字 slug 前導 0 | YAML lib 跳脫 + 強制引號 |
+| 圖片路徑 `%20` 雙重編碼 | 磁碟存解碼名、URL 單次編碼 |
+| Markdown 轉換器丟掉影片/iframe/PDF | 佔位符保留在原位置 |
+| `<title>` 帶日期與站名雜訊 | 內文標題優先 + 可設定清理 |
+| 日期格式混用(YMD/MDY/DMY) | 全部認得並正規化 |
+| 索引移除但頁面還在的孤兒文章 | 逐日 URL 候選 + 後綴變體探測 |
+| 原站壞圖 | 偵測、記錄、不阻斷 |
+| bot 防護(JS cookie 挑戰回 409) | config 宣告 cookie 繞法 |
+| 舊編碼(Big5、GB2312…) | 每站宣告或預設 |
+
+## 實戰案例
+
+PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品化:
+
+- **516 頁**、**4.6 GB** 媒體
+- **281 個 translation key**;**231 篇雙語文章全自動配對**
+- 內建巡檢:**1,269 個內部連結 + 4,116 個媒體引用,0 錯誤**
+- date 探測找回 13 篇孤兒文章;修正 141 張 EXIF 顛倒照片的縮圖
+
+移植過程以 Python 原型輸出為對照基準:466/516 頁正文在空白正規化後逐字相同,其餘皆為渲染等價或更保真。
+
+## 安裝與使用
+
+```
+dotnet tool install -g polymigrate          # 尚未發佈;本機 pack 已可用
+polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
+polymigrate verify out/                     # 連結/媒體/frontmatter 巡檢,exit code 可接 CI
+polymigrate thumbs site.yaml                # EXIF 轉正縮圖
+polymigrate probe-orphans site.yaml --section news --years 2021-2023
+polymigrate fetch-orphans site.yaml --section news
+```
+
+一站一份 YAML config,站別知識全在裡面——完整註解的真實範例見
+[examples/ibps-austin.yaml](examples/ibps-austin.yaml)。
+
+## 目錄
+
+| 路徑 | 內容 |
+|---|---|
+| `src/PolyMigrate.Core` | 抽取/配對/巡檢核心(NuGet:`PolyMigrate.Core`) |
+| `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`PolyMigrate`) |
+| `tests/` | 100 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
+| `docs/contracts.md` | Phase 之間的檔案格式契約 |
+
+## 開發
+
+```
+dotnet build
+dotnet test
+dotnet run --project src/PolyMigrate.Cli -- --help
+```
+
+授權:[MIT](LICENSE)。依賴全為 MIT/BSD/Apache-2.0(影像處理用 **Magick.NET**;
+ImageSharp 因 4.x 起建置即要求授權金鑰而棄用)。

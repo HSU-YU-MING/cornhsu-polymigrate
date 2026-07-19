@@ -44,4 +44,28 @@ public class TitleCleanerTests
         Assert.Equal("", Cleaner.Clean(null, stripSiteNoise: true));
         Assert.Equal("", Cleaner.Clean("  ", stripSiteNoise: true));
     }
+
+    [Fact]
+    public void TitleMarkers_AreConfigurable_NotHardcodedToZhEn()
+    {
+        // i18n-first:標記字可換成任何語言
+        var config = TestConfigs.IbpsLike();
+        config.Extract.TitleMarkers = ["ニュース"];
+        var cleaner = new TitleCleaner(config);
+
+        Assert.Equal("春の法要", cleaner.Clean("2026/04/01 ニュース:春の法要", stripSiteNoise: false));
+        // 換掉後,預設的 News 不再是標記字(僅日期前綴仍剝)
+        Assert.Equal("News:Retreat", cleaner.Clean("News:Retreat", stripSiteNoise: false));
+    }
+
+    [Fact]
+    public void EmptyTitleMarkers_DisablesMarkerStripping_KeepsDatePrefixes()
+    {
+        var config = TestConfigs.IbpsLike();
+        config.Extract.TitleMarkers = [];
+        var cleaner = new TitleCleaner(config);
+
+        Assert.Equal("八關齋戒", cleaner.Clean("2025/02/02:八關齋戒", stripSiteNoise: false));
+        Assert.Equal("News 02/02/2025: Retreat", cleaner.Clean("News 02/02/2025: Retreat", stripSiteNoise: false));
+    }
 }

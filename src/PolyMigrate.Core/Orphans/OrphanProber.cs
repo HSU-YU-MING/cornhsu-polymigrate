@@ -107,10 +107,13 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
         return false;
     }
 
-    /// <summary>建構帶 UA 與 auth_workaround cookie 的 HttpClient(probe/fetch 共用)。</summary>
-    public static HttpClient CreateHttpClient(SiteConfig config)
+    /// <summary>
+    /// 建構帶 UA 與 auth_workaround cookie 的 HttpClient。
+    /// probe 不跟轉址(轉址頁不算命中);fetch 要跟(頁面可能在 301 之後)。
+    /// </summary>
+    public static HttpClient CreateHttpClient(SiteConfig config, bool allowRedirects = false)
     {
-        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = allowRedirects })
         {
             Timeout = TimeSpan.FromSeconds(40),
         };

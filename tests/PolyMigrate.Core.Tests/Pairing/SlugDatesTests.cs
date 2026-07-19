@@ -25,4 +25,13 @@ public class SlugDatesTests
     public void AmbiguousButValidAsYmd_PrefersYmd() =>
         // 20120505:YYYYMMDD 與 MMDDYYYY 皆合法 → 取 YMD(原站主流格式)
         Assert.Equal(new DateOnly(2012, 5, 5), SlugDates.FromSlug("20120505"));
+
+    [Fact]
+    public void EuropeanDdMmYyyy_Recognized() =>
+        // 14022026:MDY 不合法(月 14)→ 落到歐系 DDMMYYYY
+        Assert.Equal(new DateOnly(2026, 2, 14), SlugDates.FromSlug("14022026"));
+
+    [Fact]
+    public void MdyDmyAmbiguity_PrefersMdy() =>
+        Assert.Equal(new DateOnly(2026, 1, 2), SlugDates.FromSlug("01022026"));
 }

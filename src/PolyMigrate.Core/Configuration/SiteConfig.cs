@@ -93,7 +93,13 @@ public sealed class ExtractSection
     /// </summary>
     public List<string> TitleNoise { get; set; } = [];
 
-    /// <summary>額外的標題前綴剝除 regex(內建已含常見「日期 新聞:」三式,見 TitleCleaner)。</summary>
+    /// <summary>
+    /// 「新聞/News」類標題標記字:出現在日期前綴旁或「標記:」形式時參與剝除。
+    /// 預設含中英兩字只是香雲寺沿革,任何語言可自行覆寫(如 ["Nouvelles", "ニュース"]);設 [] 全關。
+    /// </summary>
+    public List<string> TitleMarkers { get; set; } = ["新聞", "News"];
+
+    /// <summary>額外的標題前綴剝除 regex(內建已含常見「日期 標記:」三式,見 TitleCleaner)。</summary>
     public List<string> StripTitlePrefix { get; set; } = [];
 
     /// <summary>section 目錄名 → page_type(如 news→article、events→event);

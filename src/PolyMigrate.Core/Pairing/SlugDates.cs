@@ -16,7 +16,8 @@ public static partial class SlugDates
             return null;
         }
         var d = m.Value;
-        // 先試 YYYYMMDD(前 4 位是合理年份),再試 MMDDYYYY
+        // 依序試 YYYYMMDD → MMDDYYYY → DDMMYYYY(歐系)。
+        // MDY/DMY 皆合法的歧義值(如 01022026)偏向 MDY——來源資料以美式為主;僅作建議、人工覆核把關。
         if (TryYmd(d[..4], d[4..6], d[6..8], out var ymd))
         {
             return ymd;
@@ -24,6 +25,10 @@ public static partial class SlugDates
         if (TryYmd(d[4..8], d[..2], d[2..4], out var mdy))
         {
             return mdy;
+        }
+        if (TryYmd(d[4..8], d[2..4], d[..2], out var dmy))
+        {
+            return dmy;
         }
         return null;
     }
