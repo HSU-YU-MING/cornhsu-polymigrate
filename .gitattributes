@@ -1,2 +1,9 @@
-# fixture 站與 golden 基準逐 byte 比對,禁止行尾轉換(§3.10 決定性輸出)
+# 全 repo 行尾釘死 LF:CI Windows runner 預設 autocrlf=true,CRLF checkout 會改變
+# raw string literal 的內容(測試因此在 CI 上與本機行為不同,踩過)
+* text=auto eol=lf
+
+# fixture 站與 golden 基準逐 byte 比對,禁止任何行尾轉換(§3.10 決定性輸出)
 tests/fixtures/** -text
+
+# 二進位
+*.png binary

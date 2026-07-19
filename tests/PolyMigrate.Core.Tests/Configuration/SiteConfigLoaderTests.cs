@@ -77,7 +77,17 @@ public class SiteConfigLoaderTests
     [Fact]
     public void MissingContentSelector_Throws()
     {
-        var yaml = MinimalYaml.Replace("extract:\n  content: \"main\"", "extract: {}");
+        // 不用跨行 Replace 改樣本——原始碼行尾在 CRLF checkout 下會讓比對失效(CI Windows 踩過)
+        const string yaml =
+            """
+            config_version: 1
+            site:
+              base_url: https://www.example.org
+            url_pattern:
+              lang_map: { ch: zh-Hant, en: en }
+              default_lang: zh-Hant
+            extract: {}
+            """;
 
         var ex = Assert.Throws<ConfigException>(() => SiteConfigLoader.Load(yaml));
         Assert.Contains("extract.content", ex.Message);
