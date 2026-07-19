@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>PolyMigrate.Core</PackageId>
+    <Description>Core library of PolyMigrate — the i18n-first static-site migrator. Extraction, bilingual pairing, and inventory components.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PolyMigrate.Cli/PolyMigrate.Cli.csproj" />
+    <Project Path="src/PolyMigrate.Core/PolyMigrate.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PolyMigrate.Core.Tests/PolyMigrate.Core.Tests.csproj" />
+  </Folder>
+</Solution>
