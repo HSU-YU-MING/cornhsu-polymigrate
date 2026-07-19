@@ -7,6 +7,10 @@ site:
   # encoding: utf-8          # 省略 = UTF-8;Big5 舊站在此宣告(§3.1)
   render: static
   polite: { concurrency: 1, delay_ms: 3000 }
+  # bot 防護繞法(§2.6:JS cookie 挑戰回 409,非 UA)— probe/fetch-orphans 用
+  auth_workaround:
+    type: cookie
+    set: { humans_21909: "1" }
 
 url_pattern:
   # /{lang}/{section}/{page}.php;URL 前綴 → BCP-47(§3.3)

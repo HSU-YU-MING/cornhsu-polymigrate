@@ -72,6 +72,10 @@ public static class SiteConfigLoader
         {
             errors.Add("extract.content (CSS selector for the main content) is required.");
         }
+        if (c.Site.AuthWorkaround is { } auth && auth.Type != "cookie")
+        {
+            errors.Add($"site.auth_workaround.type '{auth.Type}' is not supported (only 'cookie').");
+        }
         string[] knownHeuristics = ["shared_media", "date", "title_similarity"];
         foreach (var h in c.Pairing.Fallback.Where(h => !knownHeuristics.Contains(h)))
         {

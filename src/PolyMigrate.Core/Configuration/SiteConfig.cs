@@ -33,6 +33,22 @@ public sealed class SiteSection
     public RenderMode Render { get; set; } = RenderMode.Static;
 
     public PoliteSection Polite { get; set; } = new();
+
+    /// <summary>bot 防護繞法(§2.5;香雲寺:JS cookie 挑戰 → 帶 cookie)。null = 不需要。</summary>
+    public AuthWorkaroundSection? AuthWorkaround { get; set; }
+
+    /// <summary>對原站發請求時的 User-Agent(probe/fetch 用)。</summary>
+    public string UserAgent { get; set; } =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+}
+
+public sealed class AuthWorkaroundSection
+{
+    /// <summary>目前僅支援 "cookie"。</summary>
+    public string Type { get; set; } = "cookie";
+
+    /// <summary>cookie 名 → 值。</summary>
+    public Dictionary<string, string> Set { get; set; } = [];
 }
 
 public enum RenderMode

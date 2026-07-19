@@ -69,7 +69,9 @@ public sealed class ExtractionPipeline(SiteConfig config)
         public int ImageCount { get; set; }
     }
 
-    public ExtractionReport Run(ExtractionPaths paths)
+    /// <param name="paths">輸入/輸出位置。</param>
+    /// <param name="dryRun">true = 完整跑抽取與統計但不寫任何檔案(§3.8)。</param>
+    public ExtractionReport Run(ExtractionPaths paths, bool dryRun = false)
     {
         var parser = new RawPageParser(config);
         var extractor = new PageExtractor(config);
@@ -92,7 +94,10 @@ public sealed class ExtractionPipeline(SiteConfig config)
             var page = parser.Parse(paths.RawDir, file);
             var extracted = extractor.Extract(page, File.ReadAllText(file, encoding), paths.MediaDir);
 
-            WriteMarkdown(paths.OutDir, extracted);
+            if (!dryRun)
+            {
+                WriteMarkdown(paths.OutDir, extracted);
+            }
             pagesWritten++;
 
             // inventory 以 translation_key 聚合各語言版本
@@ -131,12 +136,15 @@ public sealed class ExtractionPipeline(SiteConfig config)
         }
 
         var suggestions = SuggestPairs(inventory, locales);
-        WriteContentInventory(paths.OutDir, inventory, locales, suggestions);
-        WriteMediaManifest(paths.OutDir, paths.MediaDir, mediaRefs);
-        WriteRedirectMap(paths.OutDir, redirects);
-        WriteMissingImages(paths.OutDir, missing);
-        File.WriteAllText(Path.Combine(paths.OutDir, "need_fetch_media.txt"),
-            string.Join('\n', needFetch), Utf8NoBom);
+        if (!dryRun)
+        {
+            WriteContentInventory(paths.OutDir, inventory, locales, suggestions);
+            WriteMediaManifest(paths.OutDir, paths.MediaDir, mediaRefs);
+            WriteRedirectMap(paths.OutDir, redirects);
+            WriteMissingImages(paths.OutDir, missing);
+            File.WriteAllText(Path.Combine(paths.OutDir, "need_fetch_media.txt"),
+                string.Join('\n', needFetch), Utf8NoBom);
+        }
 
         return BuildReport(inventory, locales, pagesWritten, mediaRefs.Count, missing.Count, needFetch.Count,
             suggestions.Count / 2);
