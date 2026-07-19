@@ -6,9 +6,11 @@
 
 ## 通用規則
 
-- 所有清單一律 UTF-8(無 BOM)CSV,欄位順序固定,列排序規則明確(決定性輸出,§3.10)。
+- 所有清單一律 CSV、UTF-8 **含 BOM**(人工覆核走 Excel,無 BOM 中文會亂碼)、`\r\n` 行尾、RFC 4180 跳脫;欄位順序固定,列排序規則明確(決定性輸出,§3.10)。
 - 路徑一律用 `/` 分隔、相對於各自根目錄。
-- 語言一律用 BCP-47 標準 locale(§3.3),URL 前綴不外流到任何輸出。
+- 語言一律用 BCP-47 標準 locale(§3.3)。frontmatter `lang` 與清單 lang 欄輸出 locale;
+  Markdown 輸出目錄與站內連結改寫仍沿用來源站 URL 前綴(= 新站路由),此為每站的路由決策,後續可 config 化。
+- `translation_key` = 去語言前綴的路徑;**以 `/` 開頭 = 無語言前綴的站級頁**(如語言選擇頁),不參與配對。
 - 每份輸出檔案的 schema 變更須升 `config_version` 或在此文件記錄遷移方式。
 
 ## Phase 1 → Phase 2:鏡像 + `url_inventory.csv`
@@ -49,14 +51,21 @@ date: ...             # 正規化 ISO 8601(§2.6:YYYYMMDD vs MMDDYYYY 坑)
 
 - YAML 一律由 YamlDotNet 序列化(§2.6:冒號、數字 slug 引號坑)。
 
-**`content_inventory.csv`**(含雙語缺漏表,§1.4):
+**`content_inventory.csv`**(含雙語缺漏表,§1.4;0.1 已定案,欄序如下):
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
-| translation_key | string | 配對鍵 |
-| has_zh_hant / has_en / … | bool | 每個 locale 一欄(欄名由 lang_map 展開) |
-| pair_status | enum | `paired` / `missing` / `heuristic_suggested` / `manual` |
-| TODO | — | 0.5 實作時逐項定案 |
+| translation_key | string | 配對鍵(排序鍵,ordinal) |
+| section / slug | string | 首見版本的 section 與 slug |
+| has_{locale}… | True/False | 每個 locale 一欄,欄名由 lang_map 值展開(`zh-Hant` → `has_zh_hant`) |
+| suggested_type | string | 工具判的頁型 |
+| final_type | string | 留空,人工覆核填 |
+| flags | string | `;` 分隔(如 `needs_rebuild;text_in_image`) |
+| text_len_{locale}… | int | 每個 locale 一欄;缺該語版 = 0 |
+| image_count | int | 各語版取最大 |
+| notes | string | 留空,人工覆核填 |
+
+(`pair_status` 欄位待 0.5 啟發式配對一併加入。)
 
 **`redirect_map.csv`**:舊 URL → 新路徑;MVP 出中性 CSV,匯出格式(nginx / `_redirects` / web.config)留擴充位(§3.10)。
 

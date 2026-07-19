@@ -1,0 +1,50 @@
+# PolyMigrate site config — 香雲寺(www.ibps-austin.org)
+# 本檔即 phase2_extract.py 全部站別硬編碼的 config 化;是 1.0 case study 的規格來源。
+config_version: 1
+
+site:
+  base_url: https://www.ibps-austin.org
+  # encoding: utf-8          # 省略 = UTF-8;Big5 舊站在此宣告(§3.1)
+  render: static
+  polite: { concurrency: 1, delay_ms: 3000 }
+
+url_pattern:
+  # /{lang}/{section}/{page}.php;URL 前綴 → BCP-47(§3.3)
+  lang_map: { ch: zh-Hant, en: en }
+  default_lang: zh-Hant
+  strip_extensions: [.php]
+
+extract:
+  # 正文 = 非框架的 <section>(Phase 0/1 實測:框架 = header_main/header/footer/footer_main)
+  content: "section[id]:not(#header):not(#footer):not(#header_main):not(#footer_main)"
+  # 站名雜訊只在取 <title> 時剝——英文文章真標題可能以寺名開頭,不可剝
+  title_noise:
+    - 佛光山香雲寺
+    - IBPS Austin
+    - Fo Guang Shan Xiang Yun Temple
+  section_types: { news: article, events: event }
+  section_flags: { support: needs_rebuild }   # 捐款頁後端金流要重建
+  text_in_image_max_length: 80
+  type_rules:
+    article:
+      # 文章優先用內文 h3 真標題(原站 <title> 常帶「日期 新聞:」前綴、甚至與內文不符)
+      title_selector: "#personal h3, .personal_1 h3, #article h3"
+      # 內文移除重複的日期(h5)與標題(h3)——模板已另外顯示
+      remove_selectors:
+        - "#personal .personal_1 h5"
+        - "#personal .personal_1 h3"
+        - "#personal h5"
+        - "#personal h3"
+        - "#article h3"
+      # 文章相簿由 frontmatter images 呈現(縮圖格+燈箱),內文移除圖片避免重複
+      images_to_gallery: true
+
+pairing:
+  strategy: symmetric_path
+  fallback: [shared_media, date, title_similarity]
+
+media:
+  download: true
+  web_prefix: /media/
+  pdf_labels: { zh-Hant: 下載／檢視 PDF, en: View PDF }
+  thumbnails: { max_width: 1000, quality: 82 }

@@ -1,0 +1,67 @@
+using PolyMigrate.Core.Configuration;
+
+namespace PolyMigrate.Core.Extraction;
+
+/// <summary>
+/// 內文連結改寫(規格 rewrite_link):站內動態頁相對連結 → 新路由(以頁面 URL 解析 ../);
+/// 外部、錨點、mailto 等保留原樣。
+/// </summary>
+public sealed class LinkRewriter
+{
+    private static readonly string[] PassThroughPrefixes =
+        ["http://", "https://", "#", "mailto:", "tel:", "//", "javascript:"];
+
+    private readonly string _host;
+    private readonly string[] _stripExtensions;
+
+    public LinkRewriter(SiteConfig config)
+    {
+        _host = new Uri(config.Site.BaseUrl).Host;
+        _stripExtensions = [.. config.UrlPattern.StripExtensions];
+    }
+
+    public string Rewrite(string? href, string pageUrl)
+    {
+        if (string.IsNullOrEmpty(href)
+            || PassThroughPrefixes.Any(p => href.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            return href ?? "";
+        }
+
+        Uri resolved;
+        try
+        {
+            resolved = new Uri(new Uri(pageUrl), href);
+        }
+        catch (UriFormatException)
+        {
+            return href;
+        }
+        if (!string.Equals(resolved.Host, _host, StringComparison.OrdinalIgnoreCase))
+        {
+            return href;
+        }
+
+        var path = resolved.AbsolutePath;
+        foreach (var ext in _stripExtensions)
+        {
+            if (path.EndsWith(ext, StringComparison.Ordinal))
+            {
+                path = path[..^ext.Length];
+                break;
+            }
+        }
+
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length > 0 && parts[^1] == "index")
+        {
+            parts = parts[..^1];
+        }
+        return parts.Length switch
+        {
+            0 => "/",
+            1 => $"/{parts[0]}/",   // 只剩語言前綴 → 該語首頁
+            _ => "/" + string.Join('/', parts),
+        };
+    }
+}
