@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="PolyMigrate.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.5.2" />
     <PackageReference Include="ReverseMarkdown" Version="6.1.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />

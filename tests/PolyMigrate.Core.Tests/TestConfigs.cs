@@ -34,6 +34,10 @@ public static class TestConfigs
                 },
             },
         },
+        Pairing = new PairingSection
+        {
+            Fallback = ["shared_media", "date", "title_similarity"],
+        },
         Media = new MediaSection
         {
             PdfLabels = new Dictionary<string, string> { ["zh-Hant"] = "下載／檢視 PDF", ["en"] = "View PDF" },

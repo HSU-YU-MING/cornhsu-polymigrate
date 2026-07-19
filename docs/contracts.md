@@ -61,16 +61,27 @@ date: ...             # 正規化 ISO 8601(§2.6:YYYYMMDD vs MMDDYYYY 坑)
 | suggested_type | string | 工具判的頁型 |
 | final_type | string | 留空,人工覆核填 |
 | flags | string | `;` 分隔(如 `needs_rebuild;text_in_image`) |
+| pair_status | enum | `paired` / `missing` / `heuristic_suggested` / `site_level`;單語站留空 |
+| suggested_pair | string | 啟發式建議的對方 translation_key(§1.4;僅 heuristic_suggested 有值) |
+| pair_evidence | string | 證據,`;` 分隔(如 `shared_media=3;date=2026-01-21`) |
 | text_len_{locale}… | int | 每個 locale 一欄;缺該語版 = 0 |
 | image_count | int | 各語版取最大 |
 | notes | string | 留空,人工覆核填 |
 
-(`pair_status` 欄位待 0.5 啟發式配對一併加入。)
+啟發式只「建議」不自動合併,順序由 config `pairing.fallback` 決定
+(`shared_media` 共用相簿 / `date` slug 日期正規化後相等 / `title_similarity` bigram Dice ≥ 0.5);
+無任何證據就不硬配(missing),最終決定權在人。
 
 **`redirect_map.csv`**:舊 URL → 新路徑;MVP 出中性 CSV,匯出格式(nginx / `_redirects` / web.config)留擴充位(§3.10)。
 
 **執行報告**(§3.8):warning / error 分級、壞圖清單、配不起來的頁面、跳過原因。格式 TODO 0.5 定案。
 
-## Phase 4(verify)輸入
+## Phase 4(verify)
 
-`verify` 只讀 Phase 2/3 的輸出(Markdown + 三份清單),不需要網路與鏡像 —— 契約完整性的試金石。
+`verify` 只讀 Phase 2/3 的輸出(Markdown + 清單),不需要網路與鏡像 —— 契約完整性的試金石。
+
+檢查項:frontmatter 必填欄位(source_url/lang/slug/translation_key/title/page_type)、
+內部連結對路由集(content 樹推導;index 檔代表目錄路由)、`/media/` 引用對磁碟
+(URL 解碼後比對;`missing_images.csv` 已記錄的原站壞圖降為 warning)。
+
+輸出:`verify_report.csv`(severity, page, kind, detail);exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。

@@ -23,4 +23,62 @@ internal static class Csv
         field.AsSpan().IndexOfAny(',', '"', '\n') >= 0 || field.Contains('\r')
             ? "\"" + field.Replace("\"", "\"\"") + "\""
             : field;
+
+    /// <summary>讀回本工具寫出的 CSV(RFC 4180,含引號跳脫;自動吃掉 BOM)。</summary>
+    public static IEnumerable<IReadOnlyList<string>> ReadRows(string path)
+    {
+        var text = File.ReadAllText(path, Encoding.UTF8).TrimStart('﻿');
+        var row = new List<string>();
+        var field = new StringBuilder();
+        var inQuotes = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (inQuotes)
+            {
+                if (c == '"' && i + 1 < text.Length && text[i + 1] == '"')
+                {
+                    field.Append('"');
+                    i++;
+                }
+                else if (c == '"')
+                {
+                    inQuotes = false;
+                }
+                else
+                {
+                    field.Append(c);
+                }
+            }
+            else if (c == '"')
+            {
+                inQuotes = true;
+            }
+            else if (c == ',')
+            {
+                row.Add(field.ToString());
+                field.Clear();
+            }
+            else if (c is '\n' or '\r')
+            {
+                if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n')
+                {
+                    i++;
+                }
+                row.Add(field.ToString());
+                field.Clear();
+                yield return row;
+                row = [];
+            }
+            else
+            {
+                field.Append(c);
+            }
+        }
+        if (field.Length > 0 || row.Count > 0)
+        {
+            row.Add(field.ToString());
+            yield return row;
+        }
+    }
 }

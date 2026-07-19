@@ -1,0 +1,31 @@
+# Fixture 站 config(§3.5)——結構仿香雲寺站型,內容中性。
+config_version: 1
+
+site:
+  base_url: https://legacy.example.org
+
+url_pattern:
+  lang_map: { ch: zh-Hant, en: en }
+  default_lang: zh-Hant
+  strip_extensions: [.php]
+
+extract:
+  content: "section[id]:not(#header):not(#footer)"
+  title_noise:
+    - 範例寺
+    - Example Temple
+  section_types: { news: article, events: event }
+  section_flags: { support: needs_rebuild }
+  type_rules:
+    article:
+      title_selector: "#main h3"
+      remove_selectors: ["#main h3", "#main h5"]
+      images_to_gallery: true
+
+pairing:
+  strategy: symmetric_path
+  fallback: [shared_media, date, title_similarity]
+
+media:
+  web_prefix: /media/
+  pdf_labels: { zh-Hant: 下載／檢視 PDF, en: View PDF }

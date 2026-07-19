@@ -72,6 +72,11 @@ public static class SiteConfigLoader
         {
             errors.Add("extract.content (CSS selector for the main content) is required.");
         }
+        string[] knownHeuristics = ["shared_media", "date", "title_similarity"];
+        foreach (var h in c.Pairing.Fallback.Where(h => !knownHeuristics.Contains(h)))
+        {
+            errors.Add($"pairing.fallback '{h}' is not a known heuristic ({string.Join(", ", knownHeuristics)}).");
+        }
         if (c.Site.Encoding is { } enc)
         {
             try

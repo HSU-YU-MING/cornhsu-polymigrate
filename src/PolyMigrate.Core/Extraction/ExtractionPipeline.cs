@@ -3,6 +3,7 @@ using System.Text;
 using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Inventory;
 using PolyMigrate.Core.Markdown;
+using PolyMigrate.Core.Pairing;
 
 namespace PolyMigrate.Core.Extraction;
 
@@ -35,6 +36,9 @@ public sealed class ExtractionReport
 
     public int NeedFetchMedia { get; init; }
 
+    /// <summary>啟發式配對建議的組數(§1.4),待人工覆核。</summary>
+    public int SuggestedPairs { get; init; }
+
     public bool HasWarnings => MissingImages > 0 || NeedFetchMedia > 0;
 }
 
@@ -54,9 +58,13 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         public required string Type { get; init; }
 
+        public required string Title { get; init; }   // 首見版本的標題(單語 key 即該語標題)
+
         public Dictionary<string, int?> TextByLocale { get; } = [];   // null = 該語言缺
 
         public SortedSet<string> Flags { get; } = [];
+
+        public SortedSet<string> Media { get; } = new(StringComparer.Ordinal);
 
         public int ImageCount { get; set; }
     }
@@ -95,12 +103,14 @@ public sealed class ExtractionPipeline(SiteConfig config)
                     Section = page.Section,
                     Slug = page.Slug,
                     Type = extracted.PageType,
+                    Title = extracted.Title,
                 };
                 inventory[page.TranslationKey] = record;
             }
             record.TextByLocale[page.Locale] = extracted.TextLength;
             record.ImageCount = Math.Max(record.ImageCount, extracted.ImageCount);
             record.Flags.UnionWith(extracted.Flags);
+            record.Media.UnionWith(extracted.MediaUses.Select(u => u.MediaRelative));
 
             foreach (var use in extracted.MediaUses)
             {
@@ -120,14 +130,16 @@ public sealed class ExtractionPipeline(SiteConfig config)
             redirects.Add((page.SourceUrl, page.Locale, page.TranslationKey));
         }
 
-        WriteContentInventory(paths.OutDir, inventory, locales);
+        var suggestions = SuggestPairs(inventory, locales);
+        WriteContentInventory(paths.OutDir, inventory, locales, suggestions);
         WriteMediaManifest(paths.OutDir, paths.MediaDir, mediaRefs);
         WriteRedirectMap(paths.OutDir, redirects);
         WriteMissingImages(paths.OutDir, missing);
         File.WriteAllText(Path.Combine(paths.OutDir, "need_fetch_media.txt"),
             string.Join('\n', needFetch), Utf8NoBom);
 
-        return BuildReport(inventory, locales, pagesWritten, mediaRefs.Count, missing.Count, needFetch.Count);
+        return BuildReport(inventory, locales, pagesWritten, mediaRefs.Count, missing.Count, needFetch.Count,
+            suggestions.Count / 2);
     }
 
     private static void WriteMarkdown(string outDir, ExtractedPage extracted)
@@ -164,8 +176,55 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
     private static string LocaleColumn(string locale) => locale.Replace('-', '_').ToLowerInvariant();
 
-    private static void WriteContentInventory(
-        string outDir, SortedDictionary<string, InventoryRecord> inventory, List<string> locales)
+    /// <summary>對「只有單語」的 key 產生啟發式配對建議(§1.4);回傳 key → 建議,兩端各一筆。</summary>
+    private Dictionary<string, PairSuggestion> SuggestPairs(
+        SortedDictionary<string, InventoryRecord> inventory, List<string> locales)
+    {
+        if (locales.Count < 2)
+        {
+            return [];
+        }
+        var unpaired = inventory
+            .Where(kv => !kv.Key.StartsWith('/') && kv.Value.TextByLocale.Count == 1)
+            .Select(kv => new UnpairedGroup
+            {
+                TranslationKey = kv.Key,
+                Section = kv.Value.Section,
+                Locale = kv.Value.TextByLocale.Keys.Single(),
+                Slug = kv.Value.Slug,
+                Title = kv.Value.Title,
+                Media = kv.Value.Media,
+            });
+        var byKey = new Dictionary<string, PairSuggestion>();
+        foreach (var s in new PairingSuggester(config).Suggest(unpaired))
+        {
+            byKey[s.KeyA] = s;
+            byKey[s.KeyB] = s;
+        }
+        return byKey;
+    }
+
+    private string PairStatus(string key, InventoryRecord r, List<string> locales,
+        Dictionary<string, PairSuggestion> suggestions)
+    {
+        if (locales.Count < 2)
+        {
+            return "";                       // 單語站:配對不適用
+        }
+        if (key.StartsWith('/'))
+        {
+            return "site_level";             // 站級頁(語言選擇頁等)不參與配對
+        }
+        if (locales.All(r.TextByLocale.ContainsKey))
+        {
+            return "paired";
+        }
+        return suggestions.ContainsKey(key) ? "heuristic_suggested" : "missing";
+    }
+
+    private void WriteContentInventory(
+        string outDir, SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
+        Dictionary<string, PairSuggestion> suggestions)
     {
         var rows = new List<IReadOnlyList<string>>();
         string[] header =
@@ -173,17 +232,22 @@ public sealed class ExtractionPipeline(SiteConfig config)
             "translation_key", "section", "slug",
             .. locales.Select(l => $"has_{LocaleColumn(l)}"),
             "suggested_type", "final_type", "flags",
+            "pair_status", "suggested_pair", "pair_evidence",
             .. locales.Select(l => $"text_len_{LocaleColumn(l)}"),
             "image_count", "notes",
         ];
         rows.Add(header);
         foreach (var (key, r) in inventory)
         {
+            var suggestion = suggestions.GetValueOrDefault(key);
             string[] row =
             [
                 key, r.Section, r.Slug,
                 .. locales.Select(l => r.TextByLocale.ContainsKey(l) ? "True" : "False"),
                 r.Type, "", string.Join(';', r.Flags),
+                PairStatus(key, r, locales, suggestions),
+                suggestion is null ? "" : (suggestion.KeyA == key ? suggestion.KeyB : suggestion.KeyA),
+                suggestion?.Evidence ?? "",
                 .. locales.Select(l => (r.TextByLocale.GetValueOrDefault(l) ?? 0).ToString()),
                 r.ImageCount.ToString(), "",
             ];
@@ -204,8 +268,9 @@ public sealed class ExtractionPipeline(SiteConfig config)
         {
             var localAbs = MediaPaths.LocalPath(mediaDir, relative);
             var localPath = Path.GetRelativePath(outDir, localAbs).Replace('\\', '/');
-            if (localPath.StartsWith("..", StringComparison.Ordinal))
+            if (localPath.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(localPath))
             {
+                // media 不在輸出目錄下(或跨磁碟)→ 一律用中性的 media/ 相對路徑,輸出不可含機器路徑
                 localPath = "media/" + relative;
             }
             var (sha1, bytes) = HashFile(localAbs);
@@ -252,7 +317,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
     private static ExtractionReport BuildReport(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
-        int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount)
+        int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs)
     {
         var typeCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var flagCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -280,6 +345,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             MediaReferenced = mediaReferenced,
             MissingImages = missingCount,
             NeedFetchMedia = needFetchCount,
+            SuggestedPairs = suggestedPairs,
         };
     }
 }

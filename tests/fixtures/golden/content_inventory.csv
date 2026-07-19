@@ -1,0 +1,10 @@
+﻿translation_key,section,slug,has_zh_hant,has_en,suggested_type,final_type,flags,pair_status,suggested_pair,pair_evidence,text_len_zh_hant,text_len_en,image_count,notes
+/index,,index,True,False,page,,,site_level,,,12,0,0,
+events/2026_chanxiu,events,2026_chanxiu,True,False,event,,text_in_image,heuristic_suggested,events/enRetreat,shared_media=1,0,0,1,
+events/enRetreat,events,enRetreat,False,True,event,,text_in_image,heuristic_suggested,events/2026_chanxiu,shared_media=1,0,0,1,
+index,,index,True,True,page,,,paired,,,27,30,0,
+news/02142026,news,02142026,False,True,article,,,heuristic_suggested,news/20260214,date=2026-02-14,0,109,0,
+news/20260101,news,20260101,True,True,article,,text_in_image,paired,,,40,91,3,
+news/20260214,news,20260214,True,False,article,,,heuristic_suggested,news/02142026,date=2026-02-14,48,0,0,
+news/index,news,index,True,True,listing,,,paired,,,11,34,0,
+support/donate,support,donate,True,True,page,,needs_rebuild;text_in_image,paired,,,15,68,2,
