@@ -1,8 +1,13 @@
 # PolyMigrate
 
+[![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 > **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
-[繁體中文說明](README.zh-Hant.md)
+**[Project write-up](https://cornhsu.com/polymigrate.html) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](README.zh-Hant.md) · MIT**
 
 PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, static-site-ready
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
@@ -60,10 +65,18 @@ The original Python prototype's output was used as the golden baseline while por
 extracted bodies are byte-identical after whitespace normalization, and the remainder are
 render-equivalent or strictly more faithful.
 
+Two more numbers from that run:
+
+- **Re-runs are ~7× faster**: media hashes are cached by `(size, mtime)`, taking a full re-run
+  of the 4.6 GB site from **30.1 s down to 4.6 s**.
+- **The output is deployable as-is**: `redirect_map` is auto-filled with the new paths, and
+  PolyMigrate emits both an **nginx conf** and a **Netlify `_redirects`** file — turning a
+  half-day of hand-written 301s into copying one file.
+
 ## Install & use
 
 ```
-dotnet tool install -g Cornhsu.PolyMigrate  # not yet published; local pack works today
+dotnet tool install -g Cornhsu.PolyMigrate --prerelease   # 1.0 preview on nuget.org
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
 polymigrate verify out/                     # link/media/frontmatter audit, CI-friendly exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
@@ -95,7 +108,7 @@ pairing:
 |---|---|
 | `src/PolyMigrate.Core` | extraction / pairing / verification library (NuGet: `Cornhsu.PolyMigrate.Core`) |
 | `src/PolyMigrate.Cli` | the `polymigrate` CLI (NuGet tool package: `Cornhsu.PolyMigrate`) |
-| `tests/` | 100 unit/integration tests + an offline fixture site with golden-file baselines |
+| `tests/` | 119 unit/integration tests + an offline fixture site with golden-file baselines |
 | `docs/contracts.md` | file-format contracts between pipeline phases |
 
 ## Development

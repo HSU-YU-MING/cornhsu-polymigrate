@@ -1,8 +1,13 @@
 # PolyMigrate
 
+[![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 > **The i18n-first static-site migrator** — 唯一會自動配對多語言頁面的網站搬遷工具。
 
-[English](README.md)
+**[作品介紹與開發故事](https://cornhsu.com/polymigrate.html) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [English](README.md) · MIT**
 
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
@@ -46,10 +51,16 @@ PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品
 
 移植過程以 Python 原型輸出為對照基準:466/516 頁正文在空白正規化後逐字相同,其餘皆為渲染等價或更保真。
 
+同一次實跑的另外兩個數字:
+
+- **重跑快約 7 倍**:媒體雜湊以 `(大小, mtime)` 快取,4.6 GB 實站全量重跑從 **30.1 秒降到 4.6 秒**。
+- **產出即可部署**:`redirect_map` 自動填入新路徑,並另外輸出 **nginx conf** 與 **Netlify `_redirects`**
+  ——301 設定從手填半天變成複製一個檔。
+
 ## 安裝與使用
 
 ```
-dotnet tool install -g Cornhsu.PolyMigrate  # 尚未發佈;本機 pack 已可用
+dotnet tool install -g Cornhsu.PolyMigrate --prerelease   # nuget.org 上的 1.0 preview
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
 polymigrate verify out/                     # 連結/媒體/frontmatter 巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
@@ -66,7 +77,7 @@ polymigrate fetch-orphans site.yaml --section news
 |---|---|
 | `src/PolyMigrate.Core` | 抽取/配對/巡檢核心(NuGet:`Cornhsu.PolyMigrate.Core`) |
 | `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
-| `tests/` | 100 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
+| `tests/` | 119 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
 
 ## 開發
