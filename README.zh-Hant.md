@@ -1,8 +1,13 @@
 # PolyMigrate
 
+[![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 > **The i18n-first static-site migrator** — 唯一會自動配對多語言頁面的網站搬遷工具。
 
-[English](README.md)
+**[作品介紹與開發故事](https://cornhsu.com/polymigrate.html) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [English](README.md) · MIT**
 
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。

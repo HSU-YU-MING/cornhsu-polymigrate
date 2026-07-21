@@ -1,8 +1,13 @@
 # PolyMigrate
 
+[![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
+[![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 > **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
-[繁體中文說明](README.zh-Hant.md)
+**[Project write-up](https://cornhsu.com/polymigrate.html) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](README.zh-Hant.md) · MIT**
 
 PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, static-site-ready
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
