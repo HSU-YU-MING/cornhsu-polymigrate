@@ -7,7 +7,7 @@
 
 > **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
-**[Project write-up](https://cornhsu.com/polymigrate.html) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](README.zh-Hant.md) · MIT**
+**[Project write-up](https://cornhsu.com/polymigrate) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](README.zh-Hant.md) · MIT**
 
 PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, static-site-ready
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
