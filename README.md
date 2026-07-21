@@ -108,7 +108,7 @@ pairing:
 |---|---|
 | `src/PolyMigrate.Core` | extraction / pairing / verification library (NuGet: `Cornhsu.PolyMigrate.Core`) |
 | `src/PolyMigrate.Cli` | the `polymigrate` CLI (NuGet tool package: `Cornhsu.PolyMigrate`) |
-| `tests/` | 100 unit/integration tests + an offline fixture site with golden-file baselines |
+| `tests/` | 119 unit/integration tests + an offline fixture site with golden-file baselines |
 | `docs/contracts.md` | file-format contracts between pipeline phases |
 
 ## Development

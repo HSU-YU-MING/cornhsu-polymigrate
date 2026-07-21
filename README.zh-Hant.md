@@ -77,7 +77,7 @@ polymigrate fetch-orphans site.yaml --section news
 |---|---|
 | `src/PolyMigrate.Core` | 抽取/配對/巡檢核心(NuGet:`Cornhsu.PolyMigrate.Core`) |
 | `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
-| `tests/` | 100 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
+| `tests/` | 119 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
 
 ## 開發
