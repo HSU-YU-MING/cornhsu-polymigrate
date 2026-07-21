@@ -13,8 +13,10 @@ PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, 
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
 Config-driven, fully offline-rerunnable, built on .NET.
 
-**Status: 1.0 preview.** The extraction pipeline, pairing, verification, thumbnails and
-orphan-page recovery are complete and validated against a real full-site migration (see below).
+**Status: 1.0.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
+recovery are complete and validated against a real full-site migration (see below). The CLI
+surface and the Phase output contracts are now stable: new features bump the minor version,
+fixes bump the patch version.
 
 ## Why
 
@@ -76,7 +78,7 @@ Two more numbers from that run:
 ## Install & use
 
 ```
-dotnet tool install -g Cornhsu.PolyMigrate --prerelease   # 1.0 preview on nuget.org
+dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
 polymigrate verify out/                     # link/media/frontmatter audit, CI-friendly exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails

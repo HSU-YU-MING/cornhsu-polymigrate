@@ -12,8 +12,9 @@
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
 
-**狀態:1.0 preview。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
-並以一次真實的整站搬遷驗證(見下)。
+**狀態:1.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
+並以一次真實的整站搬遷驗證(見下)。CLI 介面與 Phase 輸出契約自此定案:
+新功能升 minor、修正升 patch。
 
 ## 為什麼
 
@@ -60,7 +61,7 @@ PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品
 ## 安裝與使用
 
 ```
-dotnet tool install -g Cornhsu.PolyMigrate --prerelease   # nuget.org 上的 1.0 preview
+dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
 polymigrate verify out/                     # 連結/媒體/frontmatter 巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖

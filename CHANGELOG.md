@@ -2,6 +2,19 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 1.0.0
+
+介面定案。功能與 `1.0.0-preview.1` 相同——preview 期間未回報任何問題,
+119 個單元/整合測試在三平台 CI 全數通過,故直接定版。
+
+自此 **CLI 指令與參數、Phase 之間的輸出契約(`content_inventory` / `media_manifest` /
+`redirect_map` 等檔案格式)、YAML config 的欄位**視為穩定介面:新增功能升 minor,
+修正升 patch,破壞性變更才升 major。
+
+文件更新:補上 NuGet / CI / 授權徽章與作品集連結;修正安裝指令(不再需要
+`--prerelease`);case study 補記重跑快取(4.6GB 實站 30.1s → 4.6s)與
+redirect 匯出(nginx conf、Netlify `_redirects`)。
+
 ## 1.0.0-preview.1
 
 首個公開版本。把一次真實完成的整站搬遷(中英雙語佛寺網站,495+ 頁、4.6GB 媒體)
