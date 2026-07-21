@@ -65,10 +65,18 @@ The original Python prototype's output was used as the golden baseline while por
 extracted bodies are byte-identical after whitespace normalization, and the remainder are
 render-equivalent or strictly more faithful.
 
+Two more numbers from that run:
+
+- **Re-runs are ~7× faster**: media hashes are cached by `(size, mtime)`, taking a full re-run
+  of the 4.6 GB site from **30.1 s down to 4.6 s**.
+- **The output is deployable as-is**: `redirect_map` is auto-filled with the new paths, and
+  PolyMigrate emits both an **nginx conf** and a **Netlify `_redirects`** file — turning a
+  half-day of hand-written 301s into copying one file.
+
 ## Install & use
 
 ```
-dotnet tool install -g Cornhsu.PolyMigrate  # not yet published; local pack works today
+dotnet tool install -g Cornhsu.PolyMigrate --prerelease   # 1.0 preview on nuget.org
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
 polymigrate verify out/                     # link/media/frontmatter audit, CI-friendly exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails

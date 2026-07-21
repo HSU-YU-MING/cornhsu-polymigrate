@@ -51,10 +51,16 @@ PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品
 
 移植過程以 Python 原型輸出為對照基準:466/516 頁正文在空白正規化後逐字相同,其餘皆為渲染等價或更保真。
 
+同一次實跑的另外兩個數字:
+
+- **重跑快約 7 倍**:媒體雜湊以 `(大小, mtime)` 快取,4.6 GB 實站全量重跑從 **30.1 秒降到 4.6 秒**。
+- **產出即可部署**:`redirect_map` 自動填入新路徑,並另外輸出 **nginx conf** 與 **Netlify `_redirects`**
+  ——301 設定從手填半天變成複製一個檔。
+
 ## 安裝與使用
 
 ```
-dotnet tool install -g Cornhsu.PolyMigrate  # 尚未發佈;本機 pack 已可用
+dotnet tool install -g Cornhsu.PolyMigrate --prerelease   # nuget.org 上的 1.0 preview
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
 polymigrate verify out/                     # 連結/媒體/frontmatter 巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
