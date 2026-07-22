@@ -1,0 +1,43 @@
+{
+  "name": "cornhsu-polymigrate",
+  "version": "0.0.0-placeholder",
+  "description": "The i18n-first static-site migrator — the only one that pairs your multilingual pages automatically. Mirrors a legacy site into frontmatter Markdown, auto-matches language versions, and honestly lists what it could not pair.",
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "multilingual",
+    "site-migration",
+    "static-site",
+    "markdown",
+    "web-scraping",
+    "content-migration",
+    "hugo",
+    "eleventy",
+    "astro"
+  ],
+  "homepage": "https://cornhsu.com/polymigrate",
+  "bugs": "https://github.com/HSU-YU-MING/cornhsu-polymigrate/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HSU-YU-MING/cornhsu-polymigrate.git"
+  },
+  "license": "MIT",
+  "author": "許彧銘 Hsu Yu-Ming (https://cornhsu.com/)",
+  "type": "commonjs",
+  "bin": {
+    "polymigrate": "bin/polymigrate.js"
+  },
+  "files": [
+    "bin/polymigrate.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@cornhsu/polymigrate-win32-x64": "0.0.0-placeholder",
+    "@cornhsu/polymigrate-linux-x64": "0.0.0-placeholder",
+    "@cornhsu/polymigrate-darwin-x64": "0.0.0-placeholder",
+    "@cornhsu/polymigrate-darwin-arm64": "0.0.0-placeholder"
+  }
+}

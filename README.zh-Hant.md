@@ -60,6 +60,18 @@ PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品
 
 ## 安裝與使用
 
+兩條通路,選你手邊有的執行環境即可 —— **功能完全相同**。
+
+```
+npx cornhsu-polymigrate extract site.yaml   # 有 Node,不需要安裝 .NET
+dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET
+```
+
+> npm 版是自帶執行環境的原生執行檔,只下載你這個平台的那一份
+> (win32-x64 / linux-x64 / darwin-x64 / darwin-arm64)。
+> 搬站多半是一次性任務 —— 為了跑一次而裝一整套 SDK,摩擦成本太高,
+> 所以工具主動走到你所在的生態。
+
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單

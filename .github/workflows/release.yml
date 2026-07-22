@@ -42,3 +42,89 @@ jobs:
           -k ${{ steps.login.outputs.NUGET_API_KEY }}
           -s https://api.nuget.org/v3/index.json
           --skip-duplicate
+
+  # ── npm 通路 ──
+  # 使用者是「要把舊網站搬成靜態站的人」,多半在 Hugo / Eleventy / Astro / Next.js
+  # 的生態裡,手邊有 Node、不一定有 .NET SDK。而且搬站是一次性任務,
+  # 為了用一次而裝整套 SDK,摩擦成本高到多數人會直接放棄。
+  #
+  # 只有 CLI 上 npm:PolyMigrate.Core 是給 .NET 開發者用的函式庫,受眾本來就在 NuGet。
+  #
+  # 與上面的 NuGet job 完全獨立(僅以 needs 等待成功):npm 是新通路,
+  # NuGet 是現行主力,新通路出問題不該連帶讓 NuGet 發布失敗。
+  npm:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # npm 信任發布:GitHub 簽發 OIDC token,npm 換短效金鑰並自動簽 provenance
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # 刻意不設 registry-url:它會在 .npmrc 寫一行
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`,而 OIDC 情境下
+      # 該變數不存在 → npm 會拿「空 token」去驗證而不改走 OIDC,直接發布失敗
+      # (actions/setup-node#1551)。預設 registry 本來就是 npmjs.org,不需要設。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 信任發布需要 npm CLI >= 11.5.1;Node 22 內建的是 10.x
+      - name: Upgrade npm (trusted publishing 需要 >= 11.5.1)
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish binaries (4 RIDs)
+        run: |
+          set -euo pipefail
+          for rid in win-x64 linux-x64 osx-x64 osx-arm64; do
+            echo "::group::publish $rid"
+            dotnet publish src/PolyMigrate.Cli/PolyMigrate.Cli.csproj \
+              -c Release -r "$rid" --self-contained true \
+              -p:Version=${{ steps.ver.outputs.version }} \
+              -o "artifacts/publish/$rid"
+            echo "::endgroup::"
+          done
+
+      - name: Assemble npm packages
+        run: node npm/prepare.mjs "${{ steps.ver.outputs.version }}" artifacts/publish
+
+      # 煙霧測試:只有 linux-x64 能在此 runner 上直接執行。
+      # 至少確保「自帶執行環境的產物可以啟動」這件事在 CI 有守到。
+      - name: Smoke test (linux-x64)
+        run: |
+          set -euo pipefail
+          BIN=npm/dist/polymigrate-linux-x64/bin/polymigrate
+          chmod +x "$BIN"
+          "$BIN" --help > /dev/null
+          echo "✔ linux-x64 執行檔可啟動"
+
+      - name: Publish to npm (OIDC trusted publishing)
+        run: |
+          set -euo pipefail
+          # 冪等發布:已存在的版本跳過而不是報錯,某一包失敗時重跑不會被
+          # 前面已發成功的那幾包擋住(cornhsu-parity v0.9.6 實際踩過)。
+          publish() {
+            local dir="$1" name version
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "↷ $name@$version 已存在,跳過"
+              return 0
+            fi
+            echo "::group::publish $name@$version"
+            npm publish "$dir" --access public
+            echo "::endgroup::"
+          }
+          # 平台包要先上架,主套件的 optionalDependencies 才解析得到
+          for dir in npm/dist/polymigrate-*; do publish "$dir"; done
+          publish npm/dist/cornhsu-polymigrate
