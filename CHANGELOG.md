@@ -2,6 +2,34 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 1.1.1
+
+**無功能變更。** 用於驗證 npm 的 OIDC 信任發布路徑 —— 1.1.0 是以長效 token 發布的
+(npm 的信任發布必須先有套件才設定得了),設定完成後需要一次實際發布確認該路徑可用,
+否則問題會留到下次真正要發版時才浮現。
+
+- 移除臨時的診斷 workflow(用於查出 1.1.0 發布失敗的根因:token 已被撤銷,`npm whoami` 回 E401)
+
+## 1.1.0
+
+**新增 npm 發布通路。** 兩條通路功能完全相同,選手邊有的執行環境即可:
+
+```
+npx cornhsu-polymigrate extract site.yaml   # 有 Node,不需要 .NET
+dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET
+```
+
+- 使用者是「要把舊網站搬成靜態站的人」,多半在 Hugo / Eleventy / Astro / Next.js
+  的生態裡,手邊有 Node、不一定有 .NET SDK。而搬站是一次性任務 —— 為了跑一次而裝
+  整套 SDK,摩擦成本高到多數人會直接放棄。
+- 採 esbuild 模式:主套件只含啟動腳本,四個平台包(win32-x64 / linux-x64 /
+  darwin-x64 / darwin-arm64)掛 `optionalDependencies`,npm 依 `os`/`cpu` 只下載
+  當前平台那一份(壓縮後約 45 MB)。不使用 postinstall 下載腳本 —— 那會被
+  `npm ci --ignore-scripts` 擋掉。
+- **只有 CLI 上 npm**;`Cornhsu.PolyMigrate.Core` 是給 .NET 開發者用的函式庫,
+  受眾本來就在 NuGet。
+- CLI 行為、輸出契約、config 欄位皆未變更。
+
 ## 1.0.0
 
 介面定案。功能與 `1.0.0-preview.1` 相同——preview 期間未回報任何問題,
