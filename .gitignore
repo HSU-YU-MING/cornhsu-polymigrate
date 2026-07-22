@@ -480,3 +480,9 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# npm 打包產物
+npm/dist/
+
+# npm 主套件的啟動腳本是原始碼,不是建置產物 —— 別被上面的 [Bb]in/ 規則吃掉
+!npm/cornhsu-polymigrate/bin/

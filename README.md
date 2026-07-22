@@ -77,6 +77,18 @@ Two more numbers from that run:
 
 ## Install & use
 
+Two channels — pick whichever runtime you already have. **Same tool, same behaviour.**
+
+```
+npx cornhsu-polymigrate extract site.yaml   # Node — no .NET install needed
+dotnet tool install -g Cornhsu.PolyMigrate  # .NET
+```
+
+> The npm build ships a self-contained native binary and only downloads the one
+> matching your platform (win32-x64 / linux-x64 / darwin-x64 / darwin-arm64).
+> Migrating a site is usually a one-off job — installing a whole SDK for a single
+> run is friction most people won't accept, so the tool meets you where you are.
+
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
