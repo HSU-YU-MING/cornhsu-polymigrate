@@ -108,9 +108,25 @@ jobs:
           "$BIN" --help > /dev/null
           echo "✔ linux-x64 執行檔可啟動"
 
-      - name: Publish to npm (OIDC trusted publishing)
+      # 認證方式自動切換,不需要為了「首發」與「之後」改兩次 workflow:
+      #   有 NPM_TOKEN secret  → 寫入 .npmrc 用 token(首次發布只能這樣,
+      #                          npm 的信任發布必須先有套件才設定得了)
+      #   沒有 NPM_TOKEN       → 走 OIDC 信任發布(零長效金鑰)
+      # 設定好信任發布後把 secret 刪掉,這裡就會自動改走 OIDC。
+      #
+      # 注意:不是用 NODE_AUTH_TOKEN。那個變數「設成空字串」會讓 npm 拿空 token
+      # 去驗證而不改走 OIDC,正是要避免的失敗模式(actions/setup-node#1551 同源)。
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            echo "認證:token(首次發布)"
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+          else
+            echo "認證:OIDC 信任發布"
+          fi
           # 冪等發布:已存在的版本跳過而不是報錯,某一包失敗時重跑不會被
           # 前面已發成功的那幾包擋住(cornhsu-parity v0.9.6 實際踩過)。
           publish() {
