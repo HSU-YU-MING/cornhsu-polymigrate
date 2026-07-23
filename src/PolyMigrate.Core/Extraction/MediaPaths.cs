@@ -6,9 +6,9 @@ namespace PolyMigrate.Core.Extraction;
 /// 媒體路徑對映(§2.6 %20 雙重編碼坑):磁碟存「解碼後」檔名、輸出網址「單次編碼」。
 /// 對映規則與 Phase 1 鏡像一致:原始 URL 路徑(解碼)= media 根目錄下的相對路徑。
 /// </summary>
-public sealed class MediaPaths(SiteConfig config)
+public sealed class MediaPaths(MediaSection media)
 {
-    private readonly string _webPrefix = config.Media.WebPrefix.TrimEnd('/') + "/";
+    private readonly string _webPrefix = media.WebPrefix.TrimEnd('/') + "/";
 
     /// <summary>原始資產絕對網址 → media 根目錄下的相對路徑(已解碼、'/' 分隔);根路徑或含穿越分段為 null。</summary>
     public static string? RelativeFromUrl(string absoluteUrl)

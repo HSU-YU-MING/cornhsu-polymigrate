@@ -14,10 +14,10 @@ public sealed class LinkRewriter
     private readonly string _host;
     private readonly string[] _stripExtensions;
 
-    public LinkRewriter(SiteConfig config)
+    public LinkRewriter(SiteSection site, UrlPatternSection urlPattern)
     {
-        _host = new Uri(config.Site.BaseUrl).Host;
-        _stripExtensions = [.. config.UrlPattern.StripExtensions];
+        _host = new Uri(site.BaseUrl).Host;
+        _stripExtensions = [.. urlPattern.StripExtensions];
     }
 
     public string Rewrite(string? href, string pageUrl)

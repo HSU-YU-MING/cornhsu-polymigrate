@@ -33,10 +33,10 @@ public sealed partial class PageExtractor
     public PageExtractor(SiteConfig config)
     {
         _config = config;
-        _titles = new TitleCleaner(config);
-        _links = new LinkRewriter(config);
-        _classifier = new PageClassifier(config);
-        _mediaPaths = new MediaPaths(config);
+        _titles = new TitleCleaner(config.Extract);
+        _links = new LinkRewriter(config.Site, config.UrlPattern);
+        _classifier = new PageClassifier(config.Extract);
+        _mediaPaths = new MediaPaths(config.Media);
     }
 
     public ExtractedPage Extract(RawPage page, string html, string mediaRoot)

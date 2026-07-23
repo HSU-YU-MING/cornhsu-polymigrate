@@ -80,9 +80,9 @@ public sealed class ExtractionPipeline(SiteConfig config)
     /// <param name="dryRun">true = 完整跑抽取與統計但不寫任何檔案(§3.8)。</param>
     public ExtractionReport Run(ExtractionPaths paths, bool dryRun = false)
     {
-        var parser = new RawPageParser(config);
+        var parser = new RawPageParser(config.Site, config.UrlPattern);
         var extractor = new PageExtractor(config);
-        var links = new LinkRewriter(config);
+        var links = new LinkRewriter(config.Site, config.UrlPattern);
         var encoding = TextEncodings.Resolve(config.Site.Encoding);
         var locales = config.UrlPattern.LangMap.Values.Distinct().ToList();
 

@@ -4,7 +4,7 @@ namespace PolyMigrate.Core.Tests.Extraction;
 
 public class TitleCleanerTests
 {
-    private static readonly TitleCleaner Cleaner = new(TestConfigs.IbpsLike());
+    private static readonly TitleCleaner Cleaner = new(TestConfigs.IbpsLike().Extract);
 
     [Theory]
     // 日期前綴三式(§2.6:YYYYMMDD 與 MMDDYYYY 混用都要認)
@@ -51,7 +51,7 @@ public class TitleCleanerTests
         // i18n-first:標記字可換成任何語言
         var config = TestConfigs.IbpsLike();
         config.Extract.TitleMarkers = ["ニュース"];
-        var cleaner = new TitleCleaner(config);
+        var cleaner = new TitleCleaner(config.Extract);
 
         Assert.Equal("春の法要", cleaner.Clean("2026/04/01 ニュース:春の法要", stripSiteNoise: false));
         // 換掉後,預設的 News 不再是標記字(僅日期前綴仍剝)
@@ -63,7 +63,7 @@ public class TitleCleanerTests
     {
         var config = TestConfigs.IbpsLike();
         config.Extract.TitleMarkers = [];
-        var cleaner = new TitleCleaner(config);
+        var cleaner = new TitleCleaner(config.Extract);
 
         Assert.Equal("八關齋戒", cleaner.Clean("2025/02/02:八關齋戒", stripSiteNoise: false));
         Assert.Equal("News 02/02/2025: Retreat", cleaner.Clean("News 02/02/2025: Retreat", stripSiteNoise: false));
@@ -75,7 +75,7 @@ public class TitleCleanerTests
         // config 若含空字串雜訊,StartsWith("")/EndsWith("") 恆真會讓剝除迴圈永不收斂 → 必須先濾掉
         var config = TestConfigs.IbpsLike();
         config.Extract.TitleNoise = ["", "香雲寺"];
-        var cleaner = new TitleCleaner(config);
+        var cleaner = new TitleCleaner(config.Extract);
 
         Assert.Equal("關於", cleaner.Clean("香雲寺 - 關於", stripSiteNoise: true));
     }
