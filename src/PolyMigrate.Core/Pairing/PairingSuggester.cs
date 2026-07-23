@@ -32,6 +32,10 @@ public sealed class PairingSuggester(SiteConfig config)
     public const string Date = "date";
     public const string TitleSimilarity = "title_similarity";
 
+    /// <summary>合法的 fallback 啟發式名稱——config 驗證與此處派發共用的單一事實來源。</summary>
+    public static readonly IReadOnlySet<string> KnownHeuristics =
+        new HashSet<string>(StringComparer.Ordinal) { SharedMedia, Date, TitleSimilarity };
+
     /// <summary>title_similarity 低於此值不當證據(跨語言標題相似度本就偏弱)。</summary>
     private const double TitleSimilarityThreshold = 0.5;
 

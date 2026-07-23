@@ -22,19 +22,10 @@ public class SiteConfigLoaderTests
         var config = SiteConfigLoader.Load(MinimalYaml);
 
         Assert.Equal("zh-Hant", config.UrlPattern.LangMap["ch"]);
-        Assert.Equal(RenderMode.Static, config.Site.Render);
-        Assert.Equal(PairingStrategy.SymmetricPath, config.Pairing.Strategy);
         Assert.Equal([".php"], config.UrlPattern.StripExtensions);
         Assert.Equal("/media/", config.Media.WebPrefix);
         Assert.Equal(80, config.Extract.TextInImageMaxLength);
-    }
-
-    [Fact]
-    public void UnderscoredEnum_Parses()
-    {
-        var config = SiteConfigLoader.Load(MinimalYaml + "\npairing:\n  strategy: symmetric_path\n");
-
-        Assert.Equal(PairingStrategy.SymmetricPath, config.Pairing.Strategy);
+        Assert.Equal(3000, config.Site.Polite.DelayMs);
     }
 
     [Fact]
@@ -117,7 +108,6 @@ public class SiteConfigLoaderTests
 
     [Theory]
     // 數值/語意欄位越界不再默默下傳給編碼器/排程器,載入即報錯
-    [InlineData("site:\n  base_url: https://www.example.org\n  polite:\n    concurrency: 0", "concurrency")]
     [InlineData("site:\n  base_url: https://www.example.org\n  polite:\n    delay_ms: -1", "delay_ms")]
     [InlineData("extract:\n  content: \"main\"\n  text_in_image_max_length: -5", "text_in_image_max_length")]
     [InlineData("media:\n  thumbnails:\n    max_width: 0", "max_width")]

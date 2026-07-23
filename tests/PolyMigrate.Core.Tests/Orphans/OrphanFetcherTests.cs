@@ -16,7 +16,7 @@ public class OrphanFetcherTests : IDisposable
     private static SiteConfig FastConfig()
     {
         var config = TestConfigs.IbpsLike();
-        config.Site.Polite = new PoliteSection { Concurrency = 1, DelayMs = 0 };
+        config.Site.Polite = new PoliteSection { DelayMs = 0 };
         return config;
     }
 

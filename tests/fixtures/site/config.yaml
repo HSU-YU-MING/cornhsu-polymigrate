@@ -23,7 +23,6 @@ extract:
       images_to_gallery: true
 
 pairing:
-  strategy: symmetric_path
   fallback: [shared_media, date, title_similarity]
 
 media:
