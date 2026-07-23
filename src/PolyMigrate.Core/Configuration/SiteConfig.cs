@@ -29,9 +29,6 @@ public sealed class SiteSection
     /// </summary>
     public string? Encoding { get; set; }
 
-    /// <summary>static | headless(需 JS 渲染才長出正文時)。</summary>
-    public RenderMode Render { get; set; } = RenderMode.Static;
-
     public PoliteSection Polite { get; set; } = new();
 
     /// <summary>bot 防護繞法(§2.5;香雲寺:JS cookie 挑戰 → 帶 cookie)。null = 不需要。</summary>
@@ -51,16 +48,9 @@ public sealed class AuthWorkaroundSection
     public Dictionary<string, string> Set { get; set; } = [];
 }
 
-public enum RenderMode
-{
-    Static,
-    Headless,
-}
-
 public sealed class PoliteSection
 {
-    public int Concurrency { get; set; } = 1;
-
+    /// <summary>每個對原站的請求之間的間隔毫秒(禮貌性;probe/fetch 皆為單執行緒循序,靠此間隔節流)。</summary>
     public int DelayMs { get; set; } = 3000;
 }
 
@@ -130,22 +120,15 @@ public sealed class PageTypeRules
 
 public sealed class PairingSection
 {
-    public PairingStrategy Strategy { get; set; } = PairingStrategy.SymmetricPath;
-
-    /// <summary>對稱配對失敗時的啟發式建議順序(§1.4);MVP 後續實作。</summary>
+    /// <summary>
+    /// 對稱路徑配對(去語言前綴的路徑相等)配不起來時,啟發式建議的採用順序,也決定 pair_evidence 的加權(§1.4)。
+    /// 合法值見 <see cref="PolyMigrate.Core.Pairing.PairingSuggester.KnownHeuristics"/>;空 = 只做對稱路徑、不給建議。
+    /// </summary>
     public List<string> Fallback { get; set; } = [];
-}
-
-public enum PairingStrategy
-{
-    /// <summary>去語言前綴的路徑當 translation_key(§1.4)。</summary>
-    SymmetricPath,
 }
 
 public sealed class MediaSection
 {
-    public bool Download { get; set; } = true;
-
     /// <summary>媒體改寫後的根絕對網路路徑前綴。</summary>
     public string WebPrefix { get; set; } = "/media/";
 

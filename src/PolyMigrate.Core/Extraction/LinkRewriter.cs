@@ -6,7 +6,7 @@ namespace PolyMigrate.Core.Extraction;
 /// 內文連結改寫(規格 rewrite_link):站內動態頁相對連結 → 新路由(以頁面 URL 解析 ../);
 /// 外部、錨點、mailto 等保留原樣。
 /// </summary>
-public sealed class LinkRewriter
+internal sealed class LinkRewriter
 {
     private static readonly string[] PassThroughPrefixes =
         ["http://", "https://", "#", "mailto:", "tel:", "//", "javascript:"];
@@ -14,10 +14,10 @@ public sealed class LinkRewriter
     private readonly string _host;
     private readonly string[] _stripExtensions;
 
-    public LinkRewriter(SiteConfig config)
+    public LinkRewriter(SiteSection site, UrlPatternSection urlPattern)
     {
-        _host = new Uri(config.Site.BaseUrl).Host;
-        _stripExtensions = [.. config.UrlPattern.StripExtensions];
+        _host = new Uri(site.BaseUrl).Host;
+        _stripExtensions = [.. urlPattern.StripExtensions];
     }
 
     public string Rewrite(string? href, string pageUrl)

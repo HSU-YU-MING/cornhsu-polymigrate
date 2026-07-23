@@ -8,14 +8,14 @@ public class PairingSuggesterTests
 
     private static UnpairedGroup Group(string key, string locale, string slug,
         string title = "", string section = "events", params string[] media) => new()
-    {
-        TranslationKey = key,
-        Section = section,
-        Locale = locale,
-        Slug = slug,
-        Title = title,
-        Media = new HashSet<string>(media),
-    };
+        {
+            TranslationKey = key,
+            Section = section,
+            Locale = locale,
+            Slug = slug,
+            Title = title,
+            Media = new HashSet<string>(media),
+        };
 
     [Fact]
     public void SharedAlbum_SuggestsPair()

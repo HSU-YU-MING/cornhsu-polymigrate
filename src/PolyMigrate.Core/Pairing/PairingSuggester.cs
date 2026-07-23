@@ -3,7 +3,7 @@ using PolyMigrate.Core.Configuration;
 namespace PolyMigrate.Core.Pairing;
 
 /// <summary>配對建議的候選:只有單一語言版本的 translation_key(§1.4「配不起來的」)。</summary>
-public sealed class UnpairedGroup
+internal sealed class UnpairedGroup
 {
     public required string TranslationKey { get; init; }
 
@@ -19,18 +19,22 @@ public sealed class UnpairedGroup
 }
 
 /// <summary>一筆建議:兩個互缺對方語言的 key,附證據(如 shared_media=3)。</summary>
-public sealed record PairSuggestion(string KeyA, string KeyB, string Evidence);
+internal sealed record PairSuggestion(string KeyA, string KeyB, string Evidence);
 
 /// <summary>
 /// 啟發式配對建議(§1.4):對稱路徑配不起來的內容(如檔名語意命名的活動頁),
 /// 依 config pairing.fallback 順序用「共用媒體 / slug 日期 / 標題相似度」建議人工覆核的配對。
 /// 只建議、不自動合併——最終決定權在人(content_inventory 的 final 欄)。
 /// </summary>
-public sealed class PairingSuggester(SiteConfig config)
+internal sealed class PairingSuggester(SiteConfig config)
 {
     public const string SharedMedia = "shared_media";
     public const string Date = "date";
     public const string TitleSimilarity = "title_similarity";
+
+    /// <summary>合法的 fallback 啟發式名稱——config 驗證與此處派發共用的單一事實來源。</summary>
+    public static readonly IReadOnlySet<string> KnownHeuristics =
+        new HashSet<string>(StringComparer.Ordinal) { SharedMedia, Date, TitleSimilarity };
 
     /// <summary>title_similarity 低於此值不當證據(跨語言標題相似度本就偏弱)。</summary>
     private const double TitleSimilarityThreshold = 0.5;

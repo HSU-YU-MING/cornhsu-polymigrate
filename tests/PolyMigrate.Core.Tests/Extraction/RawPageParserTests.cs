@@ -1,10 +1,12 @@
+using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Extraction;
 
 namespace PolyMigrate.Core.Tests.Extraction;
 
 public class RawPageParserTests
 {
-    private static readonly RawPageParser Parser = new(TestConfigs.IbpsLike());
+    private static readonly SiteConfig Config = TestConfigs.IbpsLike();
+    private static readonly RawPageParser Parser = new(Config.Site, Config.UrlPattern);
 
     private static RawPage Parse(string relative) =>
         Parser.Parse(@"C:\raw", Path.Combine(@"C:\raw", relative.Replace('/', Path.DirectorySeparatorChar)));

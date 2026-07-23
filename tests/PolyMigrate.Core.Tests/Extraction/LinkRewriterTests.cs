@@ -1,10 +1,12 @@
+using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Extraction;
 
 namespace PolyMigrate.Core.Tests.Extraction;
 
 public class LinkRewriterTests
 {
-    private static readonly LinkRewriter Rewriter = new(TestConfigs.IbpsLike());
+    private static readonly SiteConfig Config = TestConfigs.IbpsLike();
+    private static readonly LinkRewriter Rewriter = new(Config.Site, Config.UrlPattern);
     private const string PageUrl = "https://www.ibps-austin.org/ch/news/20260712.php";
 
     [Theory]

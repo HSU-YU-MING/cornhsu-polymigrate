@@ -4,6 +4,7 @@
     <Project Path="src/PolyMigrate.Core/PolyMigrate.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PolyMigrate.Cli.Tests/PolyMigrate.Cli.Tests.csproj" />
     <Project Path="tests/PolyMigrate.Core.Tests/PolyMigrate.Core.Tests.csproj" />
   </Folder>
 </Solution>

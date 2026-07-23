@@ -1,0 +1,29 @@
+; PolyMigrate 編碼風格。CI 以 `dotnet format --verify-no-changes` 把關(見 ci.yml)。
+; 只鎖住既有一致的排版(縮排、行尾、空白);主觀的 IDE 風格規則留 suggestion,不強制改寫。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+; 檔案範圍 namespace(全 codebase 慣例)
+csharp_style_namespace_declarations = file_scoped:warning
+; 其餘主觀風格:記錄慣例但不擋建置(避免對既有碼大規模改寫)
+csharp_prefer_braces = true:suggestion
+dotnet_sort_system_directives_first = true
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+csharp_style_var_for_built_in_types = true:silent
+csharp_style_var_when_type_is_apparent = true:silent
+csharp_style_var_elsewhere = true:silent

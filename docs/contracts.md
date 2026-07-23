@@ -2,7 +2,7 @@
 
 > 「可離線重跑」的前提:每個 Phase 的輸出是明確、版本化的檔案格式契約。
 > 契約定案後,才能只重跑 Phase 2 不重爬,也才是 NuGet lib 元件化的基礎。
-> 狀態:**骨架(v0)— 欄位隨 0.1/0.5 實作逐項定案,定案前允許破壞性修改。**
+> 狀態:**自 1.0 起穩定。** 下列 CSV 格式與 frontmatter 欄位為對外契約,破壞性變更才升 major。
 
 ## 通用規則
 
@@ -39,17 +39,25 @@ mirror/
 
 ## Phase 2 → Phase 3:Markdown + 清單 + 配對結果
 
-**Markdown frontmatter 必填欄位**(TODO 0.1 定案):
+**Markdown frontmatter**(欄位序即輸出序;`verify` 檢查前六個為必填):
 
 ```yaml
-title: ...            # 內文標題優先、剝除日期前綴(§2.6)
-lang: zh-Hant         # BCP-47
-translation_key: ...  # 去語言前綴的路徑(§1.4)
 source_url: ...
-date: ...             # 正規化 ISO 8601(§2.6:YYYYMMDD vs MMDDYYYY 坑)
+lang: zh-Hant         # BCP-47(§3.3)
+section: ...
+slug: ...
+translation_key: ...  # 去語言前綴的路徑(§1.4)
+title: ...            # 內文標題優先、剝除日期前綴(§2.6)
+page_type: ...        # 由 extract.section_types 分類(§classify)
+flags: [...]          # needs_rebuild / text_in_image 等
+text_length: 0
+image_count: 0
+images: [...]         # 相簿:每筆 {local, alt}
+videos: [...]
+documents: [...]
 ```
 
-- YAML 一律由 YamlDotNet 序列化(§2.6:冒號、數字 slug 引號坑)。
+- YAML 一律由 YamlDotNet 序列化(§2.6:冒號、數字 slug、以及 YAML 1.1 會誤判成日期/數字的字串,一律強制引號)。
 
 **`content_inventory.csv`**(含雙語缺漏表,§1.4;0.1 已定案,欄序如下):
 

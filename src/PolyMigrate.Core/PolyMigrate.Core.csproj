@@ -4,6 +4,12 @@
     <PackageId>Cornhsu.PolyMigrate.Core</PackageId>
     <Description>Core library of PolyMigrate — the i18n-first static-site migrator. Extraction, bilingual pairing, and inventory components.</Description>
     <IsPackable>true</IsPackable>
+
+    <!-- 把 /// 註解打包進 nupkg,函式庫消費者才有 IntelliSense。
+         CS1591(缺 XML 註解)/ CS1573(只註解部分參數)不擋建置:選擇性註解是本 codebase 慣例,
+         不該讓 warnings-as-errors 失敗 -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

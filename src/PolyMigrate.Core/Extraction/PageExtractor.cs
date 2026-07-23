@@ -11,7 +11,7 @@ namespace PolyMigrate.Core.Extraction;
 /// 影片/PDF 佔位符保留(§2.6:markdownify/ReverseMarkdown 會丟 iframe/video)、
 /// 圖片 → 根絕對網路路徑 + 壞圖偵測,最後 HTML → Markdown。
 /// </summary>
-public sealed partial class PageExtractor
+internal sealed partial class PageExtractor
 {
     private const string VideoWrap =
         "<div style=\"position:relative;padding-bottom:56.25%;height:0;margin:18px 0;" +
@@ -33,10 +33,10 @@ public sealed partial class PageExtractor
     public PageExtractor(SiteConfig config)
     {
         _config = config;
-        _titles = new TitleCleaner(config);
-        _links = new LinkRewriter(config);
-        _classifier = new PageClassifier(config);
-        _mediaPaths = new MediaPaths(config);
+        _titles = new TitleCleaner(config.Extract);
+        _links = new LinkRewriter(config.Site, config.UrlPattern);
+        _classifier = new PageClassifier(config.Extract);
+        _mediaPaths = new MediaPaths(config.Media);
     }
 
     public ExtractedPage Extract(RawPage page, string html, string mediaRoot)

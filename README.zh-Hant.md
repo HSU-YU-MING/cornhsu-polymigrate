@@ -12,9 +12,10 @@
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
 
-**狀態:1.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
-並以一次真實的整站搬遷驗證(見下)。CLI 介面與 Phase 輸出契約自此定案:
-新功能升 minor、修正升 patch。
+**狀態:2.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
+並以一次真實的整站搬遷驗證(見下)。**CLI 介面與 Phase 輸出契約維持穩定**(自 1.0 未變):
+新功能升 minor、修正升 patch。2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
+收束到意圖中的進入點、移除未使用的 config 欄位,遷移說明見 [CHANGELOG](CHANGELOG.md)。
 
 ## 為什麼
 
@@ -87,14 +88,35 @@ polymigrate fetch-orphans site.yaml --section news
 一站一份 YAML config,站別知識全在裡面——完整註解的真實範例見
 [examples/ibps-austin.yaml](examples/ibps-austin.yaml)。
 
+## 當函式庫用
+
+CLI 只是 `Cornhsu.PolyMigrate.Core` 之上的薄殼。要在自己的 .NET 程式裡驅動搬遷,
+用 `PolyMigrator` facade 即可 —— 唯一有文件的進入點,不必碰內部實作型別:
+
+```
+dotnet add package Cornhsu.PolyMigrate.Core
+```
+
+```csharp
+using PolyMigrate.Core;
+
+var migrator = PolyMigrator.FromConfigFile("site.yaml");
+var report = migrator.Extract("out/");        // out/raw、out/media → out/content + 清單
+if (report.HasErrors) { /* 有不安全路徑被跳過,見 path_issues.csv */ }
+
+var verify = PolyMigrator.Verify("out/");      // 不需 config,只讀 Phase 2 輸出
+Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
+```
+
 ## 目錄
 
 | 路徑 | 內容 |
 |---|---|
 | `src/PolyMigrate.Core` | 抽取/配對/巡檢核心(NuGet:`Cornhsu.PolyMigrate.Core`) |
 | `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
-| `tests/` | 119 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
+| `tests/` | 單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
+| `docs/搬遷工具_評估與規劃書.md` | 原始評估與規劃書(原始碼中滿地的 `§X.Y` 都指向這份) |
 
 ## 開發
 

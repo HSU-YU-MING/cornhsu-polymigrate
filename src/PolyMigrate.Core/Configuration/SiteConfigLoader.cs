@@ -1,3 +1,4 @@
+using PolyMigrate.Core.Pairing;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -80,10 +81,9 @@ public static class SiteConfigLoader
         {
             errors.Add($"site.auth_workaround.type '{auth.Type}' is not supported (only 'cookie').");
         }
-        string[] knownHeuristics = ["shared_media", "date", "title_similarity"];
-        foreach (var h in c.Pairing.Fallback.Where(h => !knownHeuristics.Contains(h)))
+        foreach (var h in c.Pairing.Fallback.Where(h => !PairingSuggester.KnownHeuristics.Contains(h)))
         {
-            errors.Add($"pairing.fallback '{h}' is not a known heuristic ({string.Join(", ", knownHeuristics)}).");
+            errors.Add($"pairing.fallback '{h}' is not a known heuristic ({string.Join(", ", PairingSuggester.KnownHeuristics)}).");
         }
         if (c.Site.Encoding is { } enc)
         {
@@ -95,10 +95,6 @@ public static class SiteConfigLoader
             {
                 errors.Add($"site.encoding '{enc}' is not a known encoding.");
             }
-        }
-        if (c.Site.Polite.Concurrency < 1)
-        {
-            errors.Add($"site.polite.concurrency must be >= 1, got {c.Site.Polite.Concurrency}.");
         }
         if (c.Site.Polite.DelayMs < 0)
         {

@@ -14,7 +14,7 @@ namespace PolyMigrate.Core.Extraction;
 /// <param name="TranslationKey">去語言前綴的路徑,雙語配對鍵(§1.4)。
 /// 無語言前綴的站級頁(如語言選擇頁)以 "/" 開頭,不與任何語言版配對——
 /// 它們不是誰的翻譯,不可與同名的去前綴路徑相撞。</param>
-public sealed record RawPage(
+internal sealed record RawPage(
     string FilePath,
     string LangPrefix,
     string Locale,
@@ -24,17 +24,17 @@ public sealed record RawPage(
     string TranslationKey);
 
 /// <summary>鏡像檔路徑 → 頁面身分。鏡像檔名規則:原始 URL 路徑 + ".html"(如 ch/news/a.php → ch/news/a.php.html)。</summary>
-public sealed class RawPageParser
+internal sealed class RawPageParser
 {
-    private readonly SiteConfig _config;
+    private readonly UrlPatternSection _urlPattern;
     private readonly string _baseUrl;
     private readonly string[] _suffixes;   // 長的先比:".php.html" 再 ".html"
 
-    public RawPageParser(SiteConfig config)
+    public RawPageParser(SiteSection site, UrlPatternSection urlPattern)
     {
-        _config = config;
-        _baseUrl = config.Site.BaseUrl.TrimEnd('/');
-        _suffixes = [.. config.UrlPattern.StripExtensions.Select(e => e + ".html"), ".html"];
+        _urlPattern = urlPattern;
+        _baseUrl = site.BaseUrl.TrimEnd('/');
+        _suffixes = [.. urlPattern.StripExtensions.Select(e => e + ".html"), ".html"];
     }
 
     public RawPage Parse(string rawRoot, string filePath)
@@ -42,10 +42,10 @@ public sealed class RawPageParser
         var rel = Path.GetRelativePath(rawRoot, filePath).Replace('\\', '/');
         var parts = rel.Split('/');
 
-        var langPrefix = _config.UrlPattern.LangMap.ContainsKey(parts[0]) ? parts[0] : "";
+        var langPrefix = _urlPattern.LangMap.ContainsKey(parts[0]) ? parts[0] : "";
         var locale = langPrefix.Length > 0
-            ? _config.UrlPattern.LangMap[langPrefix]
-            : _config.UrlPattern.DefaultLang;
+            ? _urlPattern.LangMap[langPrefix]
+            : _urlPattern.DefaultLang;
 
         // 語言前綴之後的路徑;規格假設前綴必在,無前綴時整條路徑照用(不像 Python 一律丟 parts[0])
         var tail = langPrefix.Length > 0 ? parts[1..] : parts;

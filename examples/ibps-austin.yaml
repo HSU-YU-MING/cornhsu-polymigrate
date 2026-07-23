@@ -5,8 +5,7 @@ config_version: 1
 site:
   base_url: https://www.ibps-austin.org
   # encoding: utf-8          # 省略 = UTF-8;Big5 舊站在此宣告(§3.1)
-  render: static
-  polite: { concurrency: 1, delay_ms: 3000 }
+  polite: { delay_ms: 3000 }   # 對原站每請求間隔(probe/fetch-orphans;循序、非並發)
   # bot 防護繞法(§2.6:JS cookie 挑戰回 409,非 UA)— probe/fetch-orphans 用
   auth_workaround:
     type: cookie
@@ -44,11 +43,10 @@ extract:
       images_to_gallery: true
 
 pairing:
-  strategy: symmetric_path
+  # 對稱路徑配不起來時,依序用這些啟發式建議人工覆核的配對(§1.4);留空 = 只做對稱路徑
   fallback: [shared_media, date, title_similarity]
 
 media:
-  download: true
   web_prefix: /media/
   pdf_labels: { zh-Hant: 下載／檢視 PDF, en: View PDF }
   thumbnails: { max_width: 1000, quality: 82 }
