@@ -2,6 +2,19 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 2.0.1
+
+**修正 2.0.0 後全新視角覆審抓到的缺陷。** 對外契約不變。
+
+- **Ctrl-C 對同步指令不再被吞掉**:2.0.0 的 handler 無條件攔截 Ctrl-C,但 `extract`/`thumbs`/`verify`
+  是同步、不看 token → 按 Ctrl-C 既不取消也不終止(2.0.0 引入的回歸)。改為第一次合作式取消、
+  第二次放行讓 runtime 終止。
+- **不安全路徑被跳過的頁不再產生死 301**:被 `path_issues` 記為 error 而跳過(未寫檔)的頁,
+  原本仍會被聚合進 `redirect_map` / `redirects.nginx.conf` / `_redirects`,導致 301 打到磁碟上
+  不存在的頁(→404),也污染 inventory / media_manifest。改為跳過的頁只出現在 `path_issues.csv`。
+- **硬化**:CLI 對 `FormatException`(如病態 URL)乾淨退出 2 而非崩潰;`verify` 對手改壞的
+  非字串 `images[].local` 略過而非 `InvalidCastException`;孤兒抓取的原子寫入在取消時清掉 `.tmp`。
+
 ## 2.0.0
 
 **工程版:收束函式庫 API、清掉死 config、內部重構。** 這一版**不改任何對外行為契約**——

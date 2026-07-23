@@ -147,7 +147,16 @@ public sealed class OrphanFetcher(SiteConfig config, HttpClient http)
     private static async Task WriteAtomicAsync(string path, byte[] bytes, CancellationToken ct)
     {
         var tmp = path + ".tmp";
-        await File.WriteAllBytesAsync(tmp, bytes, ct);
-        File.Move(tmp, path, overwrite: true);
+        try
+        {
+            await File.WriteAllBytesAsync(tmp, bytes, ct);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            // 失敗/取消時清掉半截暫存檔,別留垃圾
+            try { File.Delete(tmp); } catch (IOException) { }
+            throw;
+        }
     }
 }

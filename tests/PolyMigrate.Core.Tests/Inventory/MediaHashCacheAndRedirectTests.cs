@@ -85,6 +85,28 @@ public class MediaHashCacheAndRedirectTests : IDisposable
     }
 
     [Fact]
+    public void UnsafePage_NotEmittedToRedirects()
+    {
+        // a.php.html 與 a.asp.html 都收斂成 content/ch/news/a.md → 第二個(a.php,ordinal 較後)
+        // 是重複輸出路徑、被跳過;跳過的頁不可再產生 301,否則 301 打到磁碟上不存在的頁(→404)
+        var config = Config();
+        config.UrlPattern.StripExtensions = [".php", ".asp"];
+        AddRaw("ch/news/a.asp.html", "hi");
+        AddRaw("ch/news/a.php.html", "hi");
+
+        var report = new ExtractionPipeline(config).Run(new ExtractionPaths(RawDir, MediaDir, _root));
+
+        Assert.True(report.HasErrors);   // 重複輸出路徑 = error
+
+        var redirectMap = File.ReadAllText(Path.Combine(_root, "redirect_map.csv"));
+        Assert.Contains("/ch/news/a.asp", redirectMap);        // 有寫的那個保留 301
+        Assert.DoesNotContain("/ch/news/a.php", redirectMap);  // 被跳過的那個不出現
+
+        Assert.DoesNotContain("a.php", File.ReadAllText(Path.Combine(_root, "redirects.nginx.conf")));
+        Assert.DoesNotContain("a.php", File.ReadAllText(Path.Combine(_root, "_redirects")));
+    }
+
+    [Fact]
     public void UnsafeSlug_SkippedAndRecorded_OthersStillWritten()
     {
         AddRaw("ch/news/ok.php.html", "fine");

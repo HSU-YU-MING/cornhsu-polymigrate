@@ -180,6 +180,17 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Fact]
+    public void MalformedImageLocal_NonString_DoesNotCrash()
+    {
+        // 手改壞的 frontmatter 讓 images[].local 是數字而非字串 → 略過該筆,不得崩潰
+        AddPage("ch/a.md", frontmatterExtra: "images:\n- local: 12345\n  alt: ''\n");
+
+        var report = Run();   // 不應丟 InvalidCastException
+
+        Assert.DoesNotContain(report.Issues, i => i.Kind is "missing_media" or "known_missing_media");
+    }
+
+    [Fact]
     public void ReportCsv_Written()
     {
         AddPage("ch/a.md", body: "[gone](/nope)");

@@ -88,20 +88,21 @@ public sealed class ExtractionPipeline(SiteConfig config)
             var unsafeIssue = PathSafety.Check(relPath) ?? PathSafety.RegisterOrCollide(seenPaths, relPath);
             if (unsafeIssue is not null)
             {
+                // 不安全路徑的頁不寫檔,也不進 aggregator——否則會替一個磁碟上不存在的頁
+                // 產出 301(→404)、inventory、media_manifest 列。它只出現在 path_issues.csv。
                 pathIssues.Add(new PathIssue(Severity.Error, relPath, unsafeIssue));
+                continue;
             }
-            else
+
+            if (PathSafety.CheckLength(Path.GetFullPath(Path.Combine(paths.OutDir, relPath))) is { } lengthIssue)
             {
-                if (PathSafety.CheckLength(Path.GetFullPath(Path.Combine(paths.OutDir, relPath))) is { } lengthIssue)
-                {
-                    pathIssues.Add(new PathIssue(Severity.Warning, relPath, lengthIssue));
-                }
-                if (!dryRun)
-                {
-                    WriteMarkdown(paths.OutDir, relPath, extracted);
-                }
-                pagesWritten++;
+                pathIssues.Add(new PathIssue(Severity.Warning, relPath, lengthIssue));
             }
+            if (!dryRun)
+            {
+                WriteMarkdown(paths.OutDir, relPath, extracted);
+            }
+            pagesWritten++;
 
             // translation_key 聚合各語言版本 + 媒體引用/缺圖/待補/redirect 的摺疊(純記憶體,見 InventoryAggregator)
             aggregator.Add(page, extracted);
