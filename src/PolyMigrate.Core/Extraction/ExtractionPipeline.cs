@@ -3,6 +3,7 @@ using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Inventory;
 using PolyMigrate.Core.Markdown;
 using PolyMigrate.Core.Pairing;
+using PolyMigrate.Core.Redirects;
 
 namespace PolyMigrate.Core.Extraction;
 
@@ -277,7 +278,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
         Csv.Write(Path.Combine(outDir, "redirect_map.csv"), rows);
     }
 
-    /// <summary>301 設定檔直接可用的兩種格式:nginx location 區塊與 Netlify _redirects。</summary>
+    /// <summary>301 設定檔:每種格式一個 IRedirectExporter(見 Redirects/),新增格式不必動這裡。</summary>
     private static void WriteRedirectExports(string outDir, List<Redirect> redirects)
     {
         var pairs = redirects
@@ -286,12 +287,10 @@ public sealed class ExtractionPipeline(SiteConfig config)
             .OrderBy(p => p.Old, StringComparer.Ordinal)
             .ToList();
 
-        File.WriteAllText(Path.Combine(outDir, "redirects.nginx.conf"),
-            string.Join('\n', pairs.Select(p => $"location = {p.Old} {{ return 301 {p.New}; }}")) + "\n",
-            Utf8NoBom);
-        File.WriteAllText(Path.Combine(outDir, "_redirects"),
-            string.Join('\n', pairs.Select(p => $"{p.Old} {p.New} 301")) + "\n",
-            Utf8NoBom);
+        foreach (var exporter in RedirectExporter.All)
+        {
+            File.WriteAllText(Path.Combine(outDir, exporter.FileName), exporter.Render(pairs), Utf8NoBom);
+        }
     }
 
     private static void WritePathIssues(string outDir, List<(string Severity, string Page, string Issue)> issues)
