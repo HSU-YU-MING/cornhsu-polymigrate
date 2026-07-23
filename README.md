@@ -98,6 +98,9 @@ polymigrate probe-orphans site.yaml --section news --years 2021-2023
 polymigrate fetch-orphans site.yaml --section news
 ```
 
+> No .NET? Every command above also runs with **zero install** via npm — just prefix it:
+> `npx cornhsu-polymigrate extract site.yaml`, `npx cornhsu-polymigrate verify out/`, and so on.
+
 One YAML config per site describes everything site-specific — see
 [examples/ibps-austin.yaml](examples/ibps-austin.yaml) for a fully-annotated real example.
 

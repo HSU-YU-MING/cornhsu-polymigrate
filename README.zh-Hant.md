@@ -81,6 +81,9 @@ polymigrate probe-orphans site.yaml --section news --years 2021-2023
 polymigrate fetch-orphans site.yaml --section news
 ```
 
+> 沒有 .NET?上面每個指令都可用 npm **免安裝**執行,前面加 `npx cornhsu-polymigrate` 即可:
+> `npx cornhsu-polymigrate extract site.yaml`、`npx cornhsu-polymigrate verify out/`,以此類推。
+
 一站一份 YAML config,站別知識全在裡面——完整註解的真實範例見
 [examples/ibps-austin.yaml](examples/ibps-austin.yaml)。
 
