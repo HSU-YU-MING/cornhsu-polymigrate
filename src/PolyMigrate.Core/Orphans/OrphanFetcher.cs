@@ -59,13 +59,14 @@ public sealed class OrphanFetcher(SiteConfig config, HttpClient http)
                     }
                     bytes = await response.Content.ReadAsByteArrayAsync(ct);
                 }
-                catch (HttpRequestException ex)
+                catch (Exception ex) when (IsTransient(ex, ct))
                 {
+                    // 連線層錯誤或逾時(非使用者取消):記錄該頁、繼續下一頁,不掀掉整批
                     report.Errors.Add($"[err] {url} {ex.Message}");
                     continue;
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(rawPath)!);
-                await File.WriteAllBytesAsync(rawPath, bytes, ct);
+                await WriteAtomicAsync(rawPath, bytes, ct);
                 report.PagesFetched++;
                 progress?.Invoke($"fetched {langPrefix}/{section}/{slug}");
 
@@ -128,13 +129,25 @@ public sealed class OrphanFetcher(SiteConfig config, HttpClient http)
                     continue;
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(local)!);
-                await File.WriteAllBytesAsync(local, bytes, ct);
+                await WriteAtomicAsync(local, bytes, ct);
                 report.AssetsFetched++;
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (IsTransient(ex, ct))
             {
-                // 單一資產失敗不阻斷(可能就是原站壞圖)
+                // 單一資產失敗或逾時不阻斷(可能就是原站壞圖或慢伺服器)
             }
         }
+    }
+
+    /// <summary>HTTP 層錯誤或請求逾時(非呼叫端主動取消)才算可略過的暫時性失敗。</summary>
+    private static bool IsTransient(Exception ex, CancellationToken ct) =>
+        ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested);
+
+    /// <summary>先寫暫存檔再原子改名:寫到一半被中斷不會在最終路徑留下半截檔(重跑會當它已完成)。</summary>
+    private static async Task WriteAtomicAsync(string path, byte[] bytes, CancellationToken ct)
+    {
+        var tmp = path + ".tmp";
+        await File.WriteAllBytesAsync(tmp, bytes, ct);
+        File.Move(tmp, path, overwrite: true);
     }
 }

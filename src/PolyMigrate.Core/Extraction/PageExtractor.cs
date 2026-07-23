@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
@@ -97,7 +98,7 @@ public sealed partial class PageExtractor
         var missing = new List<MissingImage>();
         var needFetch = new List<string>();
         var pdfLabel = _config.Media.PdfLabels.GetValueOrDefault(page.Locale, "View PDF");
-        var combinedHtml = "";
+        var combinedHtml = new StringBuilder();
 
         foreach (var node in nodes)
         {
@@ -111,8 +112,8 @@ public sealed partial class PageExtractor
             {
                 var src = iframe.GetAttribute("src")!;
                 var low = src.ToLowerInvariant().Split('?')[0];
-                if (src.Contains("youtube.com/embed", StringComparison.Ordinal)
-                    || src.Contains("youtu.be", StringComparison.Ordinal))
+                if (low.Contains("youtube.com/embed", StringComparison.Ordinal)
+                    || low.Contains("youtu.be", StringComparison.Ordinal))
                 {
                     var inner =
                         $"<iframe src=\"{src}\" title=\"video\" loading=\"lazy\" " +
@@ -202,10 +203,10 @@ public sealed partial class PageExtractor
             {
                 junk.Remove();
             }
-            combinedHtml += node.OuterHtml;
+            combinedHtml.Append(node.OuterHtml);
         }
 
-        var bodyMarkdown = CleanupMarkdown(_markdown.Convert(combinedHtml));
+        var bodyMarkdown = CleanupMarkdown(_markdown.Convert(combinedHtml.ToString()));
         // 還原影片/PDF 佔位符為內嵌 HTML(保留在原位置)
         for (var i = 0; i < embeds.Count; i++)
         {

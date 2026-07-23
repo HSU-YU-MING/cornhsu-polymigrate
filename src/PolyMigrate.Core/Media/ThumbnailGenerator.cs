@@ -57,7 +57,12 @@ public sealed class ThumbnailGenerator(SiteConfig config)
                     image.Quality = (uint)thumbs.Quality;
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                image.Write(target);
+                // 先寫暫存再原子改名:中途中斷(Ctrl-C、磁碟滿)不會在最終路徑留半截圖,
+                // 否則重跑會因「檔案已存在」把壞縮圖當成已完成。暫存名沒有副檔名,
+                // 故明確指定格式(否則 Magick 會依 .tmp 推測格式而寫錯)。
+                var tmp = target + ".tmp";
+                image.Write(tmp, image.Format);
+                File.Move(tmp, target, overwrite: true);
                 report.Created++;
                 if (report.Created % 200 == 0)
                 {

@@ -153,6 +153,32 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Fact]
+    public void HtmlLinks_SingleQuotedAndUppercase_AreChecked()
+    {
+        // 內嵌 HTML 的 href/src 單引號、大寫屬性也要抽出來驗,否則壞連結漏報
+        AddPage("ch/a.md", body: "<a href='/ch/news/nope'>x</a> <IMG SRC=\"/ch/news/gone\">");
+
+        var report = Run();
+
+        Assert.Equal(2, report.Errors);
+        Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/nope");
+        Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/gone");
+    }
+
+    [Fact]
+    public void MediaRef_WithQueryString_ResolvesToFile()
+    {
+        // /media/x.jpg?v=2 的 ?v=2 是快取破壞參數,不是檔名一部分——去掉再對磁碟找
+        AddMedia("images/a.jpg");
+        AddPage("ch/a.md", body: "![](/media/images/a.jpg?v=2)");
+
+        var report = Run();
+
+        Assert.Empty(report.Issues);
+        Assert.Equal(1, report.MediaChecked);
+    }
+
+    [Fact]
     public void ReportCsv_Written()
     {
         AddPage("ch/a.md", body: "[gone](/nope)");

@@ -115,6 +115,40 @@ public class SiteConfigLoaderTests
         Assert.NotNull(TextEncodings.Resolve(config.Site.Encoding));
     }
 
+    [Theory]
+    // 數值/語意欄位越界不再默默下傳給編碼器/排程器,載入即報錯
+    [InlineData("site:\n  base_url: https://www.example.org\n  polite:\n    concurrency: 0", "concurrency")]
+    [InlineData("site:\n  base_url: https://www.example.org\n  polite:\n    delay_ms: -1", "delay_ms")]
+    [InlineData("extract:\n  content: \"main\"\n  text_in_image_max_length: -5", "text_in_image_max_length")]
+    [InlineData("media:\n  thumbnails:\n    max_width: 0", "max_width")]
+    [InlineData("media:\n  thumbnails:\n    quality: 200", "quality")]
+    public void OutOfRangeNumericFields_Throw(string overrideBlock, string field)
+    {
+        // 每個 top-level key 只出現一次:把要覆寫的區塊替換進基底,其餘沿用預設
+        var topKey = overrideBlock.Split(':')[0];
+        var lines = new[]
+        {
+            "config_version: 1",
+            topKey == "site" ? overrideBlock : "site:\n  base_url: https://www.example.org",
+            "url_pattern:\n  lang_map: { ch: zh-Hant, en: en }\n  default_lang: zh-Hant",
+            topKey == "extract" ? overrideBlock : "extract:\n  content: \"main\"",
+            topKey == "media" ? overrideBlock : "",
+        };
+        var yaml = string.Join('\n', lines.Where(l => l.Length > 0));
+
+        var ex = Assert.Throws<ConfigException>(() => SiteConfigLoader.Load(yaml));
+        Assert.Contains(field, ex.Message);
+    }
+
+    [Fact]
+    public void EmptyLangMapLocale_Throws()
+    {
+        var yaml = MinimalYaml.Replace("lang_map: { ch: zh-Hant, en: en }", "lang_map: { ch: zh-Hant, en: \"\" }");
+
+        var ex = Assert.Throws<ConfigException>(() => SiteConfigLoader.Load(yaml));
+        Assert.Contains("lang_map", ex.Message);
+    }
+
     [Fact]
     public void ExampleConfig_IsValid()
     {

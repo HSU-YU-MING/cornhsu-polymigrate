@@ -109,10 +109,12 @@ public sealed partial class OutputVerifier
                         continue;
                     }
                     mediaChecked++;
-                    var rel = Uri.UnescapeDataString(reference[mediaPrefix.Length..]);
+                    // 去掉 ?query / #fragment 再對磁碟找檔(/media/x.jpg?v=2 的 ?v=2 不是檔名一部分)
+                    var clean = reference.Split('#')[0].Split('?')[0];
+                    var rel = Uri.UnescapeDataString(clean[mediaPrefix.Length..]);
                     if (!File.Exists(Path.Combine(mediaDir!, rel.Replace('/', Path.DirectorySeparatorChar))))
                     {
-                        issues.Add(knownMissing.Contains(reference)
+                        issues.Add(knownMissing.Contains(clean)
                             ? new VerifyIssue("warning", page, "known_missing_media", reference)
                             : new VerifyIssue("error", page, "missing_media", reference));
                     }
@@ -182,9 +184,10 @@ public sealed partial class OutputVerifier
         }
         foreach (Match m in HtmlTarget().Matches(body))
         {
-            if (m.Groups[1].Value is ['/', not '/', ..])
+            var value = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
+            if (value is ['/', not '/', ..])
             {
-                yield return m.Groups[1].Value;
+                yield return value;
             }
         }
     }
@@ -223,6 +226,6 @@ public sealed partial class OutputVerifier
     [GeneratedRegex(@"\]\(([^)\s]+)\)")]
     private static partial Regex MarkdownTarget();
 
-    [GeneratedRegex(@"(?:href|src)=""([^""]+)""")]
+    [GeneratedRegex("""(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlTarget();
 }

@@ -68,4 +68,15 @@ public class TitleCleanerTests
         Assert.Equal("八關齋戒", cleaner.Clean("2025/02/02:八關齋戒", stripSiteNoise: false));
         Assert.Equal("News 02/02/2025: Retreat", cleaner.Clean("News 02/02/2025: Retreat", stripSiteNoise: false));
     }
+
+    [Fact]
+    public void EmptyNoiseEntry_DoesNotHang()
+    {
+        // config 若含空字串雜訊,StartsWith("")/EndsWith("") 恆真會讓剝除迴圈永不收斂 → 必須先濾掉
+        var config = TestConfigs.IbpsLike();
+        config.Extract.TitleNoise = ["", "香雲寺"];
+        var cleaner = new TitleCleaner(config);
+
+        Assert.Equal("關於", cleaner.Clean("香雲寺 - 關於", stripSiteNoise: true));
+    }
 }

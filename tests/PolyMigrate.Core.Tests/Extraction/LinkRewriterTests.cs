@@ -30,4 +30,12 @@ public class LinkRewriterTests
     [Fact]
     public void RootIndex_CollapsesToSlash() =>
         Assert.Equal("/", Rewriter.Rewrite("/index.php", PageUrl));
+
+    [Theory]
+    // query 與 fragment 是頁面身分的一部分,改寫時不可丟(?id=5 兩頁不能塌成同一路由)
+    [InlineData("detail.php?id=5", "/ch/news/detail?id=5")]
+    [InlineData("../about.php#team", "/ch/about#team")]
+    [InlineData("list.php?page=2#top", "/ch/news/list?page=2#top")]
+    public void QueryAndFragment_Preserved(string href, string expected) =>
+        Assert.Equal(expected, Rewriter.Rewrite(href, PageUrl));
 }

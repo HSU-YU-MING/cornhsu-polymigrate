@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace PolyMigrate.Core.Pairing;
@@ -36,13 +37,15 @@ public static partial class SlugDates
     private static bool TryYmd(string year, string month, string day, out DateOnly date)
     {
         date = default;
-        if (int.Parse(year) is < 1990 or > 2100)
+        if (int.Parse(year, CultureInfo.InvariantCulture) is < 1990 or > 2100)
         {
             return false;
         }
-        return DateOnly.TryParseExact($"{year}-{month}-{day}", "yyyy-MM-dd", out date);
+        return DateOnly.TryParseExact($"{year}-{month}-{day}", "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
     }
 
-    [GeneratedRegex(@"\d{8}")]
+    // [0-9] 而非 \d:\d 會吃全形/阿拉伯數字,雙語 CJK 站上可能出現,int.Parse(invariant) 又會炸
+    [GeneratedRegex("[0-9]{8}")]
     private static partial Regex EightDigits();
 }

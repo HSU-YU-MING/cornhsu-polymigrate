@@ -50,9 +50,20 @@ public class PathSafetyTests
         var issue = PathSafety.RegisterOrCollide(seen, "content/ch/news/page.md");
         Assert.Contains("collision", issue);
         Assert.Contains("Page.md", issue);
+    }
 
-        // 同一路徑重複登記不是碰撞
-        Assert.Null(PathSafety.RegisterOrCollide(seen, "content/ch/news/Page.md"));
+    [Fact]
+    public void ExactDuplicateOutputPath_Rejected()
+    {
+        // 每個來源檔各呼叫一次,故第二次出現同一輸出路徑 = 兩個來源檔會互相覆蓋
+        // (如 a.php.html 與 a.asp.html 都收斂成 a.md),必須記錄、拒寫,而不是靜默覆蓋
+        var seen = new Dictionary<string, string>();
+
+        Assert.Null(PathSafety.RegisterOrCollide(seen, "content/ch/news/a.md"));
+
+        var issue = PathSafety.RegisterOrCollide(seen, "content/ch/news/a.md");
+        Assert.Contains("duplicate", issue);
+        Assert.Contains("a.md", issue);
     }
 
     [Fact]
