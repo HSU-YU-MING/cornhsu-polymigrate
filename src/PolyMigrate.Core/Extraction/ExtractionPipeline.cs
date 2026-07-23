@@ -1,5 +1,6 @@
 using System.Text;
 using PolyMigrate.Core.Configuration;
+using PolyMigrate.Core.Diagnostics;
 using PolyMigrate.Core.Inventory;
 using PolyMigrate.Core.Markdown;
 using PolyMigrate.Core.Pairing;
@@ -40,14 +41,14 @@ public sealed class ExtractionReport
     public int SuggestedPairs { get; init; }
 
     /// <summary>路徑安全問題(§3.4):error = 拒寫並跳過該頁;warning = 照寫但記錄(如超長路徑)。</summary>
-    public required List<(string Severity, string Page, string Issue)> PathIssues { get; init; }
+    public required List<PathIssue> PathIssues { get; init; }
 
-    public int PagesSkippedUnsafe => PathIssues.Count(i => i.Severity == "error");
+    public int PagesSkippedUnsafe => PathIssues.Count(i => i.Severity == Severity.Error);
 
     public bool HasErrors => PagesSkippedUnsafe > 0;
 
     public bool HasWarnings => MissingImages > 0 || NeedFetchMedia > 0
-        || PathIssues.Any(i => i.Severity == "warning");
+        || PathIssues.Any(i => i.Severity == Severity.Warning);
 }
 
 /// <summary>
@@ -73,7 +74,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             .ToList();
 
         var aggregator = new InventoryAggregator(links);
-        var pathIssues = new List<(string Severity, string Page, string Issue)>();
+        var pathIssues = new List<PathIssue>();
         var seenPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var pagesWritten = 0;
 
@@ -87,13 +88,13 @@ public sealed class ExtractionPipeline(SiteConfig config)
             var unsafeIssue = PathSafety.Check(relPath) ?? PathSafety.RegisterOrCollide(seenPaths, relPath);
             if (unsafeIssue is not null)
             {
-                pathIssues.Add(("error", relPath, unsafeIssue));
+                pathIssues.Add(new PathIssue(Severity.Error, relPath, unsafeIssue));
             }
             else
             {
                 if (PathSafety.CheckLength(Path.GetFullPath(Path.Combine(paths.OutDir, relPath))) is { } lengthIssue)
                 {
-                    pathIssues.Add(("warning", relPath, lengthIssue));
+                    pathIssues.Add(new PathIssue(Severity.Warning, relPath, lengthIssue));
                 }
                 if (!dryRun)
                 {
@@ -293,13 +294,13 @@ public sealed class ExtractionPipeline(SiteConfig config)
         }
     }
 
-    private static void WritePathIssues(string outDir, List<(string Severity, string Page, string Issue)> issues)
+    private static void WritePathIssues(string outDir, List<PathIssue> issues)
     {
         var rows = new List<IReadOnlyList<string>> { new[] { "severity", "page", "issue" } };
         rows.AddRange(issues
-            .OrderBy(i => i.Severity, StringComparer.Ordinal)
+            .OrderBy(i => i.Severity.Wire(), StringComparer.Ordinal)   // 排序仍依 wire 字串,與 1.x 一致
             .ThenBy(i => i.Page, StringComparer.Ordinal)
-            .Select(i => new[] { i.Severity, i.Page, i.Issue }));
+            .Select(i => new[] { i.Severity.Wire(), i.Page, i.Issue }));
         Csv.Write(Path.Combine(outDir, "path_issues.csv"), rows);
     }
 
@@ -316,7 +317,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
     private static ExtractionReport BuildReport(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
         int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs,
-        List<(string Severity, string Page, string Issue)> pathIssues)
+        List<PathIssue> pathIssues)
     {
         var typeCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var flagCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);

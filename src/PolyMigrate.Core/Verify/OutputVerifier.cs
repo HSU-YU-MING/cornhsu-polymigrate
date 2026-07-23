@@ -1,12 +1,13 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using PolyMigrate.Core.Diagnostics;
 using PolyMigrate.Core.Inventory;
 using YamlDotNet.Serialization;
 
 namespace PolyMigrate.Core.Verify;
 
 /// <summary>一筆巡檢發現。severity:error(阻斷發布)/ warning(已知或可接受,記錄)。</summary>
-public sealed record VerifyIssue(string Severity, string Page, string Kind, string Detail);
+public sealed record VerifyIssue(Severity Severity, string Page, string Kind, string Detail);
 
 public sealed class VerifyReport
 {
@@ -20,9 +21,9 @@ public sealed class VerifyReport
 
     public bool MediaChecksSkipped { get; init; }
 
-    public int Errors => Issues.Count(i => i.Severity == "error");
+    public int Errors => Issues.Count(i => i.Severity == Severity.Error);
 
-    public int Warnings => Issues.Count(i => i.Severity == "warning");
+    public int Warnings => Issues.Count(i => i.Severity == Severity.Warning);
 }
 
 /// <summary>
@@ -44,7 +45,7 @@ public sealed partial class OutputVerifier
         {
             return new VerifyReport
             {
-                Issues = [new VerifyIssue("error", "", "no_content", $"content directory not found: {contentDir}")],
+                Issues = [new VerifyIssue(Severity.Error, "", "no_content", $"content directory not found: {contentDir}")],
             };
         }
         var checkMedia = mediaDir is not null && Directory.Exists(mediaDir);
@@ -66,7 +67,7 @@ public sealed partial class OutputVerifier
 
             if (SplitFrontmatter(text) is not var (yaml, body))
             {
-                issues.Add(new VerifyIssue("error", page, "invalid_frontmatter", "no frontmatter block"));
+                issues.Add(new VerifyIssue(Severity.Error, page, "invalid_frontmatter", "no frontmatter block"));
                 continue;
             }
             Dictionary<string, object?>? fm;
@@ -76,14 +77,14 @@ public sealed partial class OutputVerifier
             }
             catch (Exception ex) when (ex is YamlDotNet.Core.YamlException)
             {
-                issues.Add(new VerifyIssue("error", page, "invalid_frontmatter", ex.Message));
+                issues.Add(new VerifyIssue(Severity.Error, page, "invalid_frontmatter", ex.Message));
                 continue;
             }
             foreach (var field in RequiredFields)
             {
                 if (fm?.GetValueOrDefault(field) is not string s || s.Length == 0)
                 {
-                    issues.Add(new VerifyIssue("error", page, "missing_field", field));
+                    issues.Add(new VerifyIssue(Severity.Error, page, "missing_field", field));
                 }
             }
 
@@ -115,8 +116,8 @@ public sealed partial class OutputVerifier
                     if (!File.Exists(Path.Combine(mediaDir!, rel.Replace('/', Path.DirectorySeparatorChar))))
                     {
                         issues.Add(knownMissing.Contains(clean)
-                            ? new VerifyIssue("warning", page, "known_missing_media", reference)
-                            : new VerifyIssue("error", page, "missing_media", reference));
+                            ? new VerifyIssue(Severity.Warning, page, "known_missing_media", reference)
+                            : new VerifyIssue(Severity.Error, page, "missing_media", reference));
                     }
                 }
                 else
@@ -124,7 +125,7 @@ public sealed partial class OutputVerifier
                     linksChecked++;
                     if (!routes.Contains(NormalizeRoute(reference)))
                     {
-                        issues.Add(new VerifyIssue("error", page, "broken_link", reference));
+                        issues.Add(new VerifyIssue(Severity.Error, page, "broken_link", reference));
                     }
                 }
             }
@@ -216,10 +217,10 @@ public sealed partial class OutputVerifier
             new[] { "severity", "page", "kind", "detail" },
         };
         rows.AddRange(issues
-            .OrderBy(i => i.Severity, StringComparer.Ordinal)
+            .OrderBy(i => i.Severity.Wire(), StringComparer.Ordinal)
             .ThenBy(i => i.Page, StringComparer.Ordinal)
             .ThenBy(i => i.Detail, StringComparer.Ordinal)
-            .Select(i => new[] { i.Severity, i.Page, i.Kind, i.Detail }));
+            .Select(i => new[] { i.Severity.Wire(), i.Page, i.Kind, i.Detail }));
         Csv.Write(Path.Combine(outDir, "verify_report.csv"), rows);
     }
 

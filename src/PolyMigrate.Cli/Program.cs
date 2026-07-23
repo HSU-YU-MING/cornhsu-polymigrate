@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using PolyMigrate.Core.Configuration;
+using PolyMigrate.Core.Diagnostics;
 using PolyMigrate.Core.Extraction;
 
 // 極簡進入點;之後如需複雜選項解析再引入 System.CommandLine。
@@ -134,7 +135,7 @@ static int RunExtract(string[] args)
         Console.WriteLine($"  path issues      : {report.PathIssues.Count} ({report.PagesSkippedUnsafe} pages skipped as unsafe, see path_issues.csv)");
         foreach (var (severity, pagePath, issue) in report.PathIssues.Take(10))
         {
-            Console.WriteLine($"  [{severity}] {pagePath}: {issue}");
+            Console.WriteLine($"  [{severity.Wire()}] {pagePath}: {issue}");
         }
         Console.WriteLine(new string('=', 50));
         return report.HasErrors ? 2 : report.HasWarnings ? 1 : 0;
@@ -200,7 +201,7 @@ static int RunVerify(string[] args)
         Console.WriteLine($"  warnings        : {report.Warnings}");
         Console.WriteLine($"  report          : {Path.Combine(outDir, "verify_report.csv")}");
         Console.WriteLine(new string('=', 50));
-        foreach (var issue in report.Issues.Where(i => i.Severity == "error").Take(20))
+        foreach (var issue in report.Issues.Where(i => i.Severity == Severity.Error).Take(20))
         {
             Console.WriteLine($"  [error] {issue.Page}: {issue.Kind} {issue.Detail}");
         }

@@ -1,3 +1,4 @@
+using PolyMigrate.Core.Diagnostics;
 using PolyMigrate.Core.Verify;
 
 namespace PolyMigrate.Core.Tests.Verify;
@@ -63,7 +64,7 @@ public class OutputVerifierTests : IDisposable
         var report = Run();
 
         var issue = Assert.Single(report.Issues);
-        Assert.Equal(("error", "broken_link", "/ch/news/nope"), (issue.Severity, issue.Kind, issue.Detail));
+        Assert.Equal((Severity.Error, "broken_link", "/ch/news/nope"), (issue.Severity, issue.Kind, issue.Detail));
     }
 
     [Fact]
