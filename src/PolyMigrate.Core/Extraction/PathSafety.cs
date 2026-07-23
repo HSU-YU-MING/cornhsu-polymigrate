@@ -44,15 +44,18 @@ public static class PathSafety
     }
 
     /// <summary>
-    /// 大小寫碰撞偵測:Windows/macOS 檔案系統不分大小寫,只差大小寫的兩條路徑會互相覆蓋。
-    /// 首見者登記;碰撞者回傳問題描述(指出撞到誰)。
+    /// 輸出路徑碰撞偵測:管線每個來源檔各呼叫一次,故重覆的路徑必為「兩個不同來源檔映到同一輸出」——
+    /// 完全相同 = 第二份會靜默覆蓋第一份(如 a.php.html 與 a.asp.html 都收斂成 a.md);
+    /// 只差大小寫 = Windows/macOS 不分大小寫檔案系統上會互相覆蓋。兩者都回傳問題描述、拒寫。
     /// </summary>
     public static string? RegisterOrCollide(Dictionary<string, string> seen, string relativePath)
     {
         var key = relativePath.ToLowerInvariant();
         if (seen.TryGetValue(key, out var existing))
         {
-            return existing == relativePath ? null : $"case-insensitive collision with '{existing}'";
+            return existing == relativePath
+                ? $"duplicate output path (another source also maps to '{relativePath}')"
+                : $"case-insensitive collision with '{existing}'";
         }
         seen[key] = relativePath;
         return null;

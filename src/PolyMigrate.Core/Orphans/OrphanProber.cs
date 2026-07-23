@@ -99,9 +99,10 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
                 }
                 return response.StatusCode == System.Net.HttpStatusCode.OK;
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (ex is HttpRequestException
+                || (ex is OperationCanceledException && !ct.IsCancellationRequested))
             {
-                // 連線層錯誤:重試一次後放棄該候選
+                // 連線層錯誤或請求逾時(非使用者取消):重試一次後放棄該候選,不掀掉整批探測
             }
         }
         return false;

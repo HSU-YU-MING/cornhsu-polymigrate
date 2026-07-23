@@ -39,6 +39,22 @@ public class FrontmatterSerializerTests
     public void BoolNullLikeStrings_StayStrings(string value) =>
         Assert.Equal(value, Roundtrip(Serialize(("v", value)))["v"]);
 
+    [Theory]
+    // YAML 1.1(PyYAML / js-yaml / Hugo)會把這些裸字解成非字串 → 一律強制引號保為字串
+    [InlineData("2024-01-18")]       // ISO 日期(slug/標題常見)
+    [InlineData("2024-1-8")]         // 非補零日期
+    [InlineData("19:30")]            // 六十進位 → base-60 整數
+    [InlineData("0x1F")]             // 十六進位
+    [InlineData("0o17")]             // 八進位
+    [InlineData(".inf")]             // 特殊浮點
+    [InlineData(".5")]               // 前導小數點浮點
+    public void Yaml11CoercibleStrings_StayStrings(string value)
+    {
+        var block = Serialize(("v", value));
+        Assert.Contains($"'{value}'", block);
+        Assert.Equal(value, Roundtrip(block)["v"]);
+    }
+
     [Fact]
     public void TitleWithColon_SurvivesRoundtrip()
     {

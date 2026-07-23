@@ -88,6 +88,24 @@ public class OrphanFetcherTests : IDisposable
     }
 
     [Fact]
+    public async Task RequestTimeout_RecordedAndDoesNotAbortBatch()
+    {
+        // HttpClient.Timeout 到期丟的是 TaskCanceledException(非 HttpRequestException),
+        // 且呼叫端 ct 未取消 → 視為暫時性失敗:記錄該項、其餘照抓,不可掀掉整批
+        var handler = new StubHandler(req => req.RequestUri!.AbsolutePath switch
+        {
+            "/ch/news/20210505.php" => throw new TaskCanceledException("timeout"),
+            "/en/news/20250606.php" => StubHandler.Html("<html><body><section id=\"main\">x</section></body></html>"),
+            _ => StubHandler.Status(HttpStatusCode.NotFound),
+        });
+
+        var report = await Fetch(handler, "20210505", "20250606");
+
+        Assert.Equal(1, report.PagesFetched);   // 20250606/en 仍成功抓到
+        Assert.Contains(report.Errors, e => e.Contains("20210505") && e.Contains("timeout"));
+    }
+
+    [Fact]
     public async Task RawBytes_PreservedVerbatim()
     {
         // 與 Python 版的刻意差異:存原始 bytes,編碼交給 config(§3.1)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Extraction;
@@ -68,15 +69,20 @@ static int RunExtract(string[] args)
     var options = new Dictionary<string, string>();
     for (var i = 0; i < args.Length; i++)
     {
-        if (args[i] is "--root" or "--raw" or "--media" or "--out" && i + 1 < args.Length)
+        if (args[i] is "--root" or "--raw" or "--media" or "--out")
         {
+            if (i + 1 >= args.Length || args[i + 1].StartsWith('-'))
+            {
+                Console.Error.WriteLine($"Option {args[i]} requires a value.");
+                return 2;
+            }
             options[args[i]] = args[++i];
         }
         else if (args[i] == "--dry-run")
         {
             dryRun = true;
         }
-        else if (configPath is null)
+        else if (configPath is null && !args[i].StartsWith('-'))
         {
             configPath = args[i];
         }
@@ -138,6 +144,12 @@ static int RunExtract(string[] args)
         Console.Error.WriteLine(ex.Message);
         return 2;
     }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException or NotSupportedException or System.Security.SecurityException)
+    {
+        Console.Error.WriteLine($"error: {ex.Message}");
+        return 2;
+    }
 }
 
 static int RunVerify(string[] args)
@@ -149,14 +161,14 @@ static int RunVerify(string[] args)
     {
         switch (args[i])
         {
-            case "--media" when i + 1 < args.Length:
+            case "--media" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
                 mediaDir = args[++i];
                 break;
-            case "--media-prefix" when i + 1 < args.Length:
+            case "--media-prefix" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
                 mediaPrefix = args[++i];
                 break;
             default:
-                if (outDir is not null)
+                if (outDir is not null || args[i].StartsWith('-'))
                 {
                     Console.Error.WriteLine($"Unexpected argument: {args[i]}");
                     return 2;
@@ -170,27 +182,36 @@ static int RunVerify(string[] args)
         Console.Error.WriteLine("Usage: polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/]");
         return 2;
     }
-    outDir = Path.GetFullPath(outDir);
-    mediaDir = Path.GetFullPath(mediaDir ?? Path.Combine(outDir, "media"));
-
-    var report = new PolyMigrate.Core.Verify.OutputVerifier().Run(outDir, mediaDir, mediaPrefix);
-
-    Console.WriteLine(new string('=', 50));
-    Console.WriteLine("Verify done.");
-    Console.WriteLine($"  pages checked   : {report.PagesChecked}");
-    Console.WriteLine($"  links checked   : {report.LinksChecked}");
-    Console.WriteLine(report.MediaChecksSkipped
-        ? "  media checks    : skipped (media directory not found)"
-        : $"  media refs      : {report.MediaChecked}");
-    Console.WriteLine($"  errors          : {report.Errors}");
-    Console.WriteLine($"  warnings        : {report.Warnings}");
-    Console.WriteLine($"  report          : {Path.Combine(outDir, "verify_report.csv")}");
-    Console.WriteLine(new string('=', 50));
-    foreach (var issue in report.Issues.Where(i => i.Severity == "error").Take(20))
+    try
     {
-        Console.WriteLine($"  [error] {issue.Page}: {issue.Kind} {issue.Detail}");
+        outDir = Path.GetFullPath(outDir);
+        mediaDir = Path.GetFullPath(mediaDir ?? Path.Combine(outDir, "media"));
+
+        var report = new PolyMigrate.Core.Verify.OutputVerifier().Run(outDir, mediaDir, mediaPrefix);
+
+        Console.WriteLine(new string('=', 50));
+        Console.WriteLine("Verify done.");
+        Console.WriteLine($"  pages checked   : {report.PagesChecked}");
+        Console.WriteLine($"  links checked   : {report.LinksChecked}");
+        Console.WriteLine(report.MediaChecksSkipped
+            ? "  media checks    : skipped (media directory not found)"
+            : $"  media refs      : {report.MediaChecked}");
+        Console.WriteLine($"  errors          : {report.Errors}");
+        Console.WriteLine($"  warnings        : {report.Warnings}");
+        Console.WriteLine($"  report          : {Path.Combine(outDir, "verify_report.csv")}");
+        Console.WriteLine(new string('=', 50));
+        foreach (var issue in report.Issues.Where(i => i.Severity == "error").Take(20))
+        {
+            Console.WriteLine($"  [error] {issue.Page}: {issue.Kind} {issue.Detail}");
+        }
+        return report.Errors > 0 ? 2 : report.Warnings > 0 ? 1 : 0;
     }
-    return report.Errors > 0 ? 2 : report.Warnings > 0 ? 1 : 0;
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException or NotSupportedException or System.Security.SecurityException)
+    {
+        Console.Error.WriteLine($"error: {ex.Message}");
+        return 2;
+    }
 }
 
 static string Format(SortedDictionary<string, int> counts) =>
@@ -203,8 +224,13 @@ static (string ConfigPath, Dictionary<string, string> Options)? ParseArgs(
     var options = new Dictionary<string, string>();
     for (var i = 0; i < args.Length; i++)
     {
-        if (knownOptions.Contains(args[i]) && i + 1 < args.Length)
+        if (knownOptions.Contains(args[i]))
         {
+            if (i + 1 >= args.Length || args[i + 1].StartsWith('-'))
+            {
+                Console.Error.WriteLine($"Option {args[i]} requires a value.\n{usage}");
+                return null;
+            }
             options[args[i]] = args[++i];
         }
         else if (configPath is null && !args[i].StartsWith('-'))
@@ -266,6 +292,12 @@ static int RunThumbs(string[] args)
         Console.Error.WriteLine(ex.Message);
         return 2;
     }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException or NotSupportedException or System.Security.SecurityException)
+    {
+        Console.Error.WriteLine($"error: {ex.Message}");
+        return 2;
+    }
 }
 
 static async Task<int> RunProbeOrphans(string[] args)
@@ -281,8 +313,10 @@ static async Task<int> RunProbeOrphans(string[] args)
         return 2;
     }
     var parts = years.Split('-');
-    if (parts.Length is not (1 or 2) || !int.TryParse(parts[0], out var yearFrom)
-        || !int.TryParse(parts[^1], out var yearTo) || yearFrom > yearTo)
+    if (parts.Length is not (1 or 2)
+        || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var yearFrom)
+        || !int.TryParse(parts[^1], NumberStyles.None, CultureInfo.InvariantCulture, out var yearTo)
+        || yearFrom > yearTo)
     {
         Console.Error.WriteLine($"Invalid --years '{years}' (expected e.g. 2021-2023).");
         return 2;
@@ -309,6 +343,12 @@ static async Task<int> RunProbeOrphans(string[] args)
     catch (ConfigException ex)
     {
         Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException or NotSupportedException or System.Security.SecurityException)
+    {
+        Console.Error.WriteLine($"error: {ex.Message}");
         return 2;
     }
 }
@@ -358,6 +398,12 @@ static async Task<int> RunFetchOrphans(string[] args)
     catch (ConfigException ex)
     {
         Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        or ArgumentException or NotSupportedException or System.Security.SecurityException)
+    {
+        Console.Error.WriteLine($"error: {ex.Message}");
         return 2;
     }
 }

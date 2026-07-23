@@ -41,7 +41,8 @@ public sealed class LinkRewriter
         {
             return href;
         }
-        return RouteForPath(resolved.AbsolutePath);
+        // 保留 query 與 fragment:news.php?id=5 與 #team 不能在改寫時被丟掉
+        return RouteForPath(resolved.AbsolutePath) + resolved.Query + resolved.Fragment;
     }
 
     /// <summary>

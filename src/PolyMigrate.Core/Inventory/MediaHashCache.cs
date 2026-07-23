@@ -69,6 +69,6 @@ internal sealed class MediaHashCache
         var rows = new List<IReadOnlyList<string>> { new[] { "path", "size", "mtime_ticks", "sha1" } };
         rows.AddRange(_entries.OrderBy(e => e.Key, StringComparer.Ordinal)
             .Select(e => new[] { e.Key, e.Value.Size.ToString(), e.Value.MtimeTicks.ToString(), e.Value.Sha1 }));
-        Csv.Write(_path, rows);
+        Csv.Write(_path, rows, guardFormulas: false);   // 內部快取本工具自己讀回,不可加公式防護前綴
     }
 }

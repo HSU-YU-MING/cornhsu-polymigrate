@@ -18,6 +18,8 @@ public class SlugDatesTests
     [InlineData("enChant")]
     [InlineData("99999999")]         // 非法日期
     [InlineData("12345")]
+    [InlineData("２０２４０１１８")]    // 全形數字:[0-9] 不吃,不得誤判為日期、更不得炸
+    [InlineData("news-٢٠٢٤٠١٠١")]    // 阿拉伯數字同理
     public void NonDates_ReturnNull(string slug) =>
         Assert.Null(SlugDates.FromSlug(slug));
 

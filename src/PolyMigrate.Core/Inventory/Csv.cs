@@ -9,20 +9,32 @@ internal static class Csv
 {
     private static readonly Encoding Utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
 
-    public static void Write(string path, IEnumerable<IReadOnlyList<string>> rows)
+    /// <param name="guardFormulas">
+    /// true(預設,人工在 Excel 覆核的清單):對 = + - @ 開頭的欄位前置單引號,擋掉試算表公式注入
+    /// (爬來的 alt/URL 可能是 =HYPERLINK(...) 之類)。
+    /// false:本工具自己讀回的內部檔(如媒體雜湊快取),需逐位元組還原、不可加料。
+    /// </param>
+    public static void Write(string path, IEnumerable<IReadOnlyList<string>> rows, bool guardFormulas = true)
     {
         var sb = new StringBuilder();
         foreach (var row in rows)
         {
-            sb.Append(string.Join(',', row.Select(Escape))).Append("\r\n");
+            sb.Append(string.Join(',', row.Select(f => Escape(f, guardFormulas)))).Append("\r\n");
         }
         File.WriteAllText(path, sb.ToString(), Utf8Bom);
     }
 
-    private static string Escape(string field) =>
-        field.AsSpan().IndexOfAny(',', '"', '\n') >= 0 || field.Contains('\r')
+    private static string Escape(string field, bool guardFormulas)
+    {
+        // 試算表公式注入防護:欄位若以 = + - @(或前導 tab/CR)起頭,Excel/Sheets 會當公式執行
+        if (guardFormulas && field.Length > 0 && "=+-@\t\r".IndexOf(field[0]) >= 0)
+        {
+            field = "'" + field;
+        }
+        return field.AsSpan().IndexOfAny(',', '"', '\n') >= 0 || field.Contains('\r')
             ? "\"" + field.Replace("\"", "\"\"") + "\""
             : field;
+    }
 
     /// <summary>讀回本工具寫出的 CSV(RFC 4180,含引號跳脫;自動吃掉 BOM)。</summary>
     public static IEnumerable<IReadOnlyList<string>> ReadRows(string path)

@@ -60,6 +60,10 @@ public static class SiteConfigLoader
         {
             errors.Add("url_pattern.lang_map must map at least one URL prefix to a BCP-47 locale (single-language sites use one entry).");
         }
+        else if (c.UrlPattern.LangMap.Any(kv => string.IsNullOrWhiteSpace(kv.Value)))
+        {
+            errors.Add("url_pattern.lang_map values (BCP-47 locales) must be non-empty.");
+        }
         if (string.IsNullOrWhiteSpace(c.UrlPattern.DefaultLang))
         {
             errors.Add("url_pattern.default_lang is required.");
@@ -90,6 +94,29 @@ public static class SiteConfigLoader
             catch (ArgumentException)
             {
                 errors.Add($"site.encoding '{enc}' is not a known encoding.");
+            }
+        }
+        if (c.Site.Polite.Concurrency < 1)
+        {
+            errors.Add($"site.polite.concurrency must be >= 1, got {c.Site.Polite.Concurrency}.");
+        }
+        if (c.Site.Polite.DelayMs < 0)
+        {
+            errors.Add($"site.polite.delay_ms must be >= 0, got {c.Site.Polite.DelayMs}.");
+        }
+        if (c.Extract.TextInImageMaxLength < 0)
+        {
+            errors.Add($"extract.text_in_image_max_length must be >= 0, got {c.Extract.TextInImageMaxLength}.");
+        }
+        if (c.Media.Thumbnails is { } thumbs)
+        {
+            if (thumbs.MaxWidth < 1)
+            {
+                errors.Add($"media.thumbnails.max_width must be >= 1, got {thumbs.MaxWidth}.");
+            }
+            if (thumbs.Quality is < 1 or > 100)
+            {
+                errors.Add($"media.thumbnails.quality must be 1-100, got {thumbs.Quality}.");
             }
         }
 

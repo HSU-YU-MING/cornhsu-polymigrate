@@ -10,8 +10,8 @@ namespace PolyMigrate.Core.Extraction;
 /// </summary>
 public sealed class TitleCleaner
 {
-    private const string EdgeTrimChars = " \t—|·-:：";
-    private const string PrefixTrimChars = " \t—|·：:";
+    private static readonly char[] EdgeTrimChars = [.. " \t—|·-:："];
+    private static readonly char[] PrefixTrimChars = [.. " \t—|·：:"];
 
     private readonly string[] _noise;
     private readonly Regex[] _prefixes;
@@ -19,26 +19,31 @@ public sealed class TitleCleaner
 
     public TitleCleaner(SiteConfig config)
     {
-        _noise = [.. config.Extract.TitleNoise];
+        // 空字串會讓 StartsWith("")/EndsWith("") 永遠成立 → 下面 while 迴圈永不收斂,先濾掉
+        _noise = [.. config.Extract.TitleNoise.Where(n => n.Length > 0)];
 
         var markers = config.Extract.TitleMarkers.Where(m => m.Length > 0).ToList();
         var alternation = string.Join('|', markers.Select(Regex.Escape));
         var optionalMarker = markers.Count > 0 ? $@"(?:{alternation})?" : "";
 
+        // IgnoreCase 一律搭 CultureInvariant:否則 tr-TR 上的 Turkish-I 會讓 "News" 之類標記字
+        // 在不同機器 locale 下清出不同結果(與 i18n 決定性目標相悖)
+        const RegexOptions Opts = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+
         // 日期+標記前綴三式:2025/02/02 新聞:|News 02/02/2025:|02/02/2025新聞:|2025/02/02:等
         List<Regex> prefixes =
         [
-            new($@"^\s*\d{{4}}[/.\-]\d{{1,2}}[/.\-]\d{{1,2}}\s*{optionalMarker}\s*[:：]?\s*", RegexOptions.IgnoreCase),
-            new($@"^\s*\d{{1,2}}[/.\-]\d{{1,2}}[/.\-]\d{{4}}\s*{optionalMarker}\s*[:：]?\s*", RegexOptions.IgnoreCase),
+            new($@"^\s*\d{{4}}[/.\-]\d{{1,2}}[/.\-]\d{{1,2}}\s*{optionalMarker}\s*[:：]?\s*", Opts),
+            new($@"^\s*\d{{1,2}}[/.\-]\d{{1,2}}[/.\-]\d{{4}}\s*{optionalMarker}\s*[:：]?\s*", Opts),
         ];
         if (markers.Count > 0)
         {
             prefixes.Add(new Regex(
                 $@"^\s*(?:{alternation})\s*[:：]?\s*\d{{1,4}}[/.\-]\d{{1,2}}[/.\-]\d{{1,4}}\s*[:：]?\s*",
-                RegexOptions.IgnoreCase));
-            _marker = new Regex($@"(?:{alternation})\s*[:：]\s*", RegexOptions.IgnoreCase);
+                Opts));
+            _marker = new Regex($@"(?:{alternation})\s*[:：]\s*", Opts);
         }
-        prefixes.AddRange(config.Extract.StripTitlePrefix.Select(p => new Regex(p, RegexOptions.IgnoreCase)));
+        prefixes.AddRange(config.Extract.StripTitlePrefix.Select(p => new Regex(p, Opts)));
         _prefixes = [.. prefixes];
     }
 
@@ -65,12 +70,12 @@ public sealed class TitleCleaner
                 {
                     if (t.StartsWith(noise, StringComparison.Ordinal))
                     {
-                        t = t[noise.Length..].TrimStart(EdgeTrimChars.ToCharArray());
+                        t = t[noise.Length..].TrimStart(EdgeTrimChars);
                         changed = true;
                     }
                     if (t.EndsWith(noise, StringComparison.Ordinal))
                     {
-                        t = t[..^noise.Length].TrimEnd(EdgeTrimChars.ToCharArray());
+                        t = t[..^noise.Length].TrimEnd(EdgeTrimChars);
                         changed = true;
                     }
                 }
@@ -88,7 +93,7 @@ public sealed class TitleCleaner
             {
                 t = pattern.Replace(t, "");
             }
-            t = t.Trim(PrefixTrimChars.ToCharArray());
+            t = t.Trim(PrefixTrimChars);
             if (t == before)
             {
                 break;

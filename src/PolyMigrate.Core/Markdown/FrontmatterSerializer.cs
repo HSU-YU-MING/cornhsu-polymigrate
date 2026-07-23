@@ -28,17 +28,35 @@ public static partial class FrontmatterSerializer
         [GeneratedRegex(@"^[-+]?[0-9][0-9_]*(\.[0-9_]+)?$")]
         private static partial Regex NumericLike();
 
-        // YAML 1.1 會誤判為布林/null 的裸字(js-yaml/舊解析器相容)
+        // 下面幾式在 YAML 1.1(PyYAML / js-yaml / Hugo)會被解成非字串,故一律強制引號保為字串:
+        [GeneratedRegex(@"^\d{4}-\d{1,2}-\d{1,2}([Tt ].*)?$")]      // ISO 日期/時間戳(slug 常見)
+        private static partial Regex DateLike();
+
+        [GeneratedRegex(@"^[-+]?[0-9][0-9_]*(:[0-5]?[0-9])+$")]     // 六十進位(19:30 → base-60 整數)
+        private static partial Regex SexagesimalLike();
+
+        [GeneratedRegex(@"^[-+]?0(x[0-9a-fA-F_]+|o[0-7_]+|b[01_]+)$")]   // 十六/八/二進位
+        private static partial Regex BaseNLike();
+
+        [GeneratedRegex(@"^[-+]?\.[0-9][0-9_]*$")]                  // 前導小數點浮點(.5)
+        private static partial Regex DottedFloatLike();
+
+        // YAML 1.1 會誤判為布林/null/特殊浮點的裸字(js-yaml/舊解析器相容)
         private static readonly HashSet<string> AmbiguousWords = new(StringComparer.OrdinalIgnoreCase)
         {
             "true", "false", "yes", "no", "on", "off", "null", "~",
+            ".inf", "+.inf", "-.inf", ".nan",
         };
+
+        private static bool NeedsQuoting(string s) =>
+            NumericLike().IsMatch(s) || DateLike().IsMatch(s) || SexagesimalLike().IsMatch(s)
+            || BaseNLike().IsMatch(s) || DottedFloatLike().IsMatch(s) || AmbiguousWords.Contains(s);
 
         public override void Emit(ScalarEventInfo eventInfo, IEmitter emitter)
         {
             if (eventInfo.Source.Type == typeof(string)
                 && eventInfo.Source.Value is string s
-                && (NumericLike().IsMatch(s) || AmbiguousWords.Contains(s)))
+                && NeedsQuoting(s))
             {
                 eventInfo = new ScalarEventInfo(eventInfo.Source) { Style = ScalarStyle.SingleQuoted };
             }
