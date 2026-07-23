@@ -8,7 +8,7 @@ namespace PolyMigrate.Core.Extraction;
 /// 站名雜訊只在取 &lt;title&gt; 標籤時剝(stripSiteNoise=true)——內文真標題可能合法以站名開頭,不可剝。
 /// 「新聞/News」類標記字由 config extract.title_markers 提供(i18n-first:不硬編任何語言的字)。
 /// </summary>
-public sealed class TitleCleaner
+internal sealed class TitleCleaner
 {
     private static readonly char[] EdgeTrimChars = [.. " \t—|·-:："];
     private static readonly char[] PrefixTrimChars = [.. " \t—|·：:"];

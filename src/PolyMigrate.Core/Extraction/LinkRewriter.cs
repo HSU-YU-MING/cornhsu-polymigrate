@@ -6,7 +6,7 @@ namespace PolyMigrate.Core.Extraction;
 /// 內文連結改寫(規格 rewrite_link):站內動態頁相對連結 → 新路由(以頁面 URL 解析 ../);
 /// 外部、錨點、mailto 等保留原樣。
 /// </summary>
-public sealed class LinkRewriter
+internal sealed class LinkRewriter
 {
     private static readonly string[] PassThroughPrefixes =
         ["http://", "https://", "#", "mailto:", "tel:", "//", "javascript:"];

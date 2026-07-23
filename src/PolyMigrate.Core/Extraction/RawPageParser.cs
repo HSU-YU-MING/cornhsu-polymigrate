@@ -14,7 +14,7 @@ namespace PolyMigrate.Core.Extraction;
 /// <param name="TranslationKey">去語言前綴的路徑,雙語配對鍵(§1.4)。
 /// 無語言前綴的站級頁(如語言選擇頁)以 "/" 開頭,不與任何語言版配對——
 /// 它們不是誰的翻譯,不可與同名的去前綴路徑相撞。</param>
-public sealed record RawPage(
+internal sealed record RawPage(
     string FilePath,
     string LangPrefix,
     string Locale,
@@ -24,7 +24,7 @@ public sealed record RawPage(
     string TranslationKey);
 
 /// <summary>鏡像檔路徑 → 頁面身分。鏡像檔名規則:原始 URL 路徑 + ".html"(如 ch/news/a.php → ch/news/a.php.html)。</summary>
-public sealed class RawPageParser
+internal sealed class RawPageParser
 {
     private readonly UrlPatternSection _urlPattern;
     private readonly string _baseUrl;

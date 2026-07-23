@@ -6,7 +6,7 @@ namespace PolyMigrate.Core.Pairing;
 /// <summary>
 /// slug 內的日期抽取與正規化(§2.6:原站 YYYYMMDD 與 MMDDYYYY 混用,兩種都認)。
 /// </summary>
-public static partial class SlugDates
+internal static partial class SlugDates
 {
     /// <summary>自 slug 抽第一段 8 位數字並解讀為日期;認不得回傳 null。</summary>
     public static DateOnly? FromSlug(string slug)

@@ -12,7 +12,7 @@ namespace PolyMigrate.Core.Markdown;
 /// 2. 會被 YAML 誤判成數字/布林/null 的字串(如 slug '01182024')強制加單引號保留為字串;
 ///    PyYAML 與 js-yaml 對前導 0 判斷不一致,故任何純數字型字串一律強制引號(規格 _str_representer)。
 /// </summary>
-public static partial class FrontmatterSerializer
+internal static partial class FrontmatterSerializer
 {
     private static readonly ISerializer Serializer = new SerializerBuilder()
         .WithEventEmitter(next => new ForceQuoteAmbiguousStringsEmitter(next))

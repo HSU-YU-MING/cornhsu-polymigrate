@@ -5,7 +5,7 @@ namespace PolyMigrate.Core.Extraction;
 /// 驗收標準:同一份 config 在 Windows 與 Linux 產出完全相同的檔案清單——
 /// 所以「Windows 會炸的路徑」在任何平台都一致地拒寫並記錄,而不是各平台各自為政。
 /// </summary>
-public static class PathSafety
+internal static class PathSafety
 {
     // Windows 保留裝置名(不分大小寫;含副檔名仍保留,如 con.md)
     private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)

@@ -1,16 +1,16 @@
 namespace PolyMigrate.Core.Extraction;
 
 /// <summary>frontmatter images 相簿的一筆(web 路徑 + alt)。</summary>
-public sealed record ImageRef(string Web, string Alt);
+internal sealed record ImageRef(string Web, string Alt);
 
 /// <summary>media 引用(供 media_manifest 聚合):media 相對路徑、原始 URL、引用頁、alt。</summary>
-public sealed record MediaUse(string MediaRelative, string OriginalUrl, string SourceUrl, string Alt);
+internal sealed record MediaUse(string MediaRelative, string OriginalUrl, string SourceUrl, string Alt);
 
 /// <summary>頁面引用但鏡像中不存在的圖 = 原站即 404(§2.6),記錄不阻斷。</summary>
-public sealed record MissingImage(string SourcePage, string WebPath);
+internal sealed record MissingImage(string SourcePage, string WebPath);
 
 /// <summary>單頁抽取結果(規格 main 迴圈單檔部分的全部產物)。</summary>
-public sealed class ExtractedPage
+internal sealed class ExtractedPage
 {
     public required RawPage Page { get; init; }
 
