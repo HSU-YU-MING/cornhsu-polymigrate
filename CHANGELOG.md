@@ -2,6 +2,49 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 2.0.0
+
+**工程版:收束函式庫 API、清掉死 config、內部重構。** 這一版**不改任何對外行為契約**——
+CLI 指令與參數、Phase 輸出檔案格式(`content_inventory` / `media_manifest` / `redirect_map` /
+`path_issues` 等)、frontmatter 欄位、golden 全部逐位元組不變。破壞性僅在「.NET 函式庫的公開型別」
+與「YAML config 的死欄位」兩處,故升 major。
+
+### ⚠️ 破壞性變更(升級須看)
+
+- **函式庫公開面大幅收束**:`Cornhsu.PolyMigrate.Core` 原本把抽取/配對/路徑/媒體的內部型別
+  (`PageExtractor`、`ExtractedPage`、`RawPage`、`PathSafety`、`MediaPaths`、`LinkRewriter`、
+  `PairingSuggester`、`SlugDates`、`FrontmatterSerializer`、`TextEncodings` 等 ~28 個)意外公開;
+  現全改 `internal`。**遷移**:改用新的 `PolyMigrator` facade(`FromConfigFile` / `Extract` /
+  `GenerateThumbnails` / `Verify`)——這是唯一有文件的進入點。CLI 使用者不受影響。
+- **`ExtractionReport.PathIssues`** 由 `List<(string,string,string)>` 改為 `List<PathIssue>`;
+  **`VerifyIssue.Severity`** 由 `string` 改為 `Severity` enum(`Warning` / `Error`)。裸 tuple 與魔術字串
+  是 semver 陷阱與易錯點。
+- **移除四個從未生效的 config 欄位**:`site.render`、`pairing.strategy`、`media.download`、
+  `polite.concurrency`。它們宣告了卻從不被讀取;因 loader 對未知欄位報錯,**config 若設了這些欄位
+  需刪除該行**,否則載入失敗。功能無任何改變(抽取一律讀 raw 鏡像、配對一律對稱路徑、probe/fetch
+  一律循序)。
+
+### 新增
+
+- **`PolyMigrator` facade**:在自己的 .NET 程式裡三行驅動搬遷(README「當函式庫用」段)。
+- **函式庫終於帶 XML 文件**:`GenerateDocumentationFile` 打開,`///` 註解進 nupkg,消費者有 IntelliSense。
+- **CLI 合作式中斷**:接 Ctrl-C → `CancellationToken` 穿進 probe/fetch,數小時的探測可乾淨中止(exit 130);
+  原本 token 從 CLI 端是擺設。
+
+### 內部重構(無行為變更,golden 全綠)
+
+- `ExtractionPipeline.Run` 的聚合邏輯抽成純記憶體、可單獨測的 `InventoryAggregator`。
+- redirect 輸出抽成 `IRedirectExporter`(新增格式不必動 pipeline)。
+- 各 helper 只收用到的 config section,不再整包 `SiteConfig`。
+- 啟發式合法值改為 `PairingSuggester.KnownHeuristics` 單一事實來源。
+
+### 測試與工具
+
+- 新增 `PolyMigrate.Cli.Tests`:CLI 參數解析與 exit code 契約首次有覆蓋(含 1.1.2「選項不吞旗標」的回歸)。
+- 新增 `.editorconfig` + CI `dotnet format --verify-no-changes` 關卡。
+- 文件校正:`contracts.md` 狀態改「自 1.0 起穩定」並修掉不存在的 `date` frontmatter 欄位;
+  `RELEASING.md` 補 npm 通路;規劃書移進 `docs/`;新增 `CONTRIBUTING.md`(含 golden 更新流程)。
+
 ## 1.1.2
 
 **穩健性與安全性修正。** CLI 指令、輸出契約、config 欄位皆未變更;fixture 的 golden 輸出
