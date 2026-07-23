@@ -383,7 +383,7 @@ public static class Cli
     }
 
     private static bool IsIoError(Exception ex) => ex is IOException or UnauthorizedAccessException
-        or ArgumentException or NotSupportedException or System.Security.SecurityException;
+        or ArgumentException or NotSupportedException or FormatException or System.Security.SecurityException;
 
     private static string Format(SortedDictionary<string, int> counts) =>
         counts.Count == 0 ? "-" : string.Join(", ", counts.Select(kv => $"{kv.Key}={kv.Value}"));

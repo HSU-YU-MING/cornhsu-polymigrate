@@ -94,9 +94,10 @@ public sealed partial class OutputVerifier
             {
                 foreach (var img in images)
                 {
-                    if (img is IDictionary<object, object> d && d.TryGetValue("local", out var local))
+                    if (img is IDictionary<object, object> d && d.TryGetValue("local", out var local)
+                        && local is string localStr)
                     {
-                        refs.Add((string)local!);
+                        refs.Add(localStr);   // 手改壞的 frontmatter 可能讓 local 非字串,略過而非崩潰
                     }
                 }
             }
