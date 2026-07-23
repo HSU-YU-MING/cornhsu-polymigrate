@@ -12,9 +12,10 @@
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
 
-**狀態:1.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
-並以一次真實的整站搬遷驗證(見下)。CLI 介面與 Phase 輸出契約自此定案:
-新功能升 minor、修正升 patch。
+**狀態:2.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
+並以一次真實的整站搬遷驗證(見下)。**CLI 介面與 Phase 輸出契約維持穩定**(自 1.0 未變):
+新功能升 minor、修正升 patch。2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
+收束到意圖中的進入點、移除未使用的 config 欄位,遷移說明見 [CHANGELOG](CHANGELOG.md)。
 
 ## 為什麼
 
@@ -115,6 +116,7 @@ Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
 | `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
 | `tests/` | 單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
+| `docs/搬遷工具_評估與規劃書.md` | 原始評估與規劃書(原始碼中滿地的 `§X.Y` 都指向這份) |
 
 ## 開發
 
