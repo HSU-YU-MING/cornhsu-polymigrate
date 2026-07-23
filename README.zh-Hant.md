@@ -87,13 +87,33 @@ polymigrate fetch-orphans site.yaml --section news
 一站一份 YAML config,站別知識全在裡面——完整註解的真實範例見
 [examples/ibps-austin.yaml](examples/ibps-austin.yaml)。
 
+## 當函式庫用
+
+CLI 只是 `Cornhsu.PolyMigrate.Core` 之上的薄殼。要在自己的 .NET 程式裡驅動搬遷,
+用 `PolyMigrator` facade 即可 —— 唯一有文件的進入點,不必碰內部實作型別:
+
+```
+dotnet add package Cornhsu.PolyMigrate.Core
+```
+
+```csharp
+using PolyMigrate.Core;
+
+var migrator = PolyMigrator.FromConfigFile("site.yaml");
+var report = migrator.Extract("out/");        // out/raw、out/media → out/content + 清單
+if (report.HasErrors) { /* 有不安全路徑被跳過,見 path_issues.csv */ }
+
+var verify = PolyMigrator.Verify("out/");      // 不需 config,只讀 Phase 2 輸出
+Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
+```
+
 ## 目錄
 
 | 路徑 | 內容 |
 |---|---|
 | `src/PolyMigrate.Core` | 抽取/配對/巡檢核心(NuGet:`Cornhsu.PolyMigrate.Core`) |
 | `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
-| `tests/` | 119 個單元/整合測試 + 離線 fixture 站與 golden 基準 |
+| `tests/` | 單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
 
 ## 開發

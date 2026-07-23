@@ -115,8 +115,27 @@ url_pattern:
 extract:
   content: "section[id]:not(#header):not(#footer)"
 pairing:
-  strategy: symmetric_path
   fallback: [shared_media, date, title_similarity]
+```
+
+## Use as a library
+
+The CLI is a thin shell over `Cornhsu.PolyMigrate.Core`. To drive a migration from your own
+.NET code, use the `PolyMigrator` facade — the single documented entry point:
+
+```
+dotnet add package Cornhsu.PolyMigrate.Core
+```
+
+```csharp
+using PolyMigrate.Core;
+
+var migrator = PolyMigrator.FromConfigFile("site.yaml");
+var report = migrator.Extract("out/");        // out/raw, out/media -> out/content + inventories
+if (report.HasErrors) { /* unsafe paths were skipped; see path_issues.csv */ }
+
+var verify = PolyMigrator.Verify("out/");      // no config needed; reads Phase 2 output only
+Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
 ```
 
 ## Layout
@@ -125,7 +144,7 @@ pairing:
 |---|---|
 | `src/PolyMigrate.Core` | extraction / pairing / verification library (NuGet: `Cornhsu.PolyMigrate.Core`) |
 | `src/PolyMigrate.Cli` | the `polymigrate` CLI (NuGet tool package: `Cornhsu.PolyMigrate`) |
-| `tests/` | 119 unit/integration tests + an offline fixture site with golden-file baselines |
+| `tests/` | unit/integration tests + an offline fixture site with golden-file baselines |
 | `docs/contracts.md` | file-format contracts between pipeline phases |
 
 ## Development
