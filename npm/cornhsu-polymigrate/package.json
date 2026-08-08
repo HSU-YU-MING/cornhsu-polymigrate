@@ -36,7 +36,9 @@
   },
   "optionalDependencies": {
     "@cornhsu/polymigrate-win32-x64": "0.0.0-placeholder",
+    "@cornhsu/polymigrate-win32-arm64": "0.0.0-placeholder",
     "@cornhsu/polymigrate-linux-x64": "0.0.0-placeholder",
+    "@cornhsu/polymigrate-linux-arm64": "0.0.0-placeholder",
     "@cornhsu/polymigrate-darwin-x64": "0.0.0-placeholder",
     "@cornhsu/polymigrate-darwin-arm64": "0.0.0-placeholder"
   }

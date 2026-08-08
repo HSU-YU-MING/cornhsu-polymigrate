@@ -23,7 +23,9 @@ if (!version || !publishRoot) {
 // RID → npm 平台套件的 os/cpu 與執行檔名
 const TARGETS = [
   { rid: "win-x64", pkg: "polymigrate-win32-x64", os: "win32", cpu: "x64", bin: "polymigrate.exe" },
+  { rid: "win-arm64", pkg: "polymigrate-win32-arm64", os: "win32", cpu: "arm64", bin: "polymigrate.exe" },
   { rid: "linux-x64", pkg: "polymigrate-linux-x64", os: "linux", cpu: "x64", bin: "polymigrate" },
+  { rid: "linux-arm64", pkg: "polymigrate-linux-arm64", os: "linux", cpu: "arm64", bin: "polymigrate" },
   { rid: "osx-x64", pkg: "polymigrate-darwin-x64", os: "darwin", cpu: "x64", bin: "polymigrate" },
   { rid: "osx-arm64", pkg: "polymigrate-darwin-arm64", os: "darwin", cpu: "arm64", bin: "polymigrate" },
 ];
@@ -53,7 +55,7 @@ for (const t of TARGETS) {
       {
         name: `@cornhsu/${t.pkg}`,
         version,
-        description: `Cornhsu.PolyMigrate 的 ${t.os}-${t.cpu} 執行檔。請安裝 cornhsu-polymigrate,不要直接安裝這個套件。`,
+        description: `The ${t.os}-${t.cpu} binary for Cornhsu.PolyMigrate. Install cornhsu-polymigrate instead — do not depend on this package directly.`,
         homepage: "https://cornhsu.com/polymigrate",
         repository: {
           type: "git",
