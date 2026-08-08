@@ -123,15 +123,24 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          set -euo pipefail
+          # 刻意不用 -e:單一套件失敗要讓迴圈跑完再統一回報(見下方 failed 陣列)
+          set -uo pipefail
           if [ -n "${NPM_TOKEN:-}" ]; then
             echo "認證:token(首次發布)"
             echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+            # token 認證下關閉 provenance:workflow 有 id-token: write,npm 會自動
+            # 嘗試產生 provenance 簽章,但認證走的是 token → 憑證申請 403
+            # (CA_CREATE_SIGNING_CERTIFICATE_ERROR,2.1.0 實際踩到)。
+            # OIDC 路徑不設這個變數,信任發布仍會自動簽 provenance。
+            export NPM_CONFIG_PROVENANCE=false
           else
             echo "認證:OIDC 信任發布"
           fi
           # 冪等發布:已存在的版本跳過而不是報錯,某一包失敗時重跑不會被
           # 前面已發成功的那幾包擋住(cornhsu-parity v0.9.6 實際踩過)。
+          # 2.1.0 又補上一課:失敗的那一包也不該擋住「排在它後面」的其餘套件,
+          # 否則一次失敗就要重跑很多趟才推得完。
+          failed=()
           publish() {
             local dir="$1" name version
             name=$(node -p "require('./$dir/package.json').name")
@@ -141,9 +150,22 @@ jobs:
               return 0
             fi
             echo "::group::publish $name@$version"
-            npm publish "$dir" --access public
+            if ! npm publish "$dir" --access public; then
+              echo "::endgroup::"
+              echo "::warning::$name@$version 發布失敗,繼續處理其餘套件"
+              failed+=("$name@$version")
+              return 0
+            fi
             echo "::endgroup::"
           }
           # 平台包要先上架,主套件的 optionalDependencies 才解析得到
           for dir in npm/dist/polymigrate-*; do publish "$dir"; done
           publish npm/dist/cornhsu-polymigrate
+
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::${#failed[@]} 個套件未發布:${failed[*]}"
+            echo "重跑本 job 即可(已發布的會自動跳過);若失敗原因是認證,"
+            echo "改用另一種方式(設定 / 刪除 NPM_TOKEN)後再跑。"
+            exit 1
+          fi
+          echo "✔ npm 全數發布完成"
