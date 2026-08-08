@@ -2,6 +2,24 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 2.1.0
+
+**發佈管線的修補。** CLI 介面、Phase 輸出契約、frontmatter 欄位、golden 全部不變。
+
+- **npm 補上 arm64 平台包**(`win32-arm64`、`linux-arm64`),從四個平台變六個,與 Parity 對齊。
+  原本 arm64 機器上 `npx cornhsu-polymigrate` 會因為找不到可用的 `optionalDependency` 而直接失敗。
+  註:npm 的 OIDC 信任發布無法建立**全新**套件,這兩包首發需要 `NPM_TOKEN`;release.yml 既有的
+  「有 token 就用 token、沒有就走 OIDC」自動切換已能處理,首發後把 secret 刪掉即可回到零長效金鑰。
+- **符號套件(snupkg)現在真的有產出。** `Directory.Build.props` 設了 `SymbolPackageFormat`
+  卻沒設 `IncludeSymbols`,所以 snupkg 從來沒被建出來過 —— 「可以 step-in 進原始碼」
+  一直只是設定檔上的宣告。同時補上 SourceLink、`EmbedUntrackedSources`、`Deterministic`
+  與 `ContinuousIntegrationBuild`(其餘三個姊妹套件早就有,只有這裡漏了)。
+- **移除寫死的 `<Version>1.0.0-preview.1</Version>`。** 實際版本早已是 2.0.x,而 release
+  一律以 tag 版號 `-p:Version=` 注入 —— 寫死的預設值只會過期,讓本機建置報出一個
+  早就不存在的版本號。
+- **npm 平台包的 description 改英文**(主套件的 description 本來就是英文,只有平台包是中文)。
+- 新增 `.github/dependabot.yml`(nuget + github-actions);release 的 `setup-node` 由 v5 對齊到 v7。
+
 ## 2.0.1
 
 **修正 2.0.0 後全新視角覆審抓到的缺陷。** 對外契約不變。

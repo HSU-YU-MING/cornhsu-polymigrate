@@ -69,7 +69,7 @@ jobs:
       # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`,而 OIDC 情境下
       # 該變數不存在 → npm 會拿「空 token」去驗證而不改走 OIDC,直接發布失敗
       # (actions/setup-node#1551)。預設 registry 本來就是 npmjs.org,不需要設。
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -83,10 +83,13 @@ jobs:
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Publish binaries (4 RIDs)
+      # 六個平台各自 self-contained 發佈。arm64 的 Windows / Linux 是 2.0.2 補上的:
+      # 少了它們,arm64 機器上 `npx cornhsu-polymigrate` 會找不到可用的 optionalDependency
+      # 而直接失敗(Parity 已覆蓋六個平台,這裡對齊)。
+      - name: Publish binaries (6 RIDs)
         run: |
           set -euo pipefail
-          for rid in win-x64 linux-x64 osx-x64 osx-arm64; do
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
             echo "::group::publish $rid"
             dotnet publish src/PolyMigrate.Cli/PolyMigrate.Cli.csproj \
               -c Release -r "$rid" --self-contained true \

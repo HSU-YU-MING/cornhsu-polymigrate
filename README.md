@@ -13,12 +13,13 @@ PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, 
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
 Config-driven, fully offline-rerunnable, built on .NET.
 
-**Status: 2.0.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
+**Status: 2.1.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
 surface and the Phase output contracts remain stable** (unchanged since 1.0): new features bump
-the minor version, fixes bump the patch. 2.0 is an engineering release — it narrowed the
+the minor version, fixes bump the patch. 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
-config fields; see the [CHANGELOG](CHANGELOG.md) for the migration notes.
+config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages).
+See the [CHANGELOG](CHANGELOG.md) for the migration notes.
 
 ## Why
 
