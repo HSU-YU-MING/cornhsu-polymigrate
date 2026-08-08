@@ -1,0 +1,124 @@
+name: npm-backfill
+
+# 一次性:補發某個「已經發過 NuGet、但 npm 沒發完」的版本。
+#
+# 背景(2.1.0 實際踩到):release.yml 的 npm job 依字母序逐包發布,遇到第一個失敗就整個中斷。
+# 2.1.0 當時的狀況是兩種認證需求同時存在、而且順序剛好互卡:
+#   - 全新套件(win32-arm64)只有 token 發得動 —— npm 的 OIDC 信任發布無法建立新套件
+#   - 既有且已設信任發布的套件(linux-x64…)用 token 發會撞 provenance 簽章 403
+#     (CA_CREATE_SIGNING_CERTIFICATE_ERROR),因為 workflow 有 id-token: write,
+#     npm 會自動嘗試產生 provenance,但認證走的是 token
+# 而 linux-x64 排在 win32-arm64 前面 → 不管留不留 token 都會卡住。
+#
+# 這裡的兩個對策:
+#   1. 用 token 時關掉 provenance(NPM_CONFIG_PROVENANCE=false)
+#   2. 單一套件失敗不中斷整個迴圈,全部試完再統一回報
+#
+# 用法(可能需要跑兩趟,因為兩種認證各自能做的事不同):
+#   第 1 趟:設好 NPM_TOKEN → 建立所有還不存在的套件
+#   第 2 趟:刪掉 NPM_TOKEN → 走 OIDC 發完其餘(已設信任發布的那些)
+# 兩趟都是冪等的:已存在的版本一律跳過。
+#
+# 補完即可刪除本檔。release.yml 已套用同樣的「不中斷」修正,正常發版走它就好。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要補發的版本(對齊已推的 tag,例:2.1.0)'
+        required: true
+        default: '2.1.0'
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # 刻意不設 registry-url:見 release.yml 同位置的說明
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Upgrade npm (trusted publishing 需要 >= 11.5.1)
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - name: Publish binaries (6 RIDs)
+        run: |
+          set -euo pipefail
+          for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
+            echo "::group::publish $rid"
+            dotnet publish src/PolyMigrate.Cli/PolyMigrate.Cli.csproj \
+              -c Release -r "$rid" --self-contained true \
+              -p:Version=${{ inputs.version }} \
+              -o "artifacts/publish/$rid"
+            echo "::endgroup::"
+          done
+
+      - name: Assemble npm packages
+        run: node npm/prepare.mjs "${{ inputs.version }}" artifacts/publish
+
+      - name: Smoke test (linux-x64)
+        run: |
+          set -euo pipefail
+          BIN=npm/dist/polymigrate-linux-x64/bin/polymigrate
+          chmod +x "$BIN"
+          "$BIN" --help > /dev/null
+          echo "✔ linux-x64 執行檔可啟動"
+
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -uo pipefail    # 刻意不用 -e:要讓迴圈跑完再回報
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            echo "認證:token(可建立新套件;關閉 provenance 以免與 token 認證衝突)"
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+            export NPM_CONFIG_PROVENANCE=false
+          else
+            echo "認證:OIDC 信任發布(無法建立新套件,但既有套件會帶 provenance)"
+          fi
+
+          published=(); skipped=(); failed=()
+          publish() {
+            local dir="$1" name version
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "↷ $name@$version 已存在,跳過"
+              skipped+=("$name@$version")
+              return 0
+            fi
+            echo "::group::publish $name@$version"
+            if npm publish "$dir" --access public; then
+              echo "::endgroup::"
+              echo "✔ $name@$version"
+              published+=("$name@$version")
+            else
+              echo "::endgroup::"
+              echo "::warning::$name@$version 發布失敗,繼續處理其餘套件"
+              failed+=("$name@$version")
+            fi
+          }
+
+          # 平台包要先上架,主套件的 optionalDependencies 才解析得到
+          for dir in npm/dist/polymigrate-*; do publish "$dir"; done
+          publish npm/dist/cornhsu-polymigrate
+
+          echo "---- 結果 ----"
+          echo "已發布 ${#published[@]}:${published[*]:-(無)}"
+          echo "已存在 ${#skipped[@]}:${skipped[*]:-(無)}"
+          echo "失敗   ${#failed[@]}:${failed[*]:-(無)}"
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::有 ${#failed[@]} 個套件未發布 —— 換一種認證方式(設定/刪除 NPM_TOKEN)後重跑本 workflow"
+            exit 1
+          fi
