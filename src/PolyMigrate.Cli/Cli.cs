@@ -29,6 +29,9 @@ public static class Cli
             case "verify":
                 return RunVerify(args[1..]);
 
+            case "slugs":
+                return RunSlugs(args[1..]);
+
             case "thumbs":
                 return RunThumbs(args[1..]);
 
@@ -65,6 +68,11 @@ public static class Cli
                           only reach by typing the URL. Unlinked pages are warnings.
                           Default media dir: <output-dir>/media (media checks skipped if absent).
                           --allow-unlinked: file of pages to exempt, one per line (# comments ok).
+                      polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]
+                          List slugs already mirrored under raw/, sorted, one per line on stdout
+                          (the summary goes to stderr, so stdout stays pipeable). During a
+                          parallel run: diff this against the live site's current list, then
+                          feed the difference to fetch-orphans --slugs. Local only, no network.
                       polymigrate --version               Print version
                     """);
                 return 0;
@@ -224,6 +232,67 @@ public static class Cli
                 Console.WriteLine($"  [warning] {issue.Page}: {issue.Kind} {issue.Detail}");
             }
             return report.Errors > 0 ? 2 : report.Warnings > 0 ? 1 : 0;
+        }
+        catch (Exception ex) when (IsHandled(ex))
+        {
+            return Report(ex);
+        }
+    }
+
+    private static int RunSlugs(string[] args)
+    {
+        const string usage = "Usage: polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]";
+        string? root = null;
+        string? section = null;
+        string? langPrefix = null;
+        string? rawDir = null;
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--section" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    section = args[++i];
+                    break;
+                case "--lang" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    langPrefix = args[++i];
+                    break;
+                case "--raw" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    rawDir = args[++i];
+                    break;
+                default:
+                    if (root is not null || args[i].StartsWith('-'))
+                    {
+                        Console.Error.WriteLine($"Unexpected argument: {args[i]}\n{usage}");
+                        return 2;
+                    }
+                    root = args[i];
+                    break;
+            }
+        }
+        if (root is null || section is null)
+        {
+            Console.Error.WriteLine(usage);
+            return 2;
+        }
+        try
+        {
+            var raw = Path.GetFullPath(rawDir ?? Path.Combine(Path.GetFullPath(root), "raw"));
+            var slugs = PolyMigrate.Core.PolyMigrator.MirrorSlugs(raw, section, langPrefix);
+            if (slugs is null)
+            {
+                // 靜靜回一份空清單會被讀成「沒有新文章」——section 打錯必須是錯誤,不是空結果
+                Console.Error.WriteLine($"No mirrored '{section}' directory under {raw}"
+                    + (langPrefix is null ? "." : $" for lang '{langPrefix}'."));
+                return 2;
+            }
+            foreach (var slug in slugs)
+            {
+                Console.WriteLine(slug);
+            }
+            // 摘要走 stderr:stdout 只放 slug,才能直接導成檔案再餵給 fetch-orphans --slugs
+            Console.Error.WriteLine($"{slugs.Count} slugs mirrored under {section}"
+                + (langPrefix is null ? " (all langs)." : $" ({langPrefix})."));
+            return 0;
         }
         catch (Exception ex) when (IsHandled(ex))
         {

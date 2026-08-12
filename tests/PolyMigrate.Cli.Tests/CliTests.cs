@@ -137,6 +137,63 @@ public class CliTests : IDisposable
         Assert.Contains("Usage: polymigrate probe-orphans", r.Err);
     }
 
+    private void AddMirrored(string langPrefix, string section, params string[] fileNames)
+    {
+        var dir = Path.Combine(_dir, "raw", langPrefix, section);
+        Directory.CreateDirectory(dir);
+        foreach (var name in fileNames)
+        {
+            File.WriteAllText(Path.Combine(dir, name), "<html></html>");
+        }
+    }
+
+    [Fact]
+    public async Task Slugs_StdoutIsSlugsOnly_SummaryGoesToStderr()
+    {
+        AddMirrored("ch", "news", "20260214.php.html", "20260101.php.html");
+        AddMirrored("en", "news", "20260101.php.html");
+
+        var r = await Run("slugs", _dir, "--section", "news");
+
+        Assert.Equal(0, r.Exit);
+        // stdout 必須逐字只有 slug——它會被直接導成檔案再餵給 fetch-orphans --slugs
+        Assert.Equal("20260101\n20260214\n", r.Out.Replace("\r", ""));
+        Assert.Contains("2 slugs", r.Err);
+    }
+
+    [Fact]
+    public async Task Slugs_LangFilter_Applies()
+    {
+        AddMirrored("ch", "news", "20260101.php.html");
+        AddMirrored("en", "news", "02142026.php.html");
+
+        var r = await Run("slugs", _dir, "--section", "news", "--lang", "en");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Equal("02142026\n", r.Out.Replace("\r", ""));
+    }
+
+    [Fact]
+    public async Task Slugs_UnknownSection_ReturnsTwo()
+    {
+        AddMirrored("ch", "news", "20260101.php.html");
+
+        var r = await Run("slugs", _dir, "--section", "newz");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Empty(r.Out);
+        Assert.Contains("No mirrored 'newz' directory", r.Err);
+    }
+
+    [Fact]
+    public async Task Slugs_MissingSection_ReturnsUsage()
+    {
+        var r = await Run("slugs", _dir);
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("Usage: polymigrate slugs", r.Err);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // exit code 契約(§3.8):0 = 乾淨、1 = 有 warning、2 = 有 error、130 = 被中斷。
     //

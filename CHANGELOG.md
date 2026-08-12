@@ -32,6 +32,23 @@ polymigrate verify out/ --allow-unlinked allow_unlinked.txt
   「not linked from any content page (menus are not checked)」而非「沒有入口」。
 - `polymigrate verify --allow-unlinked <file>`;函式庫端為 `PolyMigrator.Verify(..., allowUnlinked:)`。
   刻意**不**放進 site config —— `verify` 的「只讀輸出、不需 config」是它的設計前提。
+- **`polymigrate slugs <root> --section <name>`**:列出 `raw/` 底下已鏡像的 slug,
+  字典序、跨語言去重、一行一個。並行期(新舊站同時在線)用來跟舊站現況求差集:
+
+  ```sh
+  polymigrate slugs out/ --section news > local.txt
+  comm -13 local.txt oldsite.txt > missing.txt          # oldsite.txt 由你的腳本產生
+  polymigrate fetch-orphans site.yaml --section news --slugs missing.txt
+  ```
+
+  **stdout 只有 slug**,摘要走 stderr,所以可以直接導成檔案。純本地、不碰網路、不需 config。
+  函式庫端為 `PolyMigrator.MirrorSlugs(rawDir, section, langPrefix)`。
+
+  這裡刻意**只做本地那一半**。「去舊站讀列表頁、挑出 slug」沒有做:它因站而異
+  (香雲寺的活動根本沒有列表頁,`/ch/events/index.php` 回 404,是從首頁卡片連出去的),
+  而且會**安靜地壞掉**——舊站一改版、regex 抓不到東西,排程只會每天回報「沒有新文章」,
+  你以為在追平其實早就斷了。那一半本來就是十幾行的一次性腳本,留給使用者。
+  對應地,`--section` 打錯時回傳 **exit 2 而非空清單**:空清單會被讀成「沒有新文章」。
 
 ### 修正
 

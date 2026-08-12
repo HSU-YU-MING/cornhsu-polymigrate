@@ -47,4 +47,16 @@ public sealed class PolyMigrator(SiteConfig config)
     public static VerifyReport Verify(string outputDir, string? mediaDir = null, string mediaPrefix = "/media/",
         IReadOnlyCollection<string>? allowUnlinked = null) =>
         new OutputVerifier().Run(outputDir, mediaDir ?? Path.Combine(outputDir, "media"), mediaPrefix, allowUnlinked);
+
+    /// <summary>
+    /// 鏡像裡已有的 slug(<c>raw/{lang}/{section}/</c> 檔名),字典序、跨語言去重;
+    /// 純本地、不碰網路、不需 config。並行期用來跟舊站的現況求差集,
+    /// 差集再餵給 <c>fetch-orphans --slugs</c>。
+    /// </summary>
+    /// <param name="rawDir">鏡像根目錄(<c>root/raw</c>)。</param>
+    /// <param name="section">section 目錄名(如 news)。</param>
+    /// <param name="langPrefix">語言前綴;null = 涵蓋所有語言目錄。</param>
+    /// <returns>找不到任何對應目錄時為 null(通常是 section 名打錯)——與「有目錄但沒有頁」不同。</returns>
+    public static IReadOnlyList<string>? MirrorSlugs(string rawDir, string section, string? langPrefix = null) =>
+        Inventory.MirrorSlugs.List(rawDir, section, langPrefix);
 }
