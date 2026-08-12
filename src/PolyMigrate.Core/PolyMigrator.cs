@@ -43,6 +43,8 @@ public sealed class PolyMigrator(SiteConfig config)
     /// <param name="outputDir">Phase 2 的輸出根目錄(內含 content/ 與清單)。</param>
     /// <param name="mediaDir">媒體目錄;null = <c>outputDir/media</c>(不存在則跳過媒體檢查)。</param>
     /// <param name="mediaPrefix">內文中媒體引用的根前綴。</param>
-    public static VerifyReport Verify(string outputDir, string? mediaDir = null, string mediaPrefix = "/media/") =>
-        new OutputVerifier().Run(outputDir, mediaDir ?? Path.Combine(outputDir, "media"), mediaPrefix);
+    /// <param name="allowUnlinked">豁免孤島偵測的頁(content 相對路徑或路由)。</param>
+    public static VerifyReport Verify(string outputDir, string? mediaDir = null, string mediaPrefix = "/media/",
+        IReadOnlyCollection<string>? allowUnlinked = null) =>
+        new OutputVerifier().Run(outputDir, mediaDir ?? Path.Combine(outputDir, "media"), mediaPrefix, allowUnlinked);
 }

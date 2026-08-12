@@ -7,9 +7,12 @@ public class OutputVerifierTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("polymigrate-verify").FullName;
 
+    private readonly List<string> _pages = [];
+
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
-    private void AddPage(string relative, string frontmatterExtra = "", string body = "")
+    private void AddPage(string relative, string frontmatterExtra = "", string body = "",
+        string pageType = "article")
     {
         var path = Path.Combine(_root, "content", relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -23,11 +26,12 @@ public class OutputVerifierTests : IDisposable
             slug: {slug}
             translation_key: news/{slug}
             title: 標題
-            page_type: article
+            page_type: {pageType}
             {frontmatterExtra}---
 
             {body}
             """.Replace("\r", ""));
+        _pages.Add(relative);
     }
 
     private void AddMedia(string relative)
@@ -37,7 +41,17 @@ public class OutputVerifierTests : IDisposable
         File.WriteAllText(path, "x");
     }
 
-    private VerifyReport Run() => new OutputVerifier().Run(_root, Path.Combine(_root, "media"));
+    /// <summary>
+    /// 一般測試用。孤島偵測會對「沒有任何頁連到」的頁報 warning,而這裡多數迷你站的頁
+    /// 本來就沒人連——那是測試素材的性質,不是被測行為。故一律豁免已加入的頁,
+    /// 讓每個測試只驗自己那一件事;孤島偵測本身改用 <see cref="RunWithOrphanCheck"/>。
+    /// </summary>
+    private VerifyReport Run() =>
+        new OutputVerifier().Run(_root, Path.Combine(_root, "media"), "/media/", _pages);
+
+    /// <summary>孤島偵測的測試用:不給豁免(或只給指定的幾筆)。</summary>
+    private VerifyReport RunWithOrphanCheck(params string[] allowUnlinked) =>
+        new OutputVerifier().Run(_root, Path.Combine(_root, "media"), "/media/", allowUnlinked);
 
     [Fact]
     public void CleanSite_NoIssues()
@@ -200,5 +214,82 @@ public class OutputVerifierTests : IDisposable
         var lines = File.ReadAllLines(Path.Combine(_root, "verify_report.csv"));
         Assert.Contains("severity,page,kind,detail", lines[0]);
         Assert.Contains(lines, l => l.Contains("broken_link"));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 孤島頁面偵測:輸出正確、卻沒有任何頁連得到的頁。
+    //
+    // 這是 verify 原本的系統性盲區——沿著連結走的巡檢走不到它,於是回報「全部正常」。
+    // 誤報的代價比漏報高(沒人看的警告會稀釋整份報告),所以豁免規則一併在這裡釘死。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void UnlinkedPage_IsWarning()
+    {
+        AddPage("ch/news/index.md", body: "[看這篇](/ch/news/a)", pageType: "listing");
+        AddPage("ch/news/a.md");
+        AddPage("ch/news/b.md");        // 沒有任何頁連到 b
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal(Severity.Warning, issue.Severity);
+        Assert.Equal("unlinked_page", issue.Kind);
+        Assert.Equal("ch/news/b.md", issue.Page);
+    }
+
+    [Fact]
+    public void TopLevelSinglePage_IsWarning()
+    {
+        // 香雲寺 BLIA:頂層目錄索引、內容完全正確、選單漏了它 → 沒有任何入口。
+        // 與列表頁的差別只在 page_type(所屬 section 未宣告型別 → page 而非 listing)。
+        AddPage("index.md", pageType: "page");
+        AddPage("en/index.md", pageType: "page");
+        AddPage("en/blia/index.md", pageType: "page");
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("unlinked_page", issue.Kind);
+        Assert.Equal("en/blia/index.md", issue.Page);
+    }
+
+    [Fact]
+    public void SiteRootLanguageHomeAndListing_AreExemptByDefault()
+    {
+        // 這三類本來就不會被內容頁連到:連回站根、連回語言首頁的頁幾乎不存在,
+        // 列表頁則是從選單進入——而選單不在 Phase 2 輸出裡,verify 看不到。
+        AddPage("index.md", pageType: "page");                   // 站根,深度 0
+        AddPage("ch/index.md", pageType: "page");                // 語言首頁,深度 1
+        AddPage("ch/news/index.md", body: "[a](/ch/news/a)", pageType: "listing");
+        AddPage("ch/news/a.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void LinkedViaHtmlOrTrailingSlash_IsNotOrphan()
+    {
+        // 判定用的是正規化後的路由,所以尾斜線與內嵌 HTML 的 href 一樣算「連到了」
+        AddPage("ch/index.md", body: "<a href='/ch/news/a/'>x</a>", pageType: "page");
+        AddPage("ch/news/a.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Theory]
+    [InlineData("ch/news/b.md")]    // 用 content 相對路徑豁免
+    [InlineData("/ch/news/b")]      // 用路由豁免
+    public void AllowUnlinked_SuppressesWarning(string exemption)
+    {
+        AddPage("ch/news/b.md");
+
+        var report = RunWithOrphanCheck(exemption);
+
+        Assert.Empty(report.Issues);
     }
 }

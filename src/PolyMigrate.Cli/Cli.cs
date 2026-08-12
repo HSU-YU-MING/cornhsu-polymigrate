@@ -59,8 +59,12 @@ public static class Cli
                       polymigrate fetch-orphans <config.yaml> --section <name> [--slugs <file>] [--root <dir>]
                           Fetch probed orphan pages (all langs) into raw/ and their assets into media/.
                       polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/]
-                          Verify extracted output: frontmatter fields, internal links, media refs.
+                                                      [--allow-unlinked <file>]
+                          Verify extracted output: frontmatter fields, internal links, media refs,
+                          and unlinked pages — pages no other page links to, which visitors can
+                          only reach by typing the URL. Unlinked pages are warnings.
                           Default media dir: <output-dir>/media (media checks skipped if absent).
+                          --allow-unlinked: file of pages to exempt, one per line (# comments ok).
                       polymigrate --version               Print version
                     """);
                 return 0;
@@ -148,15 +152,9 @@ public static class Cli
             Console.WriteLine(new string('=', 50));
             return report.HasErrors ? 2 : report.HasWarnings ? 1 : 0;
         }
-        catch (ConfigException ex)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
-        }
-        catch (Exception ex) when (IsIoError(ex))
-        {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            return Report(ex);
         }
     }
 
@@ -164,6 +162,7 @@ public static class Cli
     {
         string? outDir = null;
         string? mediaDir = null;
+        string? allowUnlinkedFile = null;
         var mediaPrefix = "/media/";
         for (var i = 0; i < args.Length; i++)
         {
@@ -174,6 +173,9 @@ public static class Cli
                     break;
                 case "--media-prefix" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
                     mediaPrefix = args[++i];
+                    break;
+                case "--allow-unlinked" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    allowUnlinkedFile = args[++i];
                     break;
                 default:
                     if (outDir is not null || args[i].StartsWith('-'))
@@ -187,15 +189,18 @@ public static class Cli
         }
         if (outDir is null)
         {
-            Console.Error.WriteLine("Usage: polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/]");
+            Console.Error.WriteLine(
+                "Usage: polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/] [--allow-unlinked <file>]");
             return 2;
         }
         try
         {
             outDir = Path.GetFullPath(outDir);
             mediaDir = Path.GetFullPath(mediaDir ?? Path.Combine(outDir, "media"));
+            var allowUnlinked = ReadAllowUnlinked(allowUnlinkedFile);
 
-            var report = new PolyMigrate.Core.Verify.OutputVerifier().Run(outDir, mediaDir, mediaPrefix);
+            var report = new PolyMigrate.Core.Verify.OutputVerifier()
+                .Run(outDir, mediaDir, mediaPrefix, allowUnlinked);
 
             Console.WriteLine(new string('=', 50));
             Console.WriteLine("Verify done.");
@@ -212,12 +217,17 @@ public static class Cli
             {
                 Console.WriteLine($"  [error] {issue.Page}: {issue.Kind} {issue.Detail}");
             }
+            // warning 明細也要印:warning 會讓 exit code 變 1,只給計數等於讓使用者
+            // 拿到非零 exit code 卻在畫面上找不到原因,只能自己去翻 verify_report.csv
+            foreach (var issue in report.Issues.Where(i => i.Severity == Severity.Warning).Take(20))
+            {
+                Console.WriteLine($"  [warning] {issue.Page}: {issue.Kind} {issue.Detail}");
+            }
             return report.Errors > 0 ? 2 : report.Warnings > 0 ? 1 : 0;
         }
-        catch (Exception ex) when (IsIoError(ex))
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            return Report(ex);
         }
     }
 
@@ -254,15 +264,9 @@ public static class Cli
             Console.WriteLine(new string('=', 50));
             return report.Failed > 0 ? 1 : 0;
         }
-        catch (ConfigException ex)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
-        }
-        catch (Exception ex) when (IsIoError(ex))
-        {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            return Report(ex);
         }
     }
 
@@ -306,20 +310,9 @@ public static class Cli
             Console.WriteLine($"Probe done: {found.Count} orphan slugs -> {outFile}");
             return 0;
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine("cancelled.");
-            return 130;
-        }
-        catch (ConfigException ex)
-        {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
-        }
-        catch (Exception ex) when (IsIoError(ex))
-        {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            return Report(ex);
         }
     }
 
@@ -365,25 +358,58 @@ public static class Cli
             Console.WriteLine(new string('=', 50));
             return report.Errors.Count > 0 ? 1 : 0;
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine("cancelled.");
-            return 130;
+            return Report(ex);
         }
-        catch (ConfigException ex)
+    }
+
+    /// <summary>豁免清單:一行一頁(content 相對路徑或路由),空行與 # 開頭略過。</summary>
+    private static IReadOnlyCollection<string>? ReadAllowUnlinked(string? path)
+    {
+        if (path is null)
         {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
+            return null;
         }
-        catch (Exception ex) when (IsIoError(ex))
+        var full = Path.GetFullPath(path);
+        if (!File.Exists(full))
         {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            throw new FileNotFoundException($"Allow-unlinked list not found: {full}", full);
         }
+        return [.. File.ReadAllLines(full)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.StartsWith('#'))];
     }
 
     private static bool IsIoError(Exception ex) => ex is IOException or UnauthorizedAccessException
         or ArgumentException or NotSupportedException or FormatException or System.Security.SecurityException;
+
+    /// <summary>
+    /// 指令主體共同攔截的例外。每個指令的 catch 一律是這一組——不是各自挑幾種,
+    /// 否則新增指令時漏抄一種(例如忘了 OperationCanceledException → 130)不會被任何測試發現。
+    /// </summary>
+    private static bool IsHandled(Exception ex) =>
+        ex is OperationCanceledException or ConfigException || IsIoError(ex);
+
+    /// <summary>
+    /// 共同錯誤 → 訊息 + exit code(§3.8)。exit code 契約只在這裡定義一次;
+    /// 驗收測試見 CliTests 末段「exit code 契約」那一組。
+    /// </summary>
+    private static int Report(Exception ex)
+    {
+        switch (ex)
+        {
+            case OperationCanceledException:
+                Console.Error.WriteLine("cancelled.");
+                return 130;
+            case ConfigException:
+                Console.Error.WriteLine(ex.Message);
+                return 2;
+            default:
+                Console.Error.WriteLine($"error: {ex.Message}");
+                return 2;
+        }
+    }
 
     private static string Format(SortedDictionary<string, int> counts) =>
         counts.Count == 0 ? "-" : string.Join(", ", counts.Select(kv => $"{kv.Key}={kv.Value}"));

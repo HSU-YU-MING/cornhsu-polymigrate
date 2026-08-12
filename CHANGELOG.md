@@ -2,6 +2,47 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 2.2.0
+
+**`verify` 補上一整類抓不到的錯:孤島頁面。** Phase 輸出契約(CSV 欄位、frontmatter)不變,
+新增的只是 `verify_report.csv` 裡多一種 `kind`。
+
+### ⚠️ 升級後 `verify` 可能從 exit 0 變 exit 1
+
+孤島頁面判為 **warning**,而 warning 會讓 `verify` 回傳 **1**。在此之前唯一的 warning 是
+`known_missing_media`(少見),所以多數專案現在拿到的是 0 —— 升級後若站上真的有孤島頁,
+CI 腳本(尤其 `set -e`)會從綠燈變紅燈,**即使你什麼都沒改**。
+
+內建豁免已涵蓋「本來就不會被內容頁連到」的三類(站根、各語言首頁、`page_type: listing`
+的分類列表頁),正常專案應為 0 孤島。真的要豁免其他頁:
+
+```sh
+polymigrate verify out/ --allow-unlinked allow_unlinked.txt
+```
+
+檔案一行一頁,`content` 相對路徑或路由皆可,`#` 開頭為註解。
+
+### 新增
+
+- **孤島頁面偵測**:輸出裡存在、卻沒有任何內容頁連到的頁 → `unlinked_page` warning。
+  這是 `verify` 原本的系統性盲區 —— 沿著連結走的巡檢**走不到**這種頁,於是回報「全部正常」,
+  而「零錯誤」在此是誤導:它證明的是「連得到的頁都正常」,不是「所有頁都正常」。
+  實作只用既有資料(路由集 ∖ 被引用集),不多掃一趟、不碰網路。
+  **界線**:選單不在 Phase 2 輸出裡,verify 看不到它,故訊息措辭是
+  「not linked from any content page (menus are not checked)」而非「沒有入口」。
+- `polymigrate verify --allow-unlinked <file>`;函式庫端為 `PolyMigrator.Verify(..., allowUnlinked:)`。
+  刻意**不**放進 site config —— `verify` 的「只讀輸出、不需 config」是它的設計前提。
+
+### 修正
+
+- **`verify` 現在會印出 warning 明細**,不再只給一個計數。warning 會讓 exit code 變 1,
+  卻在畫面上找不到原因、只能自己去翻 `verify_report.csv`,是很差的第一印象。
+- **各指令的例外處理收斂為同一組**,exit code 的對應只在一處定義。原本五個指令各抄一份且
+  **抄得不一致**:`verify` 只接 IO 錯,`extract`/`thumbs` 漏接取消 —— 所以這三個指令被 Ctrl-C
+  中斷時會直接崩潰,而非乾淨回傳 130。
+- exit code(0/1/2/130)補上驗收測試。在此之前這份契約只寫在註解裡,沒有任何測試會因為
+  有人改動它而變紅 —— 而它是最多人依賴的那一份契約(CI 與 shell 腳本直接吃它)。
+
 ## 2.1.0
 
 **發佈管線的修補。** CLI 介面、Phase 輸出契約、frontmatter 欄位、golden 全部不變。
