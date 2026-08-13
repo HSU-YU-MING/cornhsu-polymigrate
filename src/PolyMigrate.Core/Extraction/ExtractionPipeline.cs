@@ -43,6 +43,19 @@ public sealed class ExtractionReport
     /// <summary>路徑安全問題(§3.4):error = 拒寫並跳過該頁;warning = 照寫但記錄(如超長路徑)。</summary>
     public required List<PathIssue> PathIssues { get; init; }
 
+    /// <summary>
+    /// <c>content/</c> 裡存在、但這一次沒有被寫到的 .md。
+    ///
+    /// <para>只回報,**不刪**:刪使用者的檔案風險太高,而「只寫不刪」正是 <c>raw/</c> 與
+    /// <c>media/</c> 這兩份不可再生資料安全的原因,不值得為了清殘檔而破壞它。
+    /// 但不刪不等於不講——舊站下架一篇文章後重跑,舊的 .md 會永遠留著,於是回報的
+    /// 「markdown files」與磁碟上的實際檔數從此對不起來,而原本沒有任何地方會提。</para>
+    ///
+    /// <para>刻意<b>不</b>計入 <see cref="HasWarnings"/>:那會讓所有有殘檔的既有使用者
+    /// 的 <c>extract</c> 從 exit 0 變 1。exit code 是對外契約,不在 patch 版動它。</para>
+    /// </summary>
+    public List<string> StaleOutputs { get; init; } = [];
+
     public int PagesSkippedUnsafe => PathIssues.Count(i => i.Severity == Severity.Error);
 
     public bool HasErrors => PagesSkippedUnsafe > 0;
@@ -76,6 +89,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
         var aggregator = new InventoryAggregator(links);
         var pathIssues = new List<PathIssue>();
         var seenPaths = new Dictionary<string, string>(StringComparer.Ordinal);
+        var writtenPaths = new HashSet<string>(StringComparer.Ordinal);
         var pagesWritten = 0;
 
         foreach (var file in files)
@@ -102,6 +116,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             {
                 WriteMarkdown(paths.OutDir, relPath, extracted);
             }
+            writtenPaths.Add(relPath);   // dry-run 時是「這次會寫的」,殘檔比對的語意一樣成立
             pagesWritten++;
 
             // translation_key 聚合各語言版本 + 媒體引用/缺圖/待補/redirect 的摺疊(純記憶體,見 InventoryAggregator)
@@ -122,7 +137,28 @@ public sealed class ExtractionPipeline(SiteConfig config)
         }
 
         return BuildReport(aggregator.Inventory, locales, pagesWritten, aggregator.MediaRefs.Count,
-            aggregator.Missing.Count, aggregator.NeedFetch.Count, suggestions.Count / 2, pathIssues);
+            aggregator.Missing.Count, aggregator.NeedFetch.Count, suggestions.Count / 2, pathIssues,
+            FindStaleOutputs(paths.OutDir, writtenPaths));
+    }
+
+    /// <summary>
+    /// content/ 裡有、但這次沒被寫到的 .md(見 <see cref="ExtractionReport.StaleOutputs"/>)。
+    /// 純比對,不動磁碟。
+    /// </summary>
+    private static List<string> FindStaleOutputs(string outDir, HashSet<string> written)
+    {
+        var contentDir = Path.Combine(outDir, "content");
+        if (!Directory.Exists(contentDir))
+        {
+            return [];
+        }
+        return
+        [
+            .. Directory.EnumerateFiles(contentDir, "*.md", SearchOption.AllDirectories)
+                .Select(f => Path.GetRelativePath(outDir, f).Replace('\\', '/'))
+                .Where(rel => !written.Contains(rel))
+                .OrderBy(rel => rel, StringComparer.Ordinal),
+        ];
     }
 
     private static string MarkdownRelativePath(RawPage page)
@@ -318,7 +354,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
     private static ExtractionReport BuildReport(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
         int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs,
-        List<PathIssue> pathIssues)
+        List<PathIssue> pathIssues, List<string> staleOutputs)
     {
         var typeCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var flagCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -348,6 +384,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             NeedFetchMedia = needFetchCount,
             SuggestedPairs = suggestedPairs,
             PathIssues = pathIssues,
+            StaleOutputs = staleOutputs,
         };
     }
 }

@@ -5,15 +5,27 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- 版本的唯一真相源是 git tag。release.yml 與 npm-backfill.yml 一律以
+         -p:Version= 覆寫這一格,所以這個值只會出現在「從原始碼建置」的產物上。
+
+         固定寫 0.0.0-dev,三種寫法裡只有它是對的:
+           寫死真版本號 → 一定會跟 tag 漂開,而且發版時沒人會記得回來改
+           整格留空     → 退回 MSBuild 預設 1.0.0,而 1.0.0 是 PolyMigrate
+                          **真的發行過**的版本 —— 從原始碼建的執行檔會自稱一個
+                          存在、但不是它自己的版本,debug 時會把人帶去錯的方向
+           0.0.0-dev    → 不可能被誤認成任何一次發行
+
+         npm 那條線的 package.json 早就用 "0.0.0-placeholder" 做同一件事,
+         這裡只是把 .NET 這半補齊。**發版不需要動這一格**(見 RELEASING.md)。 -->
+    <Version>0.0.0-dev</Version>
     <!-- NuGet audit 警告(相依套件已知弱點通報)不升級為錯誤 -->
     <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 
   <!-- 套件中繼資料:只套用到 packable 專案(src/ 底下、IsPackable 未關的)。
        套件 ID 用 Cornhsu.* 前綴:作者的 NuGet verified prefix(藍勾勾),與既有套件一致。
-       這裡刻意不寫 <Version>:release 一律以 tag 版號 -p:Version= 注入
-       (見 .github/workflows/release.yml)。寫死的預設值只會過期 —— 本機建置報出來的
-       版本號會是一個早就不存在的版本。無版號時 SDK 預設 1.0.0,對本機建置已經夠用。 -->
+       版本不在這裡設,見上面 <Version> 那段的說明。 -->
   <PropertyGroup Condition="'$(IsPackable)' != 'false'">
     <Authors>許彧銘 (Cornhsu)</Authors>
     <Company>Cornhsu</Company>

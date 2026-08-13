@@ -77,11 +77,17 @@ dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
-polymigrate verify out/                     # 連結/媒體/frontmatter 巡檢,exit code 可接 CI
+polymigrate verify out/                     # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
 polymigrate probe-orphans site.yaml --section news --years 2021-2023
 polymigrate fetch-orphans site.yaml --section news
+polymigrate slugs . --section news          # 列出 ./raw 底下已鏡像的 slug(可直接導向檔案)
 ```
+
+> **`raw/` 是唯一不可再生的東西。** 以禮貌的請求間隔重爬一個站要花好幾個小時,
+> 而來源站很可能在你搬完的那一刻就被關掉——那時候你的鏡像就是世上僅存的一份。
+> PolyMigrate 的任何指令都不會刪除或覆寫 `raw/` 與 `media/`;搬遷驗收之前請留著,
+> 來源站要收掉的話請另外備份。
 
 > 沒有 .NET?上面每個指令都可用 npm **免安裝**執行,前面加 `npx cornhsu-polymigrate` 即可:
 > `npx cornhsu-polymigrate extract site.yaml`、`npx cornhsu-polymigrate verify out/`,以此類推。

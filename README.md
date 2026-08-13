@@ -105,6 +105,12 @@ polymigrate fetch-orphans site.yaml --section news
 polymigrate slugs . --section news          # slugs already mirrored under ./raw (pipeable)
 ```
 
+> **`raw/` is the one thing you cannot regenerate.** Re-crawling a site takes hours at a
+> polite request rate, and the source site may be switched off the moment you finish
+> migrating — at which point your mirror is the only copy left. No PolyMigrate command
+> ever deletes or overwrites `raw/` or `media/`; keep them until the migration is signed
+> off, and back them up if the source is going away.
+
 > No .NET? Every command above also runs with **zero install** via npm — just prefix it:
 > `npx cornhsu-polymigrate extract site.yaml`, `npx cornhsu-polymigrate verify out/`, and so on.
 

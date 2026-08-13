@@ -60,6 +60,46 @@ public class GoldenTests : IDisposable
         Assert.Equal(2, report.SuggestedPairs);        // date 組 + shared_media 組
         Assert.Equal(2, report.MissingImages);         // 20260101_3.jpg + broken.jpg
         Assert.Equal(1, report.NeedFetchMedia);        // schedule.pdf
+        Assert.Empty(report.StaleOutputs);             // 乾淨的一次跑完,content/ 裡不該有多餘的檔
+    }
+
+    [Fact]
+    public void SecondRun_AfterAPageLeavesTheMirror_ReportsItAsStale()
+    {
+        // 舊站下架一篇文章後重跑:extract 只寫不刪,舊的 .md 會留在 content/ 裡。
+        // 不刪是刻意的(那正是 raw/ 與 media/ 安全的原因),但必須講出來——
+        // 否則回報的 PagesWritten 與磁碟上的實際檔數從此對不起來,而沒有任何地方會提。
+        RunPipeline();
+
+        var trimmedRaw = Directory.CreateTempSubdirectory("polymigrate-trimmed").FullName;
+        try
+        {
+            CopyDirectory(Path.Combine(FixtureDir, "raw"), trimmedRaw);
+            File.Delete(Path.Combine(trimmedRaw, "ch", "news", "20260214.php.html"));
+
+            var config = SiteConfigLoader.LoadFile(Path.Combine(FixtureDir, "config.yaml"));
+            var report = new ExtractionPipeline(config).Run(new ExtractionPaths(
+                trimmedRaw, Path.Combine(FixtureDir, "media"), _out));
+
+            Assert.Equal(["content/ch/news/20260214.md"], report.StaleOutputs);
+            Assert.True(File.Exists(Path.Combine(_out, "content", "ch", "news", "20260214.md")),
+                "回報殘檔,但不得刪除它");
+        }
+        finally
+        {
+            Directory.Delete(trimmedRaw, recursive: true);
+        }
+    }
+
+    private static void CopyDirectory(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var dest = Path.Combine(target, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            File.Copy(file, dest);
+        }
     }
 
     [Fact]
