@@ -153,6 +153,13 @@ public static class Cli
             Console.WriteLine($"  missing images   : {report.MissingImages} (recorded in missing_images.csv, non-blocking)");
             Console.WriteLine($"  need-fetch media : {report.NeedFetchMedia} (recorded in need_fetch_media.txt)");
             Console.WriteLine($"  path issues      : {report.PathIssues.Count} ({report.PagesSkippedUnsafe} pages skipped as unsafe, see path_issues.csv)");
+            // 沒有這一行的話,「markdown files」與 content/ 裡的實際檔數會從此對不起來,
+            // 而且沒有任何地方會提——舊站下架一篇文章重跑一次就會發生
+            Console.WriteLine($"  stale in content : {report.StaleOutputs.Count} (present but not written by this run)");
+            foreach (var stale in report.StaleOutputs.Take(10))
+            {
+                Console.WriteLine($"  [stale] {stale}");
+            }
             foreach (var (severity, pagePath, issue) in report.PathIssues.Take(10))
             {
                 Console.WriteLine($"  [{severity.Wire()}] {pagePath}: {issue}");
@@ -235,8 +242,10 @@ public static class Cli
             // (在網站選單)。講一次「該做什麼」與逃生門在哪,不要逐條重複。
             if (report.Issues.Any(i => i.Kind == "unlinked_page"))
             {
-                Console.WriteLine("  -> unlinked pages can only be reached by typing the URL. Add a link to");
-                Console.WriteLine("     them, add a menu entry, or exempt them with --allow-unlinked <file>.");
+                Console.WriteLine("  -> unlinked pages can only be reached by typing the URL. Add a link or a");
+                Console.WriteLine("     menu entry, exempt them with --allow-unlinked <file>, or delete them");
+                Console.WriteLine("     if they are left over from an earlier run (extract never removes old");
+                Console.WriteLine("     output — see 'stale in content' in the extract summary).");
             }
             return report.Errors > 0 ? 2 : report.Warnings > 0 ? 1 : 0;
         }
