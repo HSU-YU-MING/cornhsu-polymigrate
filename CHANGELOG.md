@@ -19,6 +19,13 @@
 
 ### 內部
 
+- **從原始碼建置不再自稱 1.0.0。** `Directory.Build.props` 原本刻意不寫 `<Version>`,
+  於是退回 MSBuild 預設的 `1.0.0`——而 `1.0.0` 是 PolyMigrate **真的發行過**的版本,
+  所以本機建出來的執行檔不是自稱一個不存在的版本,而是自稱一個存在、但不是它自己的版本,
+  debug 時會把人帶去錯的方向。改為固定 `0.0.0-dev`(npm 那條線的 `package.json` 早就用
+  `0.0.0-placeholder` 做同一件事,這裡只是把 .NET 這半補齊)。
+  發出去的版本完全不受影響:`release.yml` 與 `npm-backfill.yml` 一律以 `-p:Version=`
+  覆寫。規則寫進 `RELEASING.md`——不寫下來的話,下次還是會有人手動改那一格。
 - 新增 README 與 `--help` 的指令清單一致性測試。這個走鐘實際發生過兩次:2.2.0 開發期間
   README 寫 `slugs out/` 而 `--help` 寫 `<root>`,撐過一整輪人工審視;同一次改動裡
   英文 README 加了 `slugs`、中文 README 漏掉,也沒人當場看出來。只比對「有哪些指令」,

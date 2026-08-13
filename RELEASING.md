@@ -28,6 +28,12 @@ git tag v1.0.0-preview.1
 git push origin v1.0.0-preview.1
 ```
 
+> **不要手動改 `Directory.Build.props` 的 `<Version>`。** tag 是版本的唯一真相源;
+> 那一格固定是 `0.0.0-dev`,只會出現在「從原始碼建置」的產物上。手動改它不會影響
+> 發出去的版本(CI 一律覆寫),只會讓本機建置自稱一個錯的版本,而且下次發版沒人會
+> 記得改回來。同理,`npm/cornhsu-polymigrate/package.json` 的 `0.0.0-placeholder`
+> 也不要動。
+
 `release.yml` 會自動:build → test → pack → OIDC 換臨時金鑰 → `dotnet nuget push`(tool + lib 兩包)。
 
 ## 本機乾跑(不發佈,驗證封裝可裝可跑)
