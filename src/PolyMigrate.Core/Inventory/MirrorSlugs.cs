@@ -36,9 +36,19 @@ internal static class MirrorSlugs
         {
             return null;
         }
-        var langs = langPrefix is null
-            ? Directory.EnumerateDirectories(rawDir).Select(d => Path.GetFileName(d)).ToList()
-            : [langPrefix];
+        var langs = new List<string>();
+        if (langPrefix is null)
+        {
+            langs.AddRange(new DirectoryInfo(rawDir).EnumerateDirectories().Select(d => d.Name));
+            // 無語言前綴的站(lang_map 的 key 是 "",見 RawPage.LangPrefix)其 section
+            // 直接在 raw/ 底下,不在任何語言目錄裡。只掃語言目錄會把 raw/news 當成
+            // 語言 "news" 再去找 raw/news/news,於是這類站一筆都找不到。
+            langs.Add("");
+        }
+        else
+        {
+            langs.Add(langPrefix);
+        }
 
         var slugs = new SortedSet<string>(StringComparer.Ordinal);
         var sectionFound = false;

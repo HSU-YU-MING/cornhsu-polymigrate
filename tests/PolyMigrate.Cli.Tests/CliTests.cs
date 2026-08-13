@@ -319,6 +319,8 @@ public class CliTests : IDisposable
         Assert.Equal(1, r.Exit);
         // 只給 warning 計數不夠:拿到非零 exit code 的人必須在畫面上看得到是哪一頁
         Assert.Contains("[warning] ch/blia/index.md: unlinked_page", r.Out);
+        // 而且要知道下一步該做什麼——修的地方不在 PolyMigrate,在網站選單
+        Assert.Contains("--allow-unlinked", r.Out);
     }
 
     [Fact]

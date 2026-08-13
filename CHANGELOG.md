@@ -52,6 +52,9 @@ polymigrate verify out/ --allow-unlinked allow_unlinked.txt
 
 ### 修正
 
+- **`verify` 印出孤島警告後會多講一行「該做什麼」**:收到這種警告的人多半不是工程師,
+  而且要修的地方根本不在 PolyMigrate(在網站選單)。同時把 `--allow-unlinked` 這個
+  逃生門講出來——否則使用者得去翻 CHANGELOG 才知道有它。
 - **`verify` 現在會印出 warning 明細**,不再只給一個計數。warning 會讓 exit code 變 1,
   卻在畫面上找不到原因、只能自己去翻 `verify_report.csv`,是很差的第一印象。
 - **各指令的例外處理收斂為同一組**,exit code 的對應只在一處定義。原本五個指令各抄一份且

@@ -50,6 +50,18 @@ public class MirrorSlugsTests : IDisposable
     }
 
     [Fact]
+    public void NoLanguagePrefixSite_IsFound()
+    {
+        // 無語言前綴的站(lang_map 的 key 是 ""):section 直接在 raw/ 底下。
+        // 只掃語言目錄的話會把 raw/news 當成語言 "news" 再去找 raw/news/news,
+        // 於是整個單語站一筆都找不到——這類站是明確支援的,不是邊角。
+        Directory.CreateDirectory(Path.Combine(Raw, "news"));
+        File.WriteAllText(Path.Combine(Raw, "news", "20260101.php.html"), "<html></html>");
+
+        Assert.Equal(["20260101"], PolyMigrator.MirrorSlugs(Raw, "news"));
+    }
+
+    [Fact]
     public void UnknownSection_IsNull_NotEmpty()
     {
         // section 打錯必須跟「有這個 section、但一篇都沒有」分得開:靜靜回空清單

@@ -42,11 +42,11 @@ public class OutputVerifierTests : IDisposable
     }
 
     /// <summary>
-    /// 一般測試用。孤島偵測會對「沒有任何頁連到」的頁報 warning,而這裡多數迷你站的頁
-    /// 本來就沒人連——那是測試素材的性質,不是被測行為。故一律豁免已加入的頁,
-    /// 讓每個測試只驗自己那一件事;孤島偵測本身改用 <see cref="RunWithOrphanCheck"/>。
+    /// 一般測試用,**孤島偵測是關掉的**(豁免已加入的每一頁)——名字直說,因為這裡
+    /// 多數迷你站的頁本來就沒人連,那是測試素材的性質、不是被測行為。
+    /// 要驗孤島偵測請用 <see cref="RunWithOrphanCheck"/>,別在這裡等它報 warning。
     /// </summary>
-    private VerifyReport Run() =>
+    private VerifyReport RunIgnoringUnlinked() =>
         new OutputVerifier().Run(_root, Path.Combine(_root, "media"), "/media/", _pages);
 
     /// <summary>孤島偵測的測試用:不給豁免(或只給指定的幾筆)。</summary>
@@ -62,7 +62,7 @@ public class OutputVerifierTests : IDisposable
         AddPage("ch/news/b.md");
         AddPage("ch/news/index.md");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
         Assert.Equal(3, report.PagesChecked);
@@ -75,7 +75,7 @@ public class OutputVerifierTests : IDisposable
     {
         AddPage("ch/news/a.md", body: "[gone](/ch/news/nope)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         var issue = Assert.Single(report.Issues);
         Assert.Equal((Severity.Error, "broken_link", "/ch/news/nope"), (issue.Severity, issue.Kind, issue.Detail));
@@ -92,7 +92,7 @@ public class OutputVerifierTests : IDisposable
             new[] { "https://example.org/ch/news/a.php", "/media/known.jpg" },
         ]);
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Equal(1, report.Errors);
         Assert.Equal(1, report.Warnings);
@@ -113,7 +113,7 @@ public class OutputVerifierTests : IDisposable
               alt: ''
             """ + "\n");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         var issue = Assert.Single(report.Issues);
         Assert.Equal("missing_media", issue.Kind);
@@ -127,7 +127,7 @@ public class OutputVerifierTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, "---\nsource_url: https://x\n---\n\nbody\n");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Contains(report.Issues, i => i.Kind == "missing_field" && i.Detail == "title");
         Assert.True(report.Errors >= 5);
@@ -140,7 +140,7 @@ public class OutputVerifierTests : IDisposable
         AddMedia("images/a b.jpg");
         AddPage("ch/a.md", body: "![](/media/images/a%20b.jpg)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
     }
@@ -151,7 +151,7 @@ public class OutputVerifierTests : IDisposable
         AddPage("ch/index.md", body: "[root](/) [home](/ch/)");
         AddPage("index.md");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
     }
@@ -161,7 +161,7 @@ public class OutputVerifierTests : IDisposable
     {
         AddPage("ch/a.md", body: "[x](https://other.org/) [y](#top) [z](mailto:a@b.c) [p](//cdn/x)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
         Assert.Equal(0, report.LinksChecked);
@@ -173,7 +173,7 @@ public class OutputVerifierTests : IDisposable
         // 內嵌 HTML 的 href/src 單引號、大寫屬性也要抽出來驗,否則壞連結漏報
         AddPage("ch/a.md", body: "<a href='/ch/news/nope'>x</a> <IMG SRC=\"/ch/news/gone\">");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Equal(2, report.Errors);
         Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/nope");
@@ -187,7 +187,7 @@ public class OutputVerifierTests : IDisposable
         AddMedia("images/a.jpg");
         AddPage("ch/a.md", body: "![](/media/images/a.jpg?v=2)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
         Assert.Equal(1, report.MediaChecked);
@@ -199,7 +199,7 @@ public class OutputVerifierTests : IDisposable
         // 手改壞的 frontmatter 讓 images[].local 是數字而非字串 → 略過該筆,不得崩潰
         AddPage("ch/a.md", frontmatterExtra: "images:\n- local: 12345\n  alt: ''\n");
 
-        var report = Run();   // 不應丟 InvalidCastException
+        var report = RunIgnoringUnlinked();   // 不應丟 InvalidCastException
 
         Assert.DoesNotContain(report.Issues, i => i.Kind is "missing_media" or "known_missing_media");
     }
@@ -209,7 +209,7 @@ public class OutputVerifierTests : IDisposable
     {
         AddPage("ch/a.md", body: "[gone](/nope)");
 
-        Run();
+        RunIgnoringUnlinked();
 
         var lines = File.ReadAllLines(Path.Combine(_root, "verify_report.csv"));
         Assert.Contains("severity,page,kind,detail", lines[0]);

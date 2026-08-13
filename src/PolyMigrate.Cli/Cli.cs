@@ -231,6 +231,13 @@ public static class Cli
             {
                 Console.WriteLine($"  [warning] {issue.Page}: {issue.Kind} {issue.Detail}");
             }
+            // 收到 unlinked_page 的人多半不是工程師,而且要修的地方根本不在 PolyMigrate
+            // (在網站選單)。講一次「該做什麼」與逃生門在哪,不要逐條重複。
+            if (report.Issues.Any(i => i.Kind == "unlinked_page"))
+            {
+                Console.WriteLine("  -> unlinked pages can only be reached by typing the URL. Add a link to");
+                Console.WriteLine("     them, add a menu entry, or exempt them with --allow-unlinked <file>.");
+            }
             return report.Errors > 0 ? 2 : report.Warnings > 0 ? 1 : 0;
         }
         catch (Exception ex) when (IsHandled(ex))
