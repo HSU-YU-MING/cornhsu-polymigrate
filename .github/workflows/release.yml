@@ -143,6 +143,19 @@ jobs:
           "$BIN" --help > /dev/null
           echo "✔ linux-x64 執行檔可啟動"
 
+      # 授權義務在 prepare.mjs 裡是「找不到就中止」,這裡再擋一次成品。
+      # 平台套件夾了 Magick.Native-Q8-*,那是實質的再散布,Apache-2.0 §4(d)
+      # 要求隨附 Magick.NET 的 Notice.txt。斷掉的話要在發布之前就知道。
+      - name: Verify licence notices shipped
+        run: |
+          set -euo pipefail
+          for d in npm/dist/polymigrate-*/; do
+            test -s "$d/NOTICE.txt" || { echo "::error::$d 少了 NOTICE.txt"; exit 1; }
+            grep -q "ImageMagick" "$d/NOTICE.txt" || { echo "::error::$d 的 NOTICE.txt 內容不對"; exit 1; }
+          done
+          test -s npm/dist/cornhsu-polymigrate/THIRD-PARTY-NOTICES.md
+          echo "✔ 授權聲明已隨 $(ls -d npm/dist/polymigrate-*/ | wc -l) 個平台套件與主套件出貨"
+
       # 認證方式自動切換,不需要為了「首發」與「之後」改兩次 workflow:
       #   有 NPM_TOKEN secret  → 寫入 .npmrc 用 token(首次發布只能這樣,
       #                          npm 的信任發布必須先有套件才設定得了)

@@ -12,6 +12,7 @@
 // 受眾本來就在 NuGet,不需要也不該發到 npm。
 
 import { cp, mkdir, readFile, rm, writeFile, access } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const [version, publishRoot] = process.argv.slice(2);
@@ -37,6 +38,42 @@ await mkdir(distDir, { recursive: true });
 
 const exists = async (p) => access(p).then(() => true, () => false);
 
+// ── 第三方授權聲明 ──
+// NuGet 通路不需要這一段:相依由 NuGet 解析,每個套件的授權隨它自己走。
+// npm 不一樣——這裡出的是 self-contained 執行檔,Magick.Native-Q8-* 是「夾在裡面」
+// 一起散布的,而 Magick.NET 為 Apache-2.0 且其套件內含 Notice.txt,§4(d) 要求
+// 該通知隨附於再散布。
+//
+// 找不到就中止建置,不是印個警告帶過。原本這是 RELEASING.md 上的一條人工檢查項,
+// 而人工檢查項遲早會被忘記——「安靜地沒做到」正是把它自動化要消滅的失敗方式。
+async function readMagickNotice() {
+  const assetsPath = path.join(root, "src", "PolyMigrate.Core", "obj", "project.assets.json");
+  if (!(await exists(assetsPath))) {
+    throw new Error(`找不到 ${assetsPath} — 請先 dotnet publish(還原後才有解析出的相依版本)`);
+  }
+  const assets = JSON.parse(await readFile(assetsPath, "utf8"));
+  // 版本取自實際還原結果,不寫死:相依一升版,寫死的路徑就會安靜地失效
+  const key = Object.keys(assets.libraries ?? {}).find(
+    (k) => k.toLowerCase().startsWith("magick.net-q8-anycpu/")
+  );
+  if (!key) {
+    throw new Error(
+      "project.assets.json 裡沒有 Magick.NET-Q8-AnyCPU。若影像相依換掉了," +
+        "請同步更新 THIRD-PARTY-NOTICES.md 與這段程式,別直接把它拿掉"
+    );
+  }
+  const [id, version] = key.split("/");
+  const cache = process.env.NUGET_PACKAGES || path.join(os.homedir(), ".nuget", "packages");
+  const notice = path.join(cache, id.toLowerCase(), version.toLowerCase(), "Notice.txt");
+  if (!(await exists(notice))) {
+    throw new Error(`找不到 ${notice} — Apache-2.0 §4(d) 要求隨附此通知,不能略過`);
+  }
+  return { text: await readFile(notice, "utf8"), version };
+}
+
+const magick = await readMagickNotice();
+console.log(`✔ Magick.NET ${magick.version} 的 Notice.txt`);
+
 // ── 平台套件 ──
 const built = [];
 for (const t of TARGETS) {
@@ -48,6 +85,11 @@ for (const t of TARGETS) {
 
   const out = path.join(distDir, t.pkg);
   await cp(src, path.join(out, "bin"), { recursive: true });
+
+  // 帶著原生檔散布的是平台套件,所以通知要放在這裡,不是只放主套件。
+  // LICENSE 與 README 由 npm 自動收錄,NOTICE.txt 不會 → 必須列進 files。
+  await writeFile(path.join(out, "NOTICE.txt"), magick.text);
+  await cp(path.join(root, "LICENSE"), path.join(out, "LICENSE"));
 
   await writeFile(
     path.join(out, "package.json"),
@@ -65,7 +107,7 @@ for (const t of TARGETS) {
         author: "許彧銘 Hsu Yu-Ming (https://cornhsu.com/)",
         os: [t.os],
         cpu: [t.cpu],
-        files: ["bin/"],
+        files: ["bin/", "NOTICE.txt"],
       },
       null,
       2
@@ -95,5 +137,9 @@ manifest.optionalDependencies = Object.fromEntries(
 await writeFile(path.join(mainOut, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
 
 await cp(path.join(root, "README.md"), path.join(mainOut, "README.md"));
+// 使用者裝的是主套件,所以「有哪些第三方、各是什麼授權」要在這裡看得到;
+// 原生檔的 Apache-2.0 通知則隨平台套件走(上面)。
+await cp(path.join(root, "THIRD-PARTY-NOTICES.md"), path.join(mainOut, "THIRD-PARTY-NOTICES.md"));
+await cp(path.join(root, "LICENSE"), path.join(mainOut, "LICENSE"));
 
 console.log(`✔ cornhsu-polymigrate(${built.length} 個平台,版本 ${version})`);

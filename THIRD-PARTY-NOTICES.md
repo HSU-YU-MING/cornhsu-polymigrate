@@ -35,9 +35,12 @@ The full, authoritative notice ships inside the Magick.NET package as `Notice.tx
 (and covers the exact ImageMagick version bundled by that release). Reproduce that
 file, not this summary, when redistributing.
 
-**Release checklist:** when the npm packages are built, `Notice.txt` from the
-Magick.NET package must be included alongside the binary. See
-[RELEASING.md](RELEASING.md).
+**This is automated, not a checklist item.** `npm/prepare.mjs` resolves the actual
+Magick.NET version from `project.assets.json`, reads `Notice.txt` from the NuGet cache,
+and writes it into every platform package as `NOTICE.txt` — **aborting the build if it
+cannot find it**. `release.yml` then verifies the built packages really carry it. A
+licence obligation that depends on someone remembering a checklist is one that will
+eventually be missed.
 
 ## Keeping this current
 

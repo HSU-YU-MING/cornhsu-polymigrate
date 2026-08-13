@@ -64,6 +64,10 @@ dotnet tool uninstall --global Cornhsu.PolyMigrate
 - [ ] `dotnet format --verify-no-changes` 無變更(CI 也會擋)
 - [ ] 破壞性變更(major)在 CHANGELOG 寫明遷移方式
 - [ ] 相依套件有增刪或改版 → [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) 跟著更新
-- [ ] **npm 自帶執行檔要附上 Magick.NET 的 `Notice.txt`**——npm 包夾了
-      `Magick.Native-Q8-*`,那是實質的再散布,Apache-2.0 §4(d) 要求隨附該通知。
-      NuGet 通路不受影響(相依由 NuGet 解析、授權隨套件走)
+
+> **授權通知已自動處理,不需人工確認。** npm 平台套件夾了 `Magick.Native-Q8-*`,
+> 那是實質的再散布,Apache-2.0 §4(d) 要求隨附 Magick.NET 的 `Notice.txt`。
+> `npm/prepare.mjs` 會依 `project.assets.json` 解析出的實際版本去 NuGet 快取取那份通知,
+> 放進每個平台套件,**找不到就中止建置**;release.yml 另有一步驗成品確實帶到。
+> 原本這是這張清單上的一條人工項目——而人工項目遲早會被忘記,那正是把它自動化的理由。
+> NuGet 通路不受影響(相依由 NuGet 解析、授權隨套件走)。

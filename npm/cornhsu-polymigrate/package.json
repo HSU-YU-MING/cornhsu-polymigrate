@@ -29,7 +29,8 @@
   },
   "files": [
     "bin/polymigrate.js",
-    "README.md"
+    "README.md",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "engines": {
     "node": ">=18"
