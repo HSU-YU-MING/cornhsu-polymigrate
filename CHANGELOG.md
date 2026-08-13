@@ -2,6 +2,83 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 2.2.0
+
+**`verify` 補上一整類抓不到的錯:孤島頁面。** Phase 輸出契約(CSV 欄位、frontmatter)不變,
+新增的只是 `verify_report.csv` 裡多一種 `kind`。
+
+### ⚠️ 升級後 `verify` 可能從 exit 0 變 exit 1
+
+孤島頁面判為 **warning**,而 warning 會讓 `verify` 回傳 **1**。在此之前唯一的 warning 是
+`known_missing_media`(少見),所以多數專案現在拿到的是 0 —— 升級後若站上真的有孤島頁,
+CI 腳本(尤其 `set -e`)會從綠燈變紅燈,**即使你什麼都沒改**。
+
+內建豁免已涵蓋「本來就不會被內容頁連到」的三類(站根、各語言首頁、`page_type: listing`
+的分類列表頁),正常專案應為 0 孤島。真的要豁免其他頁:
+
+```sh
+polymigrate verify out/ --allow-unlinked allow_unlinked.txt
+```
+
+檔案一行一頁,`content` 相對路徑或路由皆可,`#` 開頭為註解。
+
+### 新增
+
+- **孤島頁面偵測**:輸出裡存在、卻沒有任何內容頁連到的頁 → `unlinked_page` warning。
+  這是 `verify` 原本的系統性盲區 —— 沿著連結走的巡檢**走不到**這種頁,於是回報「全部正常」,
+  而「零錯誤」在此是誤導:它證明的是「連得到的頁都正常」,不是「所有頁都正常」。
+  實作只用既有資料(路由集 ∖ 被引用集),不多掃一趟、不碰網路。
+  **界線**:選單不在 Phase 2 輸出裡,verify 看不到它,故訊息措辭是
+  「not linked from any content page (menus are not checked)」而非「沒有入口」。
+- `polymigrate verify --allow-unlinked <file>`;函式庫端為 `PolyMigrator.Verify(..., allowUnlinked:)`。
+  刻意**不**放進 site config —— `verify` 的「只讀輸出、不需 config」是它的設計前提。
+- **`polymigrate slugs <root> --section <name>`**:列出 `raw/` 底下已鏡像的 slug,
+  字典序、跨語言去重、一行一個。並行期(新舊站同時在線)用來跟舊站現況求差集:
+
+  ```sh
+  polymigrate slugs . --section news > local.txt         # 「.」= 放 raw/ 的那一層
+  comm -13 local.txt oldsite.txt > missing.txt          # oldsite.txt 由你的腳本產生
+  polymigrate fetch-orphans site.yaml --section news --slugs missing.txt
+  ```
+
+  **stdout 只有 slug**,摘要走 stderr,所以可以直接導成檔案。純本地、不碰網路、不需 config。
+  函式庫端為 `PolyMigrator.MirrorSlugs(rawDir, section, langPrefix)`。
+
+  這裡刻意**只做本地那一半**。「去舊站讀列表頁、挑出 slug」沒有做:它因站而異
+  (香雲寺的活動根本沒有列表頁,`/ch/events/index.php` 回 404,是從首頁卡片連出去的),
+  而且會**安靜地壞掉**——舊站一改版、regex 抓不到東西,排程只會每天回報「沒有新文章」,
+  你以為在追平其實早就斷了。那一半本來就是十幾行的一次性腳本,留給使用者。
+  對應地,`--section` 打錯時回傳 **exit 2 而非空清單**:空清單會被讀成「沒有新文章」。
+
+### 修正
+
+- **中日韓 slug 的百分號編碼連結不再被誤判**。瀏覽器與編輯器產出中文 href 預設是編碼的
+  (`/ch/news/%E7%A6%AA%E4%BF%AE`),而鏡像檔名是解碼的(契約 §2.6)——原本直接比字串,
+  會把「存在、而且真的被連到」的頁報成 `broken_link`,2.2 之後還連帶誤報成 `unlinked_page`,
+  **一個正確的連結產生兩筆假發現**。對 i18n-first 的工具來說那是旗艦情境。
+  改為原樣對不上時才多試一次解碼版:原本就對得上的維持逐位元組不變(golden 不動),
+  解完還是對不上就照樣報壞連結、且回報原始寫法。此為 1.0 起就存在的缺陷。
+- **`slugs` 拒絕絕對路徑與 `..` 的 `--section` / `--lang`**。`Path.Combine` 只要後段是
+  絕對路徑就會丟掉前段,所以 `--lang C:\somewhere` 會安靜地讀到鏡像目錄以外的地方、
+  還回報成功。本機 CLI 上這不是提權,該擋的理由是它做了你沒要求的事卻不出聲。
+  空字串仍合法(無語言前綴的站)。
+- **自己連自己不再算「有入口」**:訪客得先有辦法到那一頁,才看得到頁上那個指向自己的
+  連結。原本一個 canonical 或麵包屑的自我連結,就足以讓那頁靜靜逃掉孤島偵測。
+- **`slugs` 只認 `*.html`**(與 `extract` 對「一個鏡像頁」的定義相同)。原本逐檔取名,
+  鏡像目錄被 Finder / 檔案總管開過長出來的 `.DS_Store` 會變成空字串 slug——
+  也就是輸出的第一行是空行——而 `Thumbs.db` 會變成一篇叫「Thumbs」的假文章。
+  `probe-orphans` 的已知 slug 集共用同一份實作,一併受惠。
+- **`verify` 印出孤島警告後會多講一行「該做什麼」**:收到這種警告的人多半不是工程師,
+  而且要修的地方根本不在 PolyMigrate(在網站選單)。同時把 `--allow-unlinked` 這個
+  逃生門講出來——否則使用者得去翻 CHANGELOG 才知道有它。
+- **`verify` 現在會印出 warning 明細**,不再只給一個計數。warning 會讓 exit code 變 1,
+  卻在畫面上找不到原因、只能自己去翻 `verify_report.csv`,是很差的第一印象。
+- **各指令的例外處理收斂為同一組**,exit code 的對應只在一處定義。原本五個指令各抄一份且
+  **抄得不一致**:`verify` 只接 IO 錯,`extract`/`thumbs` 漏接取消 —— 所以這三個指令被 Ctrl-C
+  中斷時會直接崩潰,而非乾淨回傳 130。
+- exit code(0/1/2/130)補上驗收測試。在此之前這份契約只寫在註解裡,沒有任何測試會因為
+  有人改動它而變紅 —— 而它是最多人依賴的那一份契約(CI 與 shell 腳本直接吃它)。
+
 ## 2.1.0
 
 **發佈管線的修補。** CLI 介面、Phase 輸出契約、frontmatter 欄位、golden 全部不變。

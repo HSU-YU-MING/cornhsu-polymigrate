@@ -33,17 +33,8 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
     }
 
     /// <summary>已抓到的 slug(raw/{lang}/{section}/ 檔名),探測時跳過。</summary>
-    public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section)
-    {
-        var dir = Path.Combine(rawDir, langPrefix, section);
-        if (!Directory.Exists(dir))
-        {
-            return [];
-        }
-        return [.. Directory.EnumerateFiles(dir)
-            .Select(f => Path.GetFileName(f))
-            .Select(f => f.Split('.')[0])];
-    }
+    public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section) =>
+        Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section);
 
     public async Task<List<string>> ProbeAsync(
         string langPrefix, string section, int yearFrom, int yearTo,

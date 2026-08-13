@@ -7,9 +7,12 @@ public class OutputVerifierTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("polymigrate-verify").FullName;
 
+    private readonly List<string> _pages = [];
+
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
-    private void AddPage(string relative, string frontmatterExtra = "", string body = "")
+    private void AddPage(string relative, string frontmatterExtra = "", string body = "",
+        string pageType = "article")
     {
         var path = Path.Combine(_root, "content", relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -23,11 +26,12 @@ public class OutputVerifierTests : IDisposable
             slug: {slug}
             translation_key: news/{slug}
             title: 標題
-            page_type: article
+            page_type: {pageType}
             {frontmatterExtra}---
 
             {body}
             """.Replace("\r", ""));
+        _pages.Add(relative);
     }
 
     private void AddMedia(string relative)
@@ -37,7 +41,17 @@ public class OutputVerifierTests : IDisposable
         File.WriteAllText(path, "x");
     }
 
-    private VerifyReport Run() => new OutputVerifier().Run(_root, Path.Combine(_root, "media"));
+    /// <summary>
+    /// 一般測試用,**孤島偵測是關掉的**(豁免已加入的每一頁)——名字直說,因為這裡
+    /// 多數迷你站的頁本來就沒人連,那是測試素材的性質、不是被測行為。
+    /// 要驗孤島偵測請用 <see cref="RunWithOrphanCheck"/>,別在這裡等它報 warning。
+    /// </summary>
+    private VerifyReport RunIgnoringUnlinked() =>
+        new OutputVerifier().Run(_root, Path.Combine(_root, "media"), "/media/", _pages);
+
+    /// <summary>孤島偵測的測試用:不給豁免(或只給指定的幾筆)。</summary>
+    private VerifyReport RunWithOrphanCheck(params string[] allowUnlinked) =>
+        new OutputVerifier().Run(_root, Path.Combine(_root, "media"), "/media/", allowUnlinked);
 
     [Fact]
     public void CleanSite_NoIssues()
@@ -48,7 +62,7 @@ public class OutputVerifierTests : IDisposable
         AddPage("ch/news/b.md");
         AddPage("ch/news/index.md");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
         Assert.Equal(3, report.PagesChecked);
@@ -61,7 +75,7 @@ public class OutputVerifierTests : IDisposable
     {
         AddPage("ch/news/a.md", body: "[gone](/ch/news/nope)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         var issue = Assert.Single(report.Issues);
         Assert.Equal((Severity.Error, "broken_link", "/ch/news/nope"), (issue.Severity, issue.Kind, issue.Detail));
@@ -78,7 +92,7 @@ public class OutputVerifierTests : IDisposable
             new[] { "https://example.org/ch/news/a.php", "/media/known.jpg" },
         ]);
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Equal(1, report.Errors);
         Assert.Equal(1, report.Warnings);
@@ -99,7 +113,7 @@ public class OutputVerifierTests : IDisposable
               alt: ''
             """ + "\n");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         var issue = Assert.Single(report.Issues);
         Assert.Equal("missing_media", issue.Kind);
@@ -113,7 +127,7 @@ public class OutputVerifierTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, "---\nsource_url: https://x\n---\n\nbody\n");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Contains(report.Issues, i => i.Kind == "missing_field" && i.Detail == "title");
         Assert.True(report.Errors >= 5);
@@ -126,7 +140,7 @@ public class OutputVerifierTests : IDisposable
         AddMedia("images/a b.jpg");
         AddPage("ch/a.md", body: "![](/media/images/a%20b.jpg)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
     }
@@ -137,7 +151,7 @@ public class OutputVerifierTests : IDisposable
         AddPage("ch/index.md", body: "[root](/) [home](/ch/)");
         AddPage("index.md");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
     }
@@ -147,7 +161,7 @@ public class OutputVerifierTests : IDisposable
     {
         AddPage("ch/a.md", body: "[x](https://other.org/) [y](#top) [z](mailto:a@b.c) [p](//cdn/x)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
         Assert.Equal(0, report.LinksChecked);
@@ -159,7 +173,7 @@ public class OutputVerifierTests : IDisposable
         // 內嵌 HTML 的 href/src 單引號、大寫屬性也要抽出來驗,否則壞連結漏報
         AddPage("ch/a.md", body: "<a href='/ch/news/nope'>x</a> <IMG SRC=\"/ch/news/gone\">");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Equal(2, report.Errors);
         Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/nope");
@@ -173,7 +187,7 @@ public class OutputVerifierTests : IDisposable
         AddMedia("images/a.jpg");
         AddPage("ch/a.md", body: "![](/media/images/a.jpg?v=2)");
 
-        var report = Run();
+        var report = RunIgnoringUnlinked();
 
         Assert.Empty(report.Issues);
         Assert.Equal(1, report.MediaChecked);
@@ -185,7 +199,7 @@ public class OutputVerifierTests : IDisposable
         // 手改壞的 frontmatter 讓 images[].local 是數字而非字串 → 略過該筆,不得崩潰
         AddPage("ch/a.md", frontmatterExtra: "images:\n- local: 12345\n  alt: ''\n");
 
-        var report = Run();   // 不應丟 InvalidCastException
+        var report = RunIgnoringUnlinked();   // 不應丟 InvalidCastException
 
         Assert.DoesNotContain(report.Issues, i => i.Kind is "missing_media" or "known_missing_media");
     }
@@ -195,10 +209,128 @@ public class OutputVerifierTests : IDisposable
     {
         AddPage("ch/a.md", body: "[gone](/nope)");
 
-        Run();
+        RunIgnoringUnlinked();
 
         var lines = File.ReadAllLines(Path.Combine(_root, "verify_report.csv"));
         Assert.Contains("severity,page,kind,detail", lines[0]);
         Assert.Contains(lines, l => l.Contains("broken_link"));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 孤島頁面偵測:輸出正確、卻沒有任何頁連得到的頁。
+    //
+    // 這是 verify 原本的系統性盲區——沿著連結走的巡檢走不到它,於是回報「全部正常」。
+    // 誤報的代價比漏報高(沒人看的警告會稀釋整份報告),所以豁免規則一併在這裡釘死。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void UnlinkedPage_IsWarning()
+    {
+        AddPage("ch/news/index.md", body: "[看這篇](/ch/news/a)", pageType: "listing");
+        AddPage("ch/news/a.md");
+        AddPage("ch/news/b.md");        // 沒有任何頁連到 b
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal(Severity.Warning, issue.Severity);
+        Assert.Equal("unlinked_page", issue.Kind);
+        Assert.Equal("ch/news/b.md", issue.Page);
+    }
+
+    [Fact]
+    public void TopLevelSinglePage_IsWarning()
+    {
+        // 香雲寺 BLIA:頂層目錄索引、內容完全正確、選單漏了它 → 沒有任何入口。
+        // 與列表頁的差別只在 page_type(所屬 section 未宣告型別 → page 而非 listing)。
+        AddPage("index.md", pageType: "page");
+        AddPage("en/index.md", pageType: "page");
+        AddPage("en/blia/index.md", pageType: "page");
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("unlinked_page", issue.Kind);
+        Assert.Equal("en/blia/index.md", issue.Page);
+    }
+
+    [Fact]
+    public void SiteRootLanguageHomeAndListing_AreExemptByDefault()
+    {
+        // 這三類本來就不會被內容頁連到:連回站根、連回語言首頁的頁幾乎不存在,
+        // 列表頁則是從選單進入——而選單不在 Phase 2 輸出裡,verify 看不到。
+        AddPage("index.md", pageType: "page");                   // 站根,深度 0
+        AddPage("ch/index.md", pageType: "page");                // 語言首頁,深度 1
+        AddPage("ch/news/index.md", body: "[a](/ch/news/a)", pageType: "listing");
+        AddPage("ch/news/a.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void LinkedViaHtmlOrTrailingSlash_IsNotOrphan()
+    {
+        // 判定用的是正規化後的路由,所以尾斜線與內嵌 HTML 的 href 一樣算「連到了」
+        AddPage("ch/index.md", body: "<a href='/ch/news/a/'>x</a>", pageType: "page");
+        AddPage("ch/news/a.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void PercentEncodedCjkLink_ResolvesToTheDecodedPage()
+    {
+        // 瀏覽器與編輯器產出中日韓 href 預設是編碼的,而鏡像檔名是解碼的(§2.6)。
+        // 直接比字串會把「存在、而且真的被連到」的頁報成壞連結,再連帶誤報成孤島——
+        // 對 i18n-first 的工具來說那是旗艦情境,不是邊角。
+        AddPage("ch/index.md", body: "[禪修](/ch/news/%E7%A6%AA%E4%BF%AE)", pageType: "page");
+        AddPage("ch/news/禪修.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void PercentEncodedLinkToNothing_IsStillBroken()
+    {
+        // 解碼只是多試一次,不是放行:解完還是對不上就照樣報壞連結,且回報原始寫法
+        AddPage("ch/index.md", body: "[無](/ch/news/%E4%B8%8D%E5%AD%98%E5%9C%A8)", pageType: "page");
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("broken_link", issue.Kind);
+        Assert.Equal("/ch/news/%E4%B8%8D%E5%AD%98%E5%9C%A8", issue.Detail);
+    }
+
+    [Fact]
+    public void SelfLink_DoesNotCountAsAnEntrance()
+    {
+        // 訪客得先有辦法到這一頁,才看得到頁上那個指向自己的連結——
+        // 否則一個 canonical / 麵包屑的自我連結就會讓這頁靜靜逃掉偵測
+        AddPage("ch/news/b.md", body: "[我自己](/ch/news/b)");
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("unlinked_page", issue.Kind);
+        Assert.Equal("ch/news/b.md", issue.Page);
+    }
+
+    [Theory]
+    [InlineData("ch/news/b.md")]    // 用 content 相對路徑豁免
+    [InlineData("/ch/news/b")]      // 用路由豁免
+    public void AllowUnlinked_SuppressesWarning(string exemption)
+    {
+        AddPage("ch/news/b.md");
+
+        var report = RunWithOrphanCheck(exemption);
+
+        Assert.Empty(report.Issues);
     }
 }

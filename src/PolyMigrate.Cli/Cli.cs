@@ -29,6 +29,9 @@ public static class Cli
             case "verify":
                 return RunVerify(args[1..]);
 
+            case "slugs":
+                return RunSlugs(args[1..]);
+
             case "thumbs":
                 return RunThumbs(args[1..]);
 
@@ -59,8 +62,17 @@ public static class Cli
                       polymigrate fetch-orphans <config.yaml> --section <name> [--slugs <file>] [--root <dir>]
                           Fetch probed orphan pages (all langs) into raw/ and their assets into media/.
                       polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/]
-                          Verify extracted output: frontmatter fields, internal links, media refs.
+                                                      [--allow-unlinked <file>]
+                          Verify extracted output: frontmatter fields, internal links, media refs,
+                          and unlinked pages — pages no other page links to, which visitors can
+                          only reach by typing the URL. Unlinked pages are warnings.
                           Default media dir: <output-dir>/media (media checks skipped if absent).
+                          --allow-unlinked: file of pages to exempt, one per line (# comments ok).
+                      polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]
+                          List slugs already mirrored under <root>/raw, sorted, one per line on stdout
+                          (the summary goes to stderr, so stdout stays pipeable). During a
+                          parallel run: diff this against the live site's current list, then
+                          feed the difference to fetch-orphans --slugs. Local only, no network.
                       polymigrate --version               Print version
                     """);
                 return 0;
@@ -148,15 +160,9 @@ public static class Cli
             Console.WriteLine(new string('=', 50));
             return report.HasErrors ? 2 : report.HasWarnings ? 1 : 0;
         }
-        catch (ConfigException ex)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
-        }
-        catch (Exception ex) when (IsIoError(ex))
-        {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            return Report(ex);
         }
     }
 
@@ -164,6 +170,7 @@ public static class Cli
     {
         string? outDir = null;
         string? mediaDir = null;
+        string? allowUnlinkedFile = null;
         var mediaPrefix = "/media/";
         for (var i = 0; i < args.Length; i++)
         {
@@ -174,6 +181,9 @@ public static class Cli
                     break;
                 case "--media-prefix" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
                     mediaPrefix = args[++i];
+                    break;
+                case "--allow-unlinked" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    allowUnlinkedFile = args[++i];
                     break;
                 default:
                     if (outDir is not null || args[i].StartsWith('-'))
@@ -187,15 +197,18 @@ public static class Cli
         }
         if (outDir is null)
         {
-            Console.Error.WriteLine("Usage: polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/]");
+            Console.Error.WriteLine(
+                "Usage: polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/] [--allow-unlinked <file>]");
             return 2;
         }
         try
         {
             outDir = Path.GetFullPath(outDir);
             mediaDir = Path.GetFullPath(mediaDir ?? Path.Combine(outDir, "media"));
+            var allowUnlinked = ReadAllowUnlinked(allowUnlinkedFile);
 
-            var report = new PolyMigrate.Core.Verify.OutputVerifier().Run(outDir, mediaDir, mediaPrefix);
+            var report = new PolyMigrate.Core.Verify.OutputVerifier()
+                .Run(outDir, mediaDir, mediaPrefix, allowUnlinked);
 
             Console.WriteLine(new string('=', 50));
             Console.WriteLine("Verify done.");
@@ -212,12 +225,85 @@ public static class Cli
             {
                 Console.WriteLine($"  [error] {issue.Page}: {issue.Kind} {issue.Detail}");
             }
+            // warning 明細也要印:warning 會讓 exit code 變 1,只給計數等於讓使用者
+            // 拿到非零 exit code 卻在畫面上找不到原因,只能自己去翻 verify_report.csv
+            foreach (var issue in report.Issues.Where(i => i.Severity == Severity.Warning).Take(20))
+            {
+                Console.WriteLine($"  [warning] {issue.Page}: {issue.Kind} {issue.Detail}");
+            }
+            // 收到 unlinked_page 的人多半不是工程師,而且要修的地方根本不在 PolyMigrate
+            // (在網站選單)。講一次「該做什麼」與逃生門在哪,不要逐條重複。
+            if (report.Issues.Any(i => i.Kind == "unlinked_page"))
+            {
+                Console.WriteLine("  -> unlinked pages can only be reached by typing the URL. Add a link to");
+                Console.WriteLine("     them, add a menu entry, or exempt them with --allow-unlinked <file>.");
+            }
             return report.Errors > 0 ? 2 : report.Warnings > 0 ? 1 : 0;
         }
-        catch (Exception ex) when (IsIoError(ex))
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine($"error: {ex.Message}");
+            return Report(ex);
+        }
+    }
+
+    private static int RunSlugs(string[] args)
+    {
+        const string usage = "Usage: polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]";
+        string? root = null;
+        string? section = null;
+        string? langPrefix = null;
+        string? rawDir = null;
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--section" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    section = args[++i];
+                    break;
+                case "--lang" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    langPrefix = args[++i];
+                    break;
+                case "--raw" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    rawDir = args[++i];
+                    break;
+                default:
+                    if (root is not null || args[i].StartsWith('-'))
+                    {
+                        Console.Error.WriteLine($"Unexpected argument: {args[i]}\n{usage}");
+                        return 2;
+                    }
+                    root = args[i];
+                    break;
+            }
+        }
+        if (root is null || section is null)
+        {
+            Console.Error.WriteLine(usage);
             return 2;
+        }
+        try
+        {
+            var raw = Path.GetFullPath(rawDir ?? Path.Combine(Path.GetFullPath(root), "raw"));
+            var slugs = PolyMigrate.Core.PolyMigrator.MirrorSlugs(raw, section, langPrefix);
+            if (slugs is null)
+            {
+                // 靜靜回一份空清單會被讀成「沒有新文章」——section 打錯必須是錯誤,不是空結果
+                Console.Error.WriteLine($"No mirrored '{section}' directory under {raw}"
+                    + (langPrefix is null ? "." : $" for lang '{langPrefix}'."));
+                return 2;
+            }
+            foreach (var slug in slugs)
+            {
+                Console.WriteLine(slug);
+            }
+            // 摘要走 stderr:stdout 只放 slug,才能直接導成檔案再餵給 fetch-orphans --slugs
+            Console.Error.WriteLine($"{slugs.Count} slugs mirrored under {section}"
+                + (langPrefix is null ? " (all langs)." : $" ({langPrefix})."));
+            return 0;
+        }
+        catch (Exception ex) when (IsHandled(ex))
+        {
+            return Report(ex);
         }
     }
 
@@ -254,15 +340,9 @@ public static class Cli
             Console.WriteLine(new string('=', 50));
             return report.Failed > 0 ? 1 : 0;
         }
-        catch (ConfigException ex)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
-        }
-        catch (Exception ex) when (IsIoError(ex))
-        {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            return Report(ex);
         }
     }
 
@@ -306,20 +386,9 @@ public static class Cli
             Console.WriteLine($"Probe done: {found.Count} orphan slugs -> {outFile}");
             return 0;
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine("cancelled.");
-            return 130;
-        }
-        catch (ConfigException ex)
-        {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
-        }
-        catch (Exception ex) when (IsIoError(ex))
-        {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            return Report(ex);
         }
     }
 
@@ -365,25 +434,58 @@ public static class Cli
             Console.WriteLine(new string('=', 50));
             return report.Errors.Count > 0 ? 1 : 0;
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (IsHandled(ex))
         {
-            Console.Error.WriteLine("cancelled.");
-            return 130;
+            return Report(ex);
         }
-        catch (ConfigException ex)
+    }
+
+    /// <summary>豁免清單:一行一頁(content 相對路徑或路由),空行與 # 開頭略過。</summary>
+    private static IReadOnlyCollection<string>? ReadAllowUnlinked(string? path)
+    {
+        if (path is null)
         {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
+            return null;
         }
-        catch (Exception ex) when (IsIoError(ex))
+        var full = Path.GetFullPath(path);
+        if (!File.Exists(full))
         {
-            Console.Error.WriteLine($"error: {ex.Message}");
-            return 2;
+            throw new FileNotFoundException($"Allow-unlinked list not found: {full}", full);
         }
+        return [.. File.ReadAllLines(full)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.StartsWith('#'))];
     }
 
     private static bool IsIoError(Exception ex) => ex is IOException or UnauthorizedAccessException
         or ArgumentException or NotSupportedException or FormatException or System.Security.SecurityException;
+
+    /// <summary>
+    /// 指令主體共同攔截的例外。每個指令的 catch 一律是這一組——不是各自挑幾種,
+    /// 否則新增指令時漏抄一種(例如忘了 OperationCanceledException → 130)不會被任何測試發現。
+    /// </summary>
+    private static bool IsHandled(Exception ex) =>
+        ex is OperationCanceledException or ConfigException || IsIoError(ex);
+
+    /// <summary>
+    /// 共同錯誤 → 訊息 + exit code(§3.8)。exit code 契約只在這裡定義一次;
+    /// 驗收測試見 CliTests 末段「exit code 契約」那一組。
+    /// </summary>
+    private static int Report(Exception ex)
+    {
+        switch (ex)
+        {
+            case OperationCanceledException:
+                Console.Error.WriteLine("cancelled.");
+                return 130;
+            case ConfigException:
+                Console.Error.WriteLine(ex.Message);
+                return 2;
+            default:
+                Console.Error.WriteLine($"error: {ex.Message}");
+                return 2;
+        }
+    }
 
     private static string Format(SortedDictionary<string, int> counts) =>
         counts.Count == 0 ? "-" : string.Join(", ", counts.Select(kv => $"{kv.Key}={kv.Value}"));

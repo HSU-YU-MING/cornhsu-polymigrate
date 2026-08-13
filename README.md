@@ -13,13 +13,16 @@ PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, 
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
 Config-driven, fully offline-rerunnable, built on .NET.
 
-**Status: 2.1.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
+**Status: 2.2.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
 surface and the Phase output contracts remain stable** (unchanged since 1.0): new features bump
 the minor version, fixes bump the patch. 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
 config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages).
-See the [CHANGELOG](CHANGELOG.md) for the migration notes.
+2.2 closed a blind spot in `verify` — pages nothing links to were reported as fine, because a
+link-following audit never reaches them — and added `slugs` for keeping up with a source site
+that is still being updated. **Upgrading to 2.2 can turn a passing `verify` into exit 1**;
+see the [CHANGELOG](CHANGELOG.md) for that and the other migration notes.
 
 ## Why
 
@@ -95,10 +98,11 @@ dotnet tool install -g Cornhsu.PolyMigrate  # .NET
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
-polymigrate verify out/                     # link/media/frontmatter audit, CI-friendly exit codes
+polymigrate verify out/                     # link/media/frontmatter/unlinked-page audit, CI exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
 polymigrate probe-orphans site.yaml --section news --years 2021-2023
 polymigrate fetch-orphans site.yaml --section news
+polymigrate slugs . --section news          # slugs already mirrored under ./raw (pipeable)
 ```
 
 > No .NET? Every command above also runs with **zero install** via npm — just prefix it:
@@ -161,4 +165,9 @@ dotnet run --project src/PolyMigrate.Cli -- --help
 
 License: [MIT](LICENSE). All dependencies are MIT/BSD/Apache-2.0
 (imaging via **Magick.NET**; ImageSharp was dropped when its 4.x line began requiring a
-license key at build time).
+license key at build time). See [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES.md).
+
+PolyMigrate fetches pages from the site you point it at, and can be configured to send
+cookies past a bot challenge. **It assumes the site is yours, or that you are migrating
+it with the owner's permission** — that is what it is for. Check the source site's terms
+before pointing it at anything else.
