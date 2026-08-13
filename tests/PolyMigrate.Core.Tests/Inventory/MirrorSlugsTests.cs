@@ -53,8 +53,12 @@ public class MirrorSlugsTests : IDisposable
     [InlineData("C:\\Windows")]     // Path.Combine 遇到絕對路徑會丟掉前面的 rawDir
     [InlineData("/etc")]
     [InlineData("../../elsewhere")]
+    [InlineData("..")]
     public void RootedOrTraversingSegment_IsRejected(string bad)
     {
+        // §3.4:同一個輸入在每個平台都要有相同結果。這幾筆**在三個平台上都必須被擋**——
+        // 用 Path.IsPathRooted 判斷的話,"C:\Windows" 在 Linux/macOS 上會是 false 而放行,
+        // 而這正是 CI 抓到的第一版寫法(本機只跑 Windows 看不出來)。
         AddMirrored("ch", "news", "20260101.php.html");
 
         // 不出聲地去讀鏡像目錄以外的地方,比報錯糟——與「section 打錯回錯誤而非空清單」同一個原則

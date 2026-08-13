@@ -30,13 +30,19 @@ internal static class MirrorSlugs
     /// 就會把前段整個丟掉——所以 <c>--lang C:\somewhere</c> 會安靜地去讀鏡像目錄以外的地方,
     /// 而且照樣回報成功。在本機 CLI 上這不是提權(使用者本來就讀得到自己的磁碟),
     /// 該擋的理由是**它做了你沒要求的事卻不出聲**,與「section 打錯回錯誤而非空清單」同一個原則。
-    /// 空字串是合法的(無語言前綴的站)。
+    ///
+    /// <para>判斷方式刻意不用 <see cref="Path.IsPathRooted(string)"/>:它在 Linux 上認不出
+    /// <c>C:\Windows</c>(冒號與反斜線在那裡都只是普通字元),同一個輸入會因平台而有不同結果——
+    /// 而 §3.4 的家規是「Windows 會炸的路徑在任何平台都一致地拒絕」,見 PathSafety。
+    /// 改為直接要求「一段目錄名」:不得含 <c>/</c>、<c>\</c>、<c>:</c>,不得是 <c>..</c>。
+    /// 空字串合法(無語言前綴的站)。</para>
     /// </summary>
     private static void EnsurePathSegment(string value, string name)
     {
-        if (Path.IsPathRooted(value) || value.Split('/', '\\').Contains(".."))
+        if (value == ".." || value.AsSpan().IndexOfAny('/', '\\', ':') >= 0)
         {
-            throw new ArgumentException($"{name} must be a plain directory name, got '{value}'.");
+            throw new ArgumentException(
+                $"{name} must be a single directory name (no path separators), got '{value}'.");
         }
     }
 
