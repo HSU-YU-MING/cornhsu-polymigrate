@@ -1,0 +1,71 @@
+name: Bug report
+description: PolyMigrate did the wrong thing on a real site
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Migration bugs are almost never reproducible from a description alone — what makes them
+        fixable is the config and the exact command. Thanks for taking the time to include them.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        Output of `polymigrate --version`. A `0.0.0-dev+<sha>` value means a local build —
+        that's fine, the sha is exactly what's needed to find the code you ran.
+      placeholder: 2.2.1+6f3a43a5…
+    validations:
+      required: true
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: How did you install it?
+      description: The npm build is a self-contained binary, so it can behave differently from the dotnet tool.
+      options:
+        - dotnet tool (NuGet)
+        - npx / npm
+        - built from source
+        - used Cornhsu.PolyMigrate.Core as a library
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and output
+      description: The full command you ran, and everything it printed.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Site config
+      description: >-
+        The YAML you passed in. **Delete anything under `site.auth_workaround` first** — those
+        cookies are credentials for the source site, and this issue is public. Everything else
+        (selectors, `lang_map`, patterns) is what makes the report reproducible.
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: >-
+        OS, the shape of the source site, one page that reproduces it, or the relevant rows from
+        `verify_report.csv` / `path_issues.csv`. Optional, but any of these usually saves a round trip.
+    validations:
+      required: false
