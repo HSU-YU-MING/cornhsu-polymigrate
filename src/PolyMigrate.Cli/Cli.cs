@@ -69,7 +69,7 @@ public static class Cli
                           Default media dir: <output-dir>/media (media checks skipped if absent).
                           --allow-unlinked: file of pages to exempt, one per line (# comments ok).
                       polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]
-                          List slugs already mirrored under raw/, sorted, one per line on stdout
+                          List slugs already mirrored under <root>/raw, sorted, one per line on stdout
                           (the summary goes to stderr, so stdout stays pipeable). During a
                           parallel run: diff this against the live site's current list, then
                           feed the difference to fetch-orphans --slugs. Local only, no network.

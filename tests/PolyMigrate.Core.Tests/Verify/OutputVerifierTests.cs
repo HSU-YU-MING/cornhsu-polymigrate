@@ -282,6 +282,33 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Fact]
+    public void PercentEncodedCjkLink_ResolvesToTheDecodedPage()
+    {
+        // 瀏覽器與編輯器產出中日韓 href 預設是編碼的,而鏡像檔名是解碼的(§2.6)。
+        // 直接比字串會把「存在、而且真的被連到」的頁報成壞連結,再連帶誤報成孤島——
+        // 對 i18n-first 的工具來說那是旗艦情境,不是邊角。
+        AddPage("ch/index.md", body: "[禪修](/ch/news/%E7%A6%AA%E4%BF%AE)", pageType: "page");
+        AddPage("ch/news/禪修.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void PercentEncodedLinkToNothing_IsStillBroken()
+    {
+        // 解碼只是多試一次,不是放行:解完還是對不上就照樣報壞連結,且回報原始寫法
+        AddPage("ch/index.md", body: "[無](/ch/news/%E4%B8%8D%E5%AD%98%E5%9C%A8)", pageType: "page");
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("broken_link", issue.Kind);
+        Assert.Equal("/ch/news/%E4%B8%8D%E5%AD%98%E5%9C%A8", issue.Detail);
+    }
+
+    [Fact]
     public void SelfLink_DoesNotCountAsAnEntrance()
     {
         // 訪客得先有辦法到這一頁,才看得到頁上那個指向自己的連結——

@@ -36,7 +36,7 @@ polymigrate verify out/ --allow-unlinked allow_unlinked.txt
   字典序、跨語言去重、一行一個。並行期(新舊站同時在線)用來跟舊站現況求差集:
 
   ```sh
-  polymigrate slugs out/ --section news > local.txt
+  polymigrate slugs . --section news > local.txt         # 「.」= 放 raw/ 的那一層
   comm -13 local.txt oldsite.txt > missing.txt          # oldsite.txt 由你的腳本產生
   polymigrate fetch-orphans site.yaml --section news --slugs missing.txt
   ```
@@ -52,6 +52,16 @@ polymigrate verify out/ --allow-unlinked allow_unlinked.txt
 
 ### 修正
 
+- **中日韓 slug 的百分號編碼連結不再被誤判**。瀏覽器與編輯器產出中文 href 預設是編碼的
+  (`/ch/news/%E7%A6%AA%E4%BF%AE`),而鏡像檔名是解碼的(契約 §2.6)——原本直接比字串,
+  會把「存在、而且真的被連到」的頁報成 `broken_link`,2.2 之後還連帶誤報成 `unlinked_page`,
+  **一個正確的連結產生兩筆假發現**。對 i18n-first 的工具來說那是旗艦情境。
+  改為原樣對不上時才多試一次解碼版:原本就對得上的維持逐位元組不變(golden 不動),
+  解完還是對不上就照樣報壞連結、且回報原始寫法。此為 1.0 起就存在的缺陷。
+- **`slugs` 拒絕絕對路徑與 `..` 的 `--section` / `--lang`**。`Path.Combine` 只要後段是
+  絕對路徑就會丟掉前段,所以 `--lang C:\somewhere` 會安靜地讀到鏡像目錄以外的地方、
+  還回報成功。本機 CLI 上這不是提權,該擋的理由是它做了你沒要求的事卻不出聲。
+  空字串仍合法(無語言前綴的站)。
 - **自己連自己不再算「有入口」**:訪客得先有辦法到那一頁,才看得到頁上那個指向自己的
   連結。原本一個 canonical 或麵包屑的自我連結,就足以讓那頁靜靜逃掉孤島偵測。
 - **`slugs` 只認 `*.html`**(與 `extract` 對「一個鏡像頁」的定義相同)。原本逐檔取名,

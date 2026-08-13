@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using PolyMigrate.Core.Diagnostics;
+using PolyMigrate.Core.Extraction;
 using PolyMigrate.Core.Inventory;
 using YamlDotNet.Serialization;
 
@@ -138,7 +139,7 @@ public sealed partial class OutputVerifier
                 else
                 {
                     linksChecked++;
-                    var route = NormalizeRoute(reference);
+                    var route = ResolveRoute(reference, routes);
                     if (route != selfRoute)
                     {
                         // 反向:沒進這個集合的路由 = 沒有任何頁連得到。
@@ -230,13 +231,38 @@ public sealed partial class OutputVerifier
     /// </list>
     /// 刻意<b>不</b>豁免深度 ≥ 2 的目錄索引——香雲寺 BLIA 那類「頂層單頁」正是要抓的目標,
     /// 它與列表頁的差別在於所屬 section 未宣告型別,故 page_type 是 page 而非 listing。
-    /// 已知限制:單語站(無語言前綴)的頂層 section 索引也落在深度 1,會一併被豁免。
-    /// 寧可漏報也不誤報——漏的那類可以靠人工巡檢補,誤報則會讓人整份不看。
+    ///
+    /// <para>已知限制(留帳):單語站(無語言前綴)的頂層 section 索引也落在深度 1,會一併
+    /// 被豁免。<b>利息</b>:BLIA 那一類頁在單語站上抓不到,也就是這個檢查對單語站的效果打折。
+    /// 要還這筆帳得先讓 verify 分得出「語言目錄」與「一般目錄」,而那需要 config——
+    /// 會破壞 verify 不需 config 的前提,所以刻意先欠著。寧可漏報也不誤報:
+    /// 漏的那類人工巡檢補得回來,誤報會讓人整份報告都不看。</para>
     /// </summary>
     private static bool IsExemptByDefault(PageRoute page) =>
-        (page.IsIndex && Depth(page.Route) <= 1) || page.PageType == "listing";
+        (page.IsIndex && Depth(page.Route) <= 1)
+        // 綁到常數而非字面字串:頁型名稱改了要嘛兩邊一起改、要嘛編譯不過。
+        // 各自寫死的話,verify 會安靜地停止豁免所有列表頁,然後每個多語站都爆出一堆警告。
+        || page.PageType == PageClassifier.Listing;
 
     private static int Depth(string route) => route == "/" ? 0 : route.Count(c => c == '/');
+
+    /// <summary>
+    /// 連結 → 路由。原樣對不上時再試一次百分號解碼版:瀏覽器與編輯器產出中日韓 href
+    /// 預設是編碼的(<c>/ch/news/%E7%A6%AA%E4%BF%AE</c>),而鏡像檔名是解碼的(§2.6)——
+    /// 直接比字串會把「存在、而且真的被連到」的頁判成壞連結,並連帶誤報成孤島頁面。
+    /// 對這個 i18n-first 的工具來說,那是旗艦情境而不是邊角。
+    /// **只在對不上時才解碼**,原本就對得上的維持逐位元組不變(golden 不動)。
+    /// </summary>
+    private static string ResolveRoute(string reference, HashSet<string> routes)
+    {
+        var route = NormalizeRoute(reference);
+        if (routes.Contains(route))
+        {
+            return route;
+        }
+        var decoded = NormalizeRoute(Uri.UnescapeDataString(reference));
+        return routes.Contains(decoded) ? decoded : route;
+    }
 
     /// <summary>連結正規化:去 #fragment/?query、去尾斜線(根除外)。</summary>
     private static string NormalizeRoute(string link)

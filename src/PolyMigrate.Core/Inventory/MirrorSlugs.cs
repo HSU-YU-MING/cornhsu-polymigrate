@@ -25,6 +25,21 @@ internal static class MirrorSlugs
                 .Where(slug => slug.Length > 0)
             : [];
 
+    /// <summary>
+    /// section / lang 是「一段目錄名」,不是路徑。<c>Path.Combine</c> 只要後段是絕對路徑
+    /// 就會把前段整個丟掉——所以 <c>--lang C:\somewhere</c> 會安靜地去讀鏡像目錄以外的地方,
+    /// 而且照樣回報成功。在本機 CLI 上這不是提權(使用者本來就讀得到自己的磁碟),
+    /// 該擋的理由是**它做了你沒要求的事卻不出聲**,與「section 打錯回錯誤而非空清單」同一個原則。
+    /// 空字串是合法的(無語言前綴的站)。
+    /// </summary>
+    private static void EnsurePathSegment(string value, string name)
+    {
+        if (Path.IsPathRooted(value) || value.Split('/', '\\').Contains(".."))
+        {
+            throw new ArgumentException($"{name} must be a plain directory name, got '{value}'.");
+        }
+    }
+
     /// <summary>單一語言的 slug 集(探測時用來跳過已抓過的)。</summary>
     public static HashSet<string> ForLanguage(string rawDir, string langPrefix, string section) =>
         [.. InDirectory(Path.Combine(rawDir, langPrefix, section))];
@@ -40,6 +55,11 @@ internal static class MirrorSlugs
     /// </returns>
     public static IReadOnlyList<string>? List(string rawDir, string section, string? langPrefix)
     {
+        EnsurePathSegment(section, "section");
+        if (langPrefix is not null)
+        {
+            EnsurePathSegment(langPrefix, "lang");
+        }
         if (!Directory.Exists(rawDir))
         {
             return null;

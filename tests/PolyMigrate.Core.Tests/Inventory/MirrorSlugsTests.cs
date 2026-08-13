@@ -49,6 +49,29 @@ public class MirrorSlugsTests : IDisposable
         Assert.Equal(["20260101"], PolyMigrator.MirrorSlugs(Raw, "news"));
     }
 
+    [Theory]
+    [InlineData("C:\\Windows")]     // Path.Combine 遇到絕對路徑會丟掉前面的 rawDir
+    [InlineData("/etc")]
+    [InlineData("../../elsewhere")]
+    public void RootedOrTraversingSegment_IsRejected(string bad)
+    {
+        AddMirrored("ch", "news", "20260101.php.html");
+
+        // 不出聲地去讀鏡像目錄以外的地方,比報錯糟——與「section 打錯回錯誤而非空清單」同一個原則
+        Assert.Throws<ArgumentException>(() => PolyMigrator.MirrorSlugs(Raw, "news", bad));
+        Assert.Throws<ArgumentException>(() => PolyMigrator.MirrorSlugs(Raw, bad));
+    }
+
+    [Fact]
+    public void EmptyLangPrefix_IsStillAllowed()
+    {
+        // 無語言前綴的站合法用空字串,別被上面的檢查一起擋掉
+        Directory.CreateDirectory(Path.Combine(Raw, "news"));
+        File.WriteAllText(Path.Combine(Raw, "news", "20260101.php.html"), "<html></html>");
+
+        Assert.Equal(["20260101"], PolyMigrator.MirrorSlugs(Raw, "news", ""));
+    }
+
     [Fact]
     public void OsJunkFiles_AreNotSlugs()
     {

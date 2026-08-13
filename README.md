@@ -102,7 +102,7 @@ polymigrate verify out/                     # link/media/frontmatter/unlinked-pa
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
 polymigrate probe-orphans site.yaml --section news --years 2021-2023
 polymigrate fetch-orphans site.yaml --section news
-polymigrate slugs out/ --section news       # slugs already mirrored, one per line (pipeable)
+polymigrate slugs . --section news          # slugs already mirrored under ./raw (pipeable)
 ```
 
 > No .NET? Every command above also runs with **zero install** via npm — just prefix it:
