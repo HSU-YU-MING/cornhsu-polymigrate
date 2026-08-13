@@ -129,3 +129,8 @@ dotnet run --project src/PolyMigrate.Cli -- --help
 
 授權:[MIT](LICENSE)。依賴全為 MIT/BSD/Apache-2.0(影像處理用 **Magick.NET**;
 ImageSharp 因 4.x 起建置即要求授權金鑰而棄用)。
+另見[第三方授權聲明](THIRD-PARTY-NOTICES.md)。
+
+PolyMigrate 會實際去抓你指定的站,也可以設定成帶 cookie 通過 bot 挑戰。
+**它預設那個站是你的,或你經站方同意在搬遷它**——這本來就是它的用途。
+要指向其他站之前,請先確認對方的使用條款。

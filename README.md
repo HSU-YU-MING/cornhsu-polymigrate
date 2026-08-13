@@ -165,4 +165,9 @@ dotnet run --project src/PolyMigrate.Cli -- --help
 
 License: [MIT](LICENSE). All dependencies are MIT/BSD/Apache-2.0
 (imaging via **Magick.NET**; ImageSharp was dropped when its 4.x line began requiring a
-license key at build time).
+license key at build time). See [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES.md).
+
+PolyMigrate fetches pages from the site you point it at, and can be configured to send
+cookies past a bot challenge. **It assumes the site is yours, or that you are migrating
+it with the owner's permission** — that is what it is for. Check the source site's terms
+before pointing it at anything else.

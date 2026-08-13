@@ -52,6 +52,12 @@ polymigrate verify out/ --allow-unlinked allow_unlinked.txt
 
 ### 修正
 
+- **自己連自己不再算「有入口」**:訪客得先有辦法到那一頁,才看得到頁上那個指向自己的
+  連結。原本一個 canonical 或麵包屑的自我連結,就足以讓那頁靜靜逃掉孤島偵測。
+- **`slugs` 只認 `*.html`**(與 `extract` 對「一個鏡像頁」的定義相同)。原本逐檔取名,
+  鏡像目錄被 Finder / 檔案總管開過長出來的 `.DS_Store` 會變成空字串 slug——
+  也就是輸出的第一行是空行——而 `Thumbs.db` 會變成一篇叫「Thumbs」的假文章。
+  `probe-orphans` 的已知 slug 集共用同一份實作,一併受惠。
 - **`verify` 印出孤島警告後會多講一行「該做什麼」**:收到這種警告的人多半不是工程師,
   而且要修的地方根本不在 PolyMigrate(在網站選單)。同時把 `--allow-unlinked` 這個
   逃生門講出來——否則使用者得去翻 CHANGELOG 才知道有它。

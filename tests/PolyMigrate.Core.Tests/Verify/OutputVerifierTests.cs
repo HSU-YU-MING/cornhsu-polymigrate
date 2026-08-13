@@ -281,6 +281,20 @@ public class OutputVerifierTests : IDisposable
         Assert.Empty(report.Issues);
     }
 
+    [Fact]
+    public void SelfLink_DoesNotCountAsAnEntrance()
+    {
+        // 訪客得先有辦法到這一頁,才看得到頁上那個指向自己的連結——
+        // 否則一個 canonical / 麵包屑的自我連結就會讓這頁靜靜逃掉偵測
+        AddPage("ch/news/b.md", body: "[我自己](/ch/news/b)");
+
+        var report = RunWithOrphanCheck();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("unlinked_page", issue.Kind);
+        Assert.Equal("ch/news/b.md", issue.Page);
+    }
+
     [Theory]
     [InlineData("ch/news/b.md")]    // 用 content 相對路徑豁免
     [InlineData("/ch/news/b")]      // 用路由豁免

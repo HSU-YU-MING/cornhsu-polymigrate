@@ -95,9 +95,10 @@ public sealed partial class OutputVerifier
                     issues.Add(new VerifyIssue(Severity.Error, page, "missing_field", field));
                 }
             }
+            var selfRoute = RouteFor(page);
             pageRoutes.Add(new PageRoute(
                 page,
-                RouteFor(page),
+                selfRoute,
                 fm?.GetValueOrDefault("page_type") as string ?? "",
                 page == "index.md" || page.EndsWith("/index.md", StringComparison.Ordinal)));
 
@@ -138,7 +139,13 @@ public sealed partial class OutputVerifier
                 {
                     linksChecked++;
                     var route = NormalizeRoute(reference);
-                    referenced.Add(route);      // 反向:沒進這個集合的路由 = 沒有任何頁連得到
+                    if (route != selfRoute)
+                    {
+                        // 反向:沒進這個集合的路由 = 沒有任何頁連得到。
+                        // 自己連自己不算入口——訪客還是得先有辦法到這一頁才看得到那個連結,
+                        // 否則一個 canonical 或麵包屑的自我連結就會讓這頁靜靜地逃掉偵測。
+                        referenced.Add(route);
+                    }
                     if (!routes.Contains(route))
                     {
                         issues.Add(new VerifyIssue(Severity.Error, page, "broken_link", reference));

@@ -63,3 +63,7 @@ dotnet tool uninstall --global Cornhsu.PolyMigrate
 - [ ] `dotnet test` 全綠
 - [ ] `dotnet format --verify-no-changes` 無變更(CI 也會擋)
 - [ ] 破壞性變更(major)在 CHANGELOG 寫明遷移方式
+- [ ] 相依套件有增刪或改版 → [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) 跟著更新
+- [ ] **npm 自帶執行檔要附上 Magick.NET 的 `Notice.txt`**——npm 包夾了
+      `Magick.Native-Q8-*`,那是實質的再散布,Apache-2.0 §4(d) 要求隨附該通知。
+      NuGet 通路不受影響(相依由 NuGet 解析、授權隨套件走)

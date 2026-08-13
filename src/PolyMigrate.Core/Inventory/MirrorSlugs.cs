@@ -11,10 +11,18 @@ namespace PolyMigrate.Core.Inventory;
 /// </summary>
 internal static class MirrorSlugs
 {
-    /// <summary>檔名 → slug:<c>20260101.php.html</c> → <c>20260101</c>。</summary>
+    /// <summary>
+    /// 檔名 → slug:<c>20260101.php.html</c> → <c>20260101</c>。
+    /// 只認 <c>*.html</c>——這正是 ExtractionPipeline 對「一個鏡像頁」的定義,同一把尺。
+    /// 逐檔取名的話,鏡像目錄被 Finder / 檔案總管開過長出來的 .DS_Store 會變成空字串 slug
+    /// (輸出第一行就是空行),Thumbs.db 會變成一個叫「Thumbs」的假文章——
+    /// 而這個指令的賣點就是 stdout 乾淨到可以直接導成檔案再餵給 fetch-orphans。
+    /// </summary>
     private static IEnumerable<string> InDirectory(string dir) =>
         Directory.Exists(dir)
-            ? Directory.EnumerateFiles(dir).Select(f => Path.GetFileName(f).Split('.')[0])
+            ? Directory.EnumerateFiles(dir, "*.html")
+                .Select(f => Path.GetFileName(f).Split('.')[0])
+                .Where(slug => slug.Length > 0)
             : [];
 
     /// <summary>單一語言的 slug 集(探測時用來跳過已抓過的)。</summary>

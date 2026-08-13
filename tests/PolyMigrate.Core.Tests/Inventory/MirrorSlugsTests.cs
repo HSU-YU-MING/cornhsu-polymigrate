@@ -50,6 +50,17 @@ public class MirrorSlugsTests : IDisposable
     }
 
     [Fact]
+    public void OsJunkFiles_AreNotSlugs()
+    {
+        // 鏡像目錄被 Finder / 檔案總管開過就會長出這些。逐檔取名的話
+        // .DS_Store → 空字串 slug(輸出第一行是空行)、Thumbs.db → 假文章「Thumbs」,
+        // 而這個指令的賣點就是 stdout 可以直接導成檔案。只認 *.html 就都擋掉了。
+        AddMirrored("ch", "news", "20260101.php.html", ".DS_Store", "Thumbs.db");
+
+        Assert.Equal(["20260101"], PolyMigrator.MirrorSlugs(Raw, "news"));
+    }
+
+    [Fact]
     public void NoLanguagePrefixSite_IsFound()
     {
         // 無語言前綴的站(lang_map 的 key 是 ""):section 直接在 raw/ 底下。
