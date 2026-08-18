@@ -115,6 +115,9 @@ documents: [...]
 | `site_level` | 兩端任一是站級頁(`/` 開頭的 key,如語言選擇頁) |
 | `ambiguous_target` | 同一個目標頁被**多個同語言**的來源頁宣告——一頁不可能是三頁的翻譯 |
 
+為什麼守門只到「建議」為止、不直接改寫 `translation_key`,見
+[hreflang_量測與決策.md](hreflang_量測與決策.md)。
+
 `ambiguous_target` 擋的是最常見的壞法:同一段 `<link>` 被貼進全站模板,於是整站的
 alternate 都指向首頁。限定「同語言」是因為多語站的合法情況長得很像——中文版與日文版
 可以各自宣告同一個英文版。

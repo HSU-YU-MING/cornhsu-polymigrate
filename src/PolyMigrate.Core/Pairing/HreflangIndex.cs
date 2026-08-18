@@ -32,6 +32,10 @@ internal sealed record HreflangRow(
 /// <para>刻意<b>不</b>要求互指:互指是可信度的加分,不是門檻——單向 hreflang 在真實站上
 /// 太常見(常常只有預設語言那半宣告)。互指與否照實記在 <c>reciprocal</c> 欄,由人判斷。
 /// 這一層只「建議」不合併,守門標準本來就該比直接覆寫 translation_key 寬。</para>
+///
+/// <para>「為什麼不乾脆用 hreflang 直接覆寫 translation_key」是這個檔案最常被問的問題,
+/// 答案(含量測數字與重啟條件)在 <c>docs/hreflang_量測與決策.md</c>——
+/// 那是刻意的決定,不是還沒做完。</para>
 /// </summary>
 internal sealed class HreflangIndex
 {

@@ -71,7 +71,9 @@ Everything declared — including the rejected ones — is written to `hreflang_
 "can I trust this site's hreflang?" is a question you want answered with data, not a total.
 
 Pairs are still only ever *suggested*: `hreflang` raises the evidence quality, it does not
-switch the tool into merging pages on its own.
+switch the tool into merging pages on its own. That is a deliberate call, not an unfinished
+one — the measurement behind it, and what would have to change to revisit it, are recorded in
+[docs/hreflang_量測與決策.md](docs/hreflang_量測與決策.md).
 
 ## Battle-tested defaults
 
@@ -192,6 +194,7 @@ Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
 | `src/PolyMigrate.Cli` | the `polymigrate` CLI (NuGet tool package: `Cornhsu.PolyMigrate`) |
 | `tests/` | unit/integration tests + an offline fixture site with golden-file baselines |
 | `docs/contracts.md` | file-format contracts between pipeline phases |
+| `docs/hreflang_量測與決策.md` | why `hreflang` only ever *suggests* — the measurement behind that call |
 | `docs/搬遷工具_評估與規劃書.md` | the original design/planning doc (the `§X.Y` references throughout the source point here) |
 
 ## Development
