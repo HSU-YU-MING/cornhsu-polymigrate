@@ -47,6 +47,15 @@
 - **新增 `docs/hreflang_量測與決策.md`**:為什麼只拿 hreflang「建議」而不直接配,
   背後的量測(唯一可驗證的真實站:528 頁、hreflang 0 則)、以及要重新考慮的觸發條件。
 
+### 內部
+
+這幾筆在 2.2.1 之後就進了 main,隨這一版一起發出去,對工具行為沒有影響:
+
+- **新增 bug 回報範本與資安通報政策**(`.github/ISSUE_TEMPLATE/bug_report.yml`、`SECURITY.md`)。
+  範本會問到 `verify_report.csv` / `path_issues.csv`,那兩份通常一貼上來就省掉一輪往返。
+- **CI workflow 明確宣告最小權限**(`permissions: contents: read`),不吃 repo 的預設值——
+  預設值哪天被改寬,workflow 會跟著變寬而且沒有人會發現。
+
 ### 升級注意
 
 - **輸出目錄會多一個檔案**(`hreflang_map.csv`)。有在比對輸出檔案清單的下游(golden 測之類)
