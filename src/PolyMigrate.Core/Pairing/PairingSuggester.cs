@@ -34,13 +34,15 @@ internal sealed record PairSuggestion(string KeyA, string KeyB, string Evidence)
 internal sealed class PairingSuggester(SiteConfig config)
 {
     public const string Hreflang = "hreflang";
+    public const string SlugNormalized = "slug_normalized";
     public const string SharedMedia = "shared_media";
     public const string Date = "date";
     public const string TitleSimilarity = "title_similarity";
 
     /// <summary>合法的 fallback 啟發式名稱——config 驗證與此處派發共用的單一事實來源。</summary>
     public static readonly IReadOnlySet<string> KnownHeuristics =
-        new HashSet<string>(StringComparer.Ordinal) { Hreflang, SharedMedia, Date, TitleSimilarity };
+        new HashSet<string>(StringComparer.Ordinal)
+        { Hreflang, SlugNormalized, SharedMedia, Date, TitleSimilarity };
 
     /// <summary>title_similarity 低於此值不當證據(跨語言標題相似度本就偏弱)。</summary>
     private const double TitleSimilarityThreshold = 0.5;
@@ -112,6 +114,13 @@ internal sealed class PairingSuggester(SiteConfig config)
                         evidence.Add(new(Hreflang, token));
                     }
                     break;
+                case SlugNormalized:
+                    var normalized = NormalizeSlug(a.Slug);
+                    if (normalized.Length > 0 && normalized == NormalizeSlug(b.Slug))
+                    {
+                        evidence.Add(new(SlugNormalized, normalized));
+                    }
+                    break;
                 case SharedMedia:
                     var shared = a.Media.Intersect(b.Media, StringComparer.Ordinal).Count();
                     if (shared > 0)
@@ -162,6 +171,23 @@ internal sealed class PairingSuggester(SiteConfig config)
         }
         return score;
     }
+
+    /// <summary>
+    /// slug 去分隔符與大小寫。<c>2025-light-offering</c> 與 <c>2025_light_offering</c>
+    /// 都變成 <c>2025lightoffering</c>。
+    ///
+    /// <para>這<b>不是</b>「URL 字串相似度」——那個做法配的是
+    /// <c>/products/</c> 與 <c>/produkte/</c>,不同語言的同一個意思字面上根本不像,
+    /// 純粹在猜。這裡要求正規化後<b>完全相等</b>,配的是同一個字被兩邊打成不同寫法,
+    /// 可靠度與「去語言前綴後路徑相等」同級。</para>
+    ///
+    /// <para>實際來源:香雲寺站的光明燈法會,中文 <c>2025-light-offering</c>、
+    /// 英文 <c>2025_light_offering</c>,只差一個分隔符,而其餘三個啟發式全部落空——
+    /// 圖是同一張的兩份拷貝各放自己語言目錄(shared_media 不成立)、slug 無日期、
+    /// 標題一中一英(相似度 0)。</para>
+    /// </summary>
+    private static string NormalizeSlug(string slug) =>
+        new(slug.Where(c => c is not ('-' or '_' or ' ')).Select(char.ToLowerInvariant).ToArray());
 
     /// <summary>Sørensen–Dice 字元 bigram 相似度(0..1),不分大小寫。</summary>
     public static double BigramDice(string x, string y)

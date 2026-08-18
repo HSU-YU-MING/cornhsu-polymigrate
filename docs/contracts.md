@@ -81,6 +81,7 @@ documents: [...]
 | 名稱 | 依據 | 備註 |
 |---|---|---|
 | `hreflang` | 原站 `<link rel="alternate" hreflang>` 宣告的對應 | 唯一「作者宣告」而非工具推測的線索,故通常放第一位;**不受同 section 限制**(語言版換 section 是真的會發生) |
+| `slug_normalized` | slug 去大小寫與 `-` `_` 空白後**完全相等** | 不是相似度比對:`/products/` 與 `/produkte/` 配不起來是對的;可靠度與對稱路徑同級 |
 | `shared_media` | 兩語版共用相簿圖片,值 = 共用張數 | |
 | `date` | slug 內日期正規化後相等(`20240121` = `01212024`) | |
 | `title_similarity` | 字元 bigram Sørensen–Dice ≥ 0.5 | 跨語言本就偏弱,故墊底 |
@@ -114,6 +115,10 @@ documents: [...]
 | `self_reference` | 指向自己。標準做法,但配對上零資訊 |
 | `site_level` | 兩端任一是站級頁(`/` 開頭的 key,如語言選擇頁) |
 | `ambiguous_target` | 同一個目標頁被**多個同語言**的來源頁宣告——一頁不可能是三頁的翻譯 |
+
+**`reject_reason` 是開放集合**:未來新增門檻會新增值,消費端須容忍沒見過的值
+(當成「不可用」處理即可),不得以列舉窮盡為前提。這一條先講明,
+新增門檻才不必動 `config_version`。
 
 為什麼守門只到「建議」為止、不直接改寫 `translation_key`,見
 [hreflang_量測與決策.md](hreflang_量測與決策.md)。

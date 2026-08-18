@@ -6,13 +6,17 @@ public class PairingSuggesterTests
 {
     private static readonly PairingSuggester Suggester = new(TestConfigs.IbpsLike());
 
-    /// <summary>fallback 首位是 hreflang 的 config(2.3 起 examples 與 README 的建議順序)。</summary>
-    private static PairingSuggester WithHreflang()
+    /// <summary>指定 fallback 順序的 suggester(TestConfigs 的預設不含 2.3 新增的線索)。</summary>
+    private static PairingSuggester WithFallback(params string[] fallback)
     {
         var config = TestConfigs.IbpsLike();
-        config.Pairing.Fallback = ["hreflang", "shared_media", "date", "title_similarity"];
+        config.Pairing.Fallback = [.. fallback];
         return new PairingSuggester(config);
     }
+
+    /// <summary>2.3 起 examples 與 README 的建議順序。</summary>
+    private static PairingSuggester WithHreflang() =>
+        WithFallback("hreflang", "slug_normalized", "shared_media", "date", "title_similarity");
 
     private static UnpairedGroup Group(string key, string locale, string slug,
         string title = "", string section = "events", params string[] media) => new()
@@ -120,7 +124,10 @@ public class PairingSuggesterTests
     [Fact]
     public void SharedAlbum_SuggestsPair()
     {
-        // 香雲寺實況(§1.4):活動檔名中英不同(2026_cjgx / enChant),但相簿中英共用
+        // 合成情境,**不是**香雲寺實況——這句原本寫成實況,是錯的。
+        // 實際去翻那個鏡像:2026_cjgx 用 2026_sangha_cn.PNG、enChant 用 enChant.jpg,
+        // 兩頁的圖不共用;整站 528 頁跑下來,shared_media 一組都沒配出來。
+        // 保留這個測試是因為「兩語版共用相簿」在別的站上合理,但別再拿它當實證。
         var suggestions = Suggester.Suggest(
         [
             Group("events/2026_cjgx", "zh-Hant", "2026_cjgx", "禪淨共修", "events",
@@ -135,6 +142,41 @@ public class PairingSuggesterTests
         Assert.Equal("events/2026_cjgx", s.KeyA);
         Assert.Equal("events/enChant", s.KeyB);
         Assert.Contains("shared_media=1", s.Evidence);
+    }
+
+    [Fact]
+    public void SlugDifferingOnlyBySeparator_SuggestsPair()
+    {
+        // 香雲寺實況(這一組是真的,實跑 528 頁鏡像找出來的):光明燈法會
+        // 中文 2025-light-offering、英文 2025_light_offering,只差一個分隔符,
+        // 而 shared_media / date / title_similarity 三個全部落空。
+        var suggester = WithFallback("slug_normalized", "shared_media", "date", "title_similarity");
+        var suggestions = suggester.Suggest(
+        [
+            Group("events/2025-light-offering", "zh-Hant", "2025-light-offering", "2026光明燈法會"),
+            Group("events/2025_light_offering", "en", "2025_light_offering", "Light Offering Service"),
+        ]);
+
+        Assert.Contains("slug_normalized=2025lightoffering", Assert.Single(suggestions).Evidence);
+    }
+
+    [Fact]
+    public void SlugNormalized_RequiresExactEqualityAfterStripping_NotSimilarity()
+    {
+        // 這個啟發式不是「URL 相似度」:/products/ 與 /produkte/ 配不起來是對的,
+        // 而 2026_lunar_new_year_celebrate 與 2026_lunar_new_year 也不該配
+        // ——包含關係是換套衣服的相似度比對,一樣在猜。
+        var suggester = WithFallback("slug_normalized");
+        Assert.Empty(suggester.Suggest(
+        [
+            Group("events/2026_lunar_new_year_celebrate", "en", "2026_lunar_new_year_celebrate", "New Year"),
+            Group("events/2026_lunar_new_year", "zh-Hant", "2026_lunar_new_year", "新春"),
+        ]));
+        Assert.Empty(suggester.Suggest(
+        [
+            Group("events/products", "en", "products", "Products"),
+            Group("events/produkte", "de", "produkte", "Produkte"),
+        ]));
     }
 
     [Fact]

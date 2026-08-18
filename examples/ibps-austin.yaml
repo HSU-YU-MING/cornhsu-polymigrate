@@ -47,7 +47,7 @@ pairing:
   # hreflang 放第一位:那是原站作者自己宣告的關係,其餘三個都是工具推測的。
   # 原站沒宣告 hreflang(老站的常態)時它不會有任何作用,留著也不會有害處——
   # 指到死連結、指到別的 host、指到自己的宣告都過不了查證,只會出現在 hreflang_map.csv。
-  fallback: [hreflang, shared_media, date, title_similarity]
+  fallback: [hreflang, slug_normalized, shared_media, date, title_similarity]
 
 media:
   web_prefix: /media/

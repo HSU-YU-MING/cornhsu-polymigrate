@@ -37,8 +37,9 @@ the pairing to you. PolyMigrate:
 - **reads the site's own `hreflang` declarations** — `<link rel="alternate" hreflang>` is the one
   pairing signal the site's authors *stated* rather than something a tool inferred, so it is
   tried first and can pair across sections (`/ch/news/` ↔ `/en/press/`),
-- **suggests pairs heuristically** where neither applies — shared photo albums, normalized dates
-  hidden in slugs (`20240121` vs `01212024`), title similarity,
+- **suggests pairs heuristically** where neither applies — slugs that differ only in separators
+  (`2025-light-offering` vs `2025_light_offering`), shared photo albums, normalized dates hidden
+  in slugs (`20240121` vs `01212024`), title similarity,
 - **honestly reports what it cannot pair**, producing a review-ready gap inventory instead of
   guessing wrong.
 
@@ -163,7 +164,7 @@ url_pattern:
 extract:
   content: "section[id]:not(#header):not(#footer)"
 pairing:
-  fallback: [hreflang, shared_media, date, title_similarity]
+  fallback: [hreflang, slug_normalized, shared_media, date, title_similarity]
 ```
 
 ## Use as a library
