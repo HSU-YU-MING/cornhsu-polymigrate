@@ -1,6 +1,10 @@
 <!-- 坑:日期格式混用(§2.6)——中文版 YYYYMMDD,英文版檔名是 02142026(MMDDYYYY)
-     → 對稱配對失敗,靠 date 啟發式建議 -->
-<html><head><title>範例寺 2026/02/14 新聞:元宵燈會</title></head><body>
+     → 對稱配對失敗,靠 date 啟發式建議。
+     坑:這裡的 hreflang 是壞的(指到鏡像裡沒有的 /en/news/20260214.php,原站早就 404)
+     → in_mirror=False、不可用,配對退回 date。舊站的 hreflang 常常就是這樣壞的 -->
+<html><head><title>範例寺 2026/02/14 新聞:元宵燈會</title>
+<link rel="alternate" hreflang="en" href="/en/news/20260214.php">
+</head><body>
 <section id="header">NAV</section>
 <section id="main">
   <h3>元宵燈會點燈祈福</h3>

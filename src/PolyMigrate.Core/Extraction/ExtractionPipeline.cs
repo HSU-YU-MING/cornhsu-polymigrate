@@ -40,6 +40,12 @@ public sealed class ExtractionReport
     /// <summary>啟發式配對建議的組數(§1.4),待人工覆核。</summary>
     public int SuggestedPairs { get; init; }
 
+    /// <summary>原站宣告的 <c>hreflang</c> 則數(全部,含指到站外/自我指涉/x-default)。</summary>
+    public int HreflangDeclared { get; init; }
+
+    /// <summary>其中查證後可用於配對的則數(見 <see cref="Pairing.HreflangIndex"/> 的四道門)。</summary>
+    public int HreflangUsable { get; init; }
+
     /// <summary>路徑安全問題(§3.4):error = 拒寫並跳過該頁;warning = 照寫但記錄(如超長路徑)。</summary>
     public required List<PathIssue> PathIssues { get; init; }
 
@@ -123,10 +129,12 @@ public sealed class ExtractionPipeline(SiteConfig config)
             aggregator.Add(page, extracted);
         }
 
-        var suggestions = SuggestPairs(aggregator.Inventory, locales);
+        var hreflang = HreflangIndex.Build(aggregator.HreflangLinks, aggregator.RouteToKey);
+        var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang);
         if (!dryRun)
         {
             WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions);
+            WriteHreflangMap(paths.OutDir, hreflang);
             WriteMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs);
             WriteRedirectMap(paths.OutDir, aggregator.Redirects);
             WriteRedirectExports(paths.OutDir, aggregator.Redirects);
@@ -138,7 +146,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         return BuildReport(aggregator.Inventory, locales, pagesWritten, aggregator.MediaRefs.Count,
             aggregator.Missing.Count, aggregator.NeedFetch.Count, suggestions.Count / 2, pathIssues,
-            FindStaleOutputs(paths.OutDir, writtenPaths));
+            FindStaleOutputs(paths.OutDir, writtenPaths), hreflang);
     }
 
     /// <summary>
@@ -201,7 +209,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
     /// <summary>對「只有單語」的 key 產生啟發式配對建議(§1.4);回傳 key → 建議,兩端各一筆。</summary>
     private Dictionary<string, PairSuggestion> SuggestPairs(
-        SortedDictionary<string, InventoryRecord> inventory, List<string> locales)
+        SortedDictionary<string, InventoryRecord> inventory, List<string> locales, HreflangIndex hreflang)
     {
         if (locales.Count < 2)
         {
@@ -217,6 +225,8 @@ public sealed class ExtractionPipeline(SiteConfig config)
                 Slug = kv.Value.Slug,
                 Title = kv.Value.Title,
                 Media = kv.Value.Media,
+                Alternates = hreflang.AlternatesByKey.GetValueOrDefault(kv.Key)
+                             ?? new Dictionary<string, string>(StringComparer.Ordinal),
             });
         var byKey = new Dictionary<string, PairSuggestion>();
         foreach (var s in new PairingSuggester(config).Suggest(unpaired))
@@ -305,6 +315,27 @@ public sealed class ExtractionPipeline(SiteConfig config)
         cache.Save();
     }
 
+    /// <summary>
+    /// 原站宣告的 hreflang 全紀錄(§1.4)。**含不可用的**——這份檔案的用途是回答
+    /// 「這個站的 hreflang 到底能不能信」,所以指到站外、指到 404、只有單向的那些,
+    /// 正是最該被看見的資料。只留可用的,等於把品質問題藏起來。
+    /// 恆輸出(沒宣告 hreflang 的站只有表頭),缺檔與空檔在診斷時意思完全不同。
+    /// </summary>
+    private static void WriteHreflangMap(string outDir, HreflangIndex hreflang)
+    {
+        var rows = new List<IReadOnlyList<string>>
+        {
+            new[] { "source_url", "hreflang", "target_url", "target_translation_key",
+                "in_mirror", "reciprocal", "usable" },
+        };
+        rows.AddRange(hreflang.Rows.Select(r => new[]
+        {
+            r.SourceUrl, r.Hreflang, r.TargetUrl, r.TargetKey,
+            r.InMirror.ToString(), r.Reciprocal.ToString(), r.Usable.ToString(),
+        }));
+        Csv.Write(Path.Combine(outDir, "hreflang_map.csv"), rows);
+    }
+
     private static void WriteRedirectMap(string outDir, List<Redirect> redirects)
     {
         // new_path 由 LinkRewriter 同一套路由規則自動填(與內文連結改寫一致);人工可在 CSV 覆改
@@ -354,7 +385,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
     private static ExtractionReport BuildReport(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
         int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs,
-        List<PathIssue> pathIssues, List<string> staleOutputs)
+        List<PathIssue> pathIssues, List<string> staleOutputs, HreflangIndex hreflang)
     {
         var typeCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var flagCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -383,6 +414,8 @@ public sealed class ExtractionPipeline(SiteConfig config)
             MissingImages = missingCount,
             NeedFetchMedia = needFetchCount,
             SuggestedPairs = suggestedPairs,
+            HreflangDeclared = hreflang.Declared,
+            HreflangUsable = hreflang.Usable,
             PathIssues = pathIssues,
             StaleOutputs = staleOutputs,
         };

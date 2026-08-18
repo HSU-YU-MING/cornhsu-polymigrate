@@ -1,0 +1,7 @@
+﻿source_url,hreflang,target_url,target_translation_key,in_mirror,reciprocal,usable
+https://legacy.example.org/ch/events/2026_chanxiu.php,en,https://legacy.example.org/en/events/enRetreat.php,events/enRetreat,True,True,True
+https://legacy.example.org/ch/events/2026_chanxiu.php,x-default,https://legacy.example.org/index.php,/index,True,False,False
+https://legacy.example.org/ch/events/2026_chanxiu.php,zh-Hant,https://legacy.example.org/ch/events/2026_chanxiu.php,events/2026_chanxiu,True,True,False
+https://legacy.example.org/ch/news/20260214.php,en,https://legacy.example.org/en/news/20260214.php,,False,False,False
+https://legacy.example.org/en/events/enRetreat.php,en,https://legacy.example.org/en/events/enRetreat.php,events/enRetreat,True,True,False
+https://legacy.example.org/en/events/enRetreat.php,zh-Hant,https://legacy.example.org/ch/events/2026_chanxiu.php,events/2026_chanxiu,True,True,True

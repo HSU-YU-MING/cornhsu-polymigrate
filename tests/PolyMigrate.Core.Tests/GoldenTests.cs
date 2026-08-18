@@ -57,10 +57,35 @@ public class GoldenTests : IDisposable
 
         Assert.Equal(13, report.PagesWritten);
         Assert.Equal(9, report.TranslationKeys);
-        Assert.Equal(2, report.SuggestedPairs);        // date 組 + shared_media 組
+        Assert.Equal(2, report.SuggestedPairs);        // date 組 + events 組(hreflang)
         Assert.Equal(2, report.MissingImages);         // 20260101_3.jpg + broken.jpg
         Assert.Equal(1, report.NeedFetchMedia);        // schedule.pdf
         Assert.Empty(report.StaleOutputs);             // 乾淨的一次跑完,content/ 裡不該有多餘的檔
+
+        // hreflang:6 則宣告裡只有 2 則可用——其餘是自我指涉、x-default、以及一則指到
+        // 鏡像裡沒有的頁。這個比例是 fixture 刻意做出來的,舊站的 hreflang 就長這樣。
+        Assert.Equal(6, report.HreflangDeclared);
+        Assert.Equal(2, report.HreflangUsable);
+    }
+
+    [Fact]
+    public void HreflangMap_RecordsUnusableDeclarations_NotJustTheGoodOnes()
+    {
+        // 這份檔案的用途是回答「這個站的 hreflang 能不能信」,所以壞掉的那些才是重點。
+        // 只留可用的,等於把品質問題藏起來。
+        RunPipeline();
+        var rows = File.ReadAllLines(Path.Combine(_out, "hreflang_map.csv"));
+
+        var broken = rows.Single(r => r.Contains("/en/news/20260214.php"));
+        Assert.Contains("False,False,False", broken);            // in_mirror / reciprocal / usable
+
+        var good = rows.Single(r =>
+            r.StartsWith("https://legacy.example.org/ch/events/2026_chanxiu.php,en,"));
+        Assert.Contains("events/enRetreat,True,True,True", good);
+
+        // x-default 指到語言選擇頁:在鏡像裡,但配對上零資訊
+        var xDefault = rows.Single(r => r.Contains(",x-default,"));
+        Assert.Contains("/index,True,False,False", xDefault);
     }
 
     [Fact]

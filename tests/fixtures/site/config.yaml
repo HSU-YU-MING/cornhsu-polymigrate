@@ -23,7 +23,7 @@ extract:
       images_to_gallery: true
 
 pairing:
-  fallback: [shared_media, date, title_similarity]
+  fallback: [hreflang, shared_media, date, title_similarity]
 
 media:
   web_prefix: /media/

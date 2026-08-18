@@ -31,6 +31,7 @@ public class InventoryAggregatorTests
         MediaUses = [.. media],
         MissingImages = [],
         NeedFetch = [],
+        Alternates = [],
     };
 
     [Fact]

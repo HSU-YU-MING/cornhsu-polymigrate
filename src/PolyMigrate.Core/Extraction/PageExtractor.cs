@@ -52,6 +52,8 @@ internal sealed partial class PageExtractor
         var textLength = string.Join(' ', nodes.Select(n => NormalizeWs(n.TextContent))).Trim().Length;
         var imageCount = nodes.Sum(n => n.QuerySelectorAll("img").Length);
 
+        var alternates = ReadAlternates(doc, page.SourceUrl);
+
         var pageType = _classifier.Classify(page.Section, page.Slug);
         var rules = _config.Extract.TypeRules.GetValueOrDefault(pageType);
 
@@ -233,7 +235,41 @@ internal sealed partial class PageExtractor
             MediaUses = mediaUses,
             MissingImages = missing,
             NeedFetch = needFetch,
+            Alternates = alternates,
         };
+    }
+
+    /// <summary>
+    /// &lt;head&gt; 裡的 <c>&lt;link rel="alternate" hreflang&gt;</c>——全站唯一由作者「宣告」的
+    /// 語言版本對應,其餘配對線索(路徑、相簿、日期、標題)都是推測出來的。
+    ///
+    /// <para>刻意<b>不</b>認 <c>&lt;a hreflang&gt;</c>:那是「這個連結指向的東西是什麼語言」的標註,
+    /// 不是「本頁的某語言版本在這裡」的宣告。內文裡一句「另見 &lt;a hreflang="en"&gt;英文說明&lt;/a&gt;」
+    /// 會被當成本頁的英文版,而那通常是另一篇文章。</para>
+    ///
+    /// <para>抽取階段一律照收(含 <c>x-default</c>、自我指涉、指到站外的),
+    /// 可不可信留給 <see cref="Pairing.HreflangIndex"/> 判——原始觀察與判斷分開,
+    /// 才有辦法先量一個站的 hreflang 品質再決定要不要信它。</para>
+    /// </summary>
+    private static List<AlternateLink> ReadAlternates(IDocument doc, string sourceUrl)
+    {
+        var alternates = new List<AlternateLink>();
+        foreach (var link in doc.QuerySelectorAll("link[hreflang][href]"))
+        {
+            // rel 是空白分隔的 token 集(rel="alternate stylesheet" 合法),不能整串比對
+            var isAlternate = (link.GetAttribute("rel") ?? "")
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Any(t => t.Equals("alternate", StringComparison.OrdinalIgnoreCase));
+            var hreflang = (link.GetAttribute("hreflang") ?? "").Trim();
+            var href = link.GetAttribute("href") ?? "";
+            if (!isAlternate || hreflang.Length == 0 || href.Length == 0
+                || TryResolve(sourceUrl, href) is not { } target)
+            {
+                continue;
+            }
+            alternates.Add(new AlternateLink(hreflang, href, target));
+        }
+        return alternates;
     }
 
     /// <summary>

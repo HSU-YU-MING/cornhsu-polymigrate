@@ -1,6 +1,12 @@
 <!-- 坑:活動檔名語意命名、中英不同(2026_chanxiu vs enRetreat)→ 對稱配對失敗;
-     海報圖與英文版共用 → shared_media 啟發式;正文極短+有圖 → text_in_image -->
-<html><head><title>範例寺 - 禪修營</title></head><body>
+     海報圖與英文版共用 → shared_media 啟發式;正文極短+有圖 → text_in_image。
+     兩語版互指 hreflang(作者宣告的配對關係)→ 優先於任何啟發式;
+     自我指涉與 x-default 照收進 hreflang_map.csv,但不可用於配對 -->
+<html><head><title>範例寺 - 禪修營</title>
+<link rel="alternate" hreflang="zh-Hant" href="/ch/events/2026_chanxiu.php">
+<link rel="alternate" hreflang="en" href="../../en/events/enRetreat.php">
+<link rel="alternate" hreflang="x-default" href="/index.php">
+</head><body>
 <section id="header">NAV</section>
 <section id="event">
   <img src="images/chanxiu_poster.jpg" alt="禪修營海報">

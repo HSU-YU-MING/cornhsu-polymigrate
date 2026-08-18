@@ -46,6 +46,20 @@ internal sealed class LinkRewriter
     }
 
     /// <summary>
+    /// 絕對 URL → 站內路由;**不同 host 一律回 null**。
+    ///
+    /// <para>host 這一關看起來多餘,其實是 hreflang 配對的安全門:很多站的英文版在
+    /// <c>en.example.org</c> 而不是 <c>/en/</c>,若只比對路徑,站外的
+    /// <c>https://en.example.org/ch/news/a.php</c> 會算出與本站
+    /// <c>/ch/news/a</c> 一模一樣的路由,於是一頁被當成自己的翻譯。</para>
+    /// </summary>
+    public string? RouteForUrl(string absoluteUrl) =>
+        Uri.TryCreate(absoluteUrl, UriKind.Absolute, out var uri)
+        && string.Equals(uri.Host, _host, StringComparison.OrdinalIgnoreCase)
+            ? RouteForPath(uri.AbsolutePath)
+            : null;
+
+    /// <summary>
     /// 站內路徑 → 新路由:去動態副檔名、收攏 index。
     /// 內文連結改寫與 redirect_map 的 new_path 共用同一套規則(兩者不同步 = 301 打到破頁)。
     /// </summary>

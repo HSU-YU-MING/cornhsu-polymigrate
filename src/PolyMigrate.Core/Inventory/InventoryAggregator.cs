@@ -29,6 +29,18 @@ internal sealed record MediaEntry(string OriginalUrl, SortedSet<string> Refs, So
 internal sealed record Redirect(string OldUrl, string NewPath, string Locale, string TranslationKey);
 
 /// <summary>
+/// 一則 hreflang 宣告,補上兩端在本站的路由(§1.4)。
+/// <paramref name="TargetRoute"/> = null 代表指到站外(見 <see cref="LinkRewriter.RouteForUrl"/>)。
+/// </summary>
+internal sealed record HreflangLink(
+    string SourceUrl,
+    string SourceRoute,
+    string SourceKey,
+    string Hreflang,
+    string TargetUrl,
+    string? TargetRoute);
+
+/// <summary>
 /// 逐頁把 <see cref="ExtractedPage"/> 摺疊成各清單的中間表示(以 translation_key 聚合各語言版本)。
 /// 純記憶體、零 I/O —— 讓聚合邏輯不必落磁碟就能單獨測(對照 ExtractionPipeline 的全站 golden 測)。
 /// </summary>
@@ -43,6 +55,12 @@ internal sealed class InventoryAggregator(LinkRewriter links)
     public SortedSet<string> NeedFetch { get; } = new(StringComparer.Ordinal);
 
     public List<Redirect> Redirects { get; } = [];
+
+    /// <summary>各頁宣告的 hreflang(原始觀察,未過濾);解析見 <see cref="Pairing.HreflangIndex"/>。</summary>
+    public List<HreflangLink> HreflangLinks { get; } = [];
+
+    /// <summary>站內路由 → translation_key。hreflang 指到的頁「在不在鏡像裡」就靠這張表回答。</summary>
+    public Dictionary<string, string> RouteToKey { get; } = new(StringComparer.Ordinal);
 
     public void Add(RawPage page, ExtractedPage extracted)
     {
@@ -78,7 +96,12 @@ internal sealed class InventoryAggregator(LinkRewriter links)
         }
         Missing.AddRange(extracted.MissingImages);
         NeedFetch.UnionWith(extracted.NeedFetch);
-        Redirects.Add(new Redirect(page.SourceUrl,
-            links.RouteForPath(new Uri(page.SourceUrl).AbsolutePath), page.Locale, page.TranslationKey));
+
+        var route = links.RouteForPath(new Uri(page.SourceUrl).AbsolutePath);
+        RouteToKey[route] = page.TranslationKey;
+        HreflangLinks.AddRange(extracted.Alternates.Select(a => new HreflangLink(
+            page.SourceUrl, route, page.TranslationKey, a.Hreflang, a.TargetUrl, links.RouteForUrl(a.TargetUrl))));
+
+        Redirects.Add(new Redirect(page.SourceUrl, route, page.Locale, page.TranslationKey));
     }
 }

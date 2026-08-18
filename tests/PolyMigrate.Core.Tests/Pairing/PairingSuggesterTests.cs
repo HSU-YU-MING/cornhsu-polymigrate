@@ -6,6 +6,14 @@ public class PairingSuggesterTests
 {
     private static readonly PairingSuggester Suggester = new(TestConfigs.IbpsLike());
 
+    /// <summary>fallback 首位是 hreflang 的 config(2.3 起 examples 與 README 的建議順序)。</summary>
+    private static PairingSuggester WithHreflang()
+    {
+        var config = TestConfigs.IbpsLike();
+        config.Pairing.Fallback = ["hreflang", "shared_media", "date", "title_similarity"];
+        return new PairingSuggester(config);
+    }
+
     private static UnpairedGroup Group(string key, string locale, string slug,
         string title = "", string section = "events", params string[] media) => new()
         {
@@ -16,6 +24,98 @@ public class PairingSuggesterTests
             Title = title,
             Media = new HashSet<string>(media),
         };
+
+    /// <summary>加上「本頁宣告了指向 targetKey 的 hreflang」。</summary>
+    private static UnpairedGroup WithAlternate(UnpairedGroup group, string targetKey, string hreflang) =>
+        new()
+        {
+            TranslationKey = group.TranslationKey,
+            Section = group.Section,
+            Locale = group.Locale,
+            Slug = group.Slug,
+            Title = group.Title,
+            Media = group.Media,
+            Alternates = new Dictionary<string, string>(StringComparer.Ordinal) { [targetKey] = hreflang },
+        };
+
+    [Fact]
+    public void Hreflang_BeatsSharedMedia_WhenBothPresent()
+    {
+        // 作者宣告的關係贏過工具推測的:證據兩個都留,但排序由 fallback 順序決定
+        var zh = WithAlternate(
+            Group("events/2026_cjgx", "zh-Hant", "2026_cjgx", "禪淨共修", "events", "m/1.jpg"),
+            "events/enChant", "en");
+        var suggestions = WithHreflang().Suggest(
+        [
+            zh,
+            Group("events/enChant", "en", "enChant", "Chanting Service", "events"),
+            Group("events/decoy", "en", "decoy", "Decoy", "events", "m/1.jpg"),
+        ]);
+
+        var s = suggestions.Single(x => x.KeyA == "events/2026_cjgx" || x.KeyB == "events/2026_cjgx");
+        Assert.Contains("events/enChant", new[] { s.KeyA, s.KeyB });   // 不是共用相簿的那個 decoy
+        Assert.Contains("hreflang=en", s.Evidence);
+    }
+
+    [Fact]
+    public void Hreflang_PairsFirst_EvenIfAHeuristicWouldHaveClaimedTheKeyEarlier()
+    {
+        // 貪婪配對是先到先得,而「先到」只是 key 的字典序:events/aaa 排在
+        // events/zzz 前面,若一趟做完就會用共用相簿先把 events/enTarget 搶走,
+        // 而 events/zzz 那則作者宣告的 hreflang 就再也配不到——推測贏過宣告。
+        var suggestions = WithHreflang().Suggest(
+        [
+            Group("events/aaa", "zh-Hant", "aaa", "甲", "events", "m/1.jpg"),
+            Group("events/enTarget", "en", "enTarget", "Target", "events", "m/1.jpg"),
+            WithAlternate(Group("events/zzz", "zh-Hant", "zzz", "乙", "events"), "events/enTarget", "en"),
+        ]);
+
+        var s = Assert.Single(suggestions);
+        Assert.Equal(
+            ["events/enTarget", "events/zzz"],           // 不是字典序在前、共用相簿的 events/aaa
+            new[] { s.KeyA, s.KeyB }.Order(StringComparer.Ordinal));
+        Assert.Contains("hreflang=en", s.Evidence);
+    }
+
+    [Fact]
+    public void Hreflang_PairsAcrossSections()
+    {
+        // 中文在 /ch/news/、英文在 /en/press/ 是真的會發生,而那正是對稱路徑配不起來的原因之一。
+        // 啟發式不准跨 section(太容易巧合),hreflang 可以——它不是猜的。
+        var suggestions = WithHreflang().Suggest(
+        [
+            WithAlternate(Group("news/a", "zh-Hant", "a", "甲", "news"), "press/b", "en"),
+            Group("press/b", "en", "b", "A", "press"),
+        ]);
+
+        var s = Assert.Single(suggestions);
+        Assert.Contains("hreflang=en", s.Evidence);
+    }
+
+    [Fact]
+    public void Hreflang_OnlyDeclaredByOneSide_StillPairs()
+    {
+        var suggestions = WithHreflang().Suggest(
+        [
+            Group("news/a", "zh-Hant", "a", "甲", "news"),
+            WithAlternate(Group("news/b", "en", "b", "A", "news"), "news/a", "zh-Hant"),
+        ]);
+
+        Assert.Contains("hreflang=zh-Hant", Assert.Single(suggestions).Evidence);
+    }
+
+    [Fact]
+    public void Hreflang_NotInFallback_IsIgnoredEntirely()
+    {
+        // 沒把 hreflang 列進 pairing.fallback 的既有 config,行為必須與 2.2 完全相同
+        var suggestions = Suggester.Suggest(
+        [
+            WithAlternate(Group("news/a", "zh-Hant", "a", "甲", "news"), "press/b", "en"),
+            Group("press/b", "en", "b", "A", "press"),
+        ]);
+
+        Assert.Empty(suggestions);
+    }
 
     [Fact]
     public void SharedAlbum_SuggestsPair()

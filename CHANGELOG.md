@@ -2,6 +2,39 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 2.3.0
+
+**開始讀原站自己宣告的 `hreflang`。** 對外契約只增不改:既有欄位、exit code、CLI 介面全部不變,
+`pairing.fallback` 沒列 `hreflang` 的 config 行為與 2.2 逐位元相同。
+
+- **新增輸出 `hreflang_map.csv`**:原站每一則 `<link rel="alternate" hreflang>` 的全紀錄,
+  附 `in_mirror` / `reciprocal` / `usable` 三欄。**含不可用的宣告**——這份檔案的用途是回答
+  「這個站的 hreflang 能不能信」,只留可用的等於把品質問題藏起來。恆輸出,沒宣告的站只有表頭。
+- **新增配對線索 `hreflang`**,可放進 `pairing.fallback`(建議放第一位,見
+  `examples/ibps-austin.yaml`)。它是全站唯一由作者**宣告**而非工具**推測**的配對關係,
+  所以是唯一**不受「兩端須同 section」限制**的線索——中文在 `/ch/news/`、英文在 `/en/press/`
+  是真的會發生,而那正是對稱路徑配不起來的原因之一。
+- **宣告不等於正確,所以要查證。** 會需要搬遷的老站正好就是 hreflang 壞掉的那些站
+  (整站 alternate 都指首頁、指到早就 404 的 URL、只有單向)。一則宣告要能用於配對,
+  必須不是 `x-default`、不指向自己、目標頁真的在鏡像裡(**含 host 要一致**——不少站的英文版在
+  `en.example.org`,只比路徑的話 `/ch/news/a.php` 會配到自己身上)、兩端都不是站級頁。
+  **刻意不要求互指**:只有一半宣告在真實站上太常見,互指是可信度加分而非門檻,照實記在
+  `reciprocal` 欄由人判斷——這一層只建議、不合併,守門標準本來就該比直接覆寫
+  `translation_key` 寬。
+- **配對改成兩趟**:`hreflang` 配得起來的先配完,啟發式才上場。同一趟內是貪婪配對、
+  先到先得,而「先到」只是 translation_key 的字典序——一趟做完的話,宣告的關係會被
+  字典序剛好排在前面的共用相簿搶走對象,等於讓推測贏過宣告。
+- **`extract` 摘要多一行** `hreflang links : N declared, M usable for pairing`。
+  先讓人看得到數字,再決定要不要信它。
+
+### 升級注意
+
+- `pairing.fallback` 加上 `hreflang` 之後,原本靠 `shared_media` / `date` / `title_similarity`
+  建議的那些配對,`pair_evidence` 可能多出 `hreflang=…` 一項,建議對象也可能改變
+  (證據強的贏)。`content_inventory.csv` 是給人覆核的,不是給程式吃的,但若你有下游腳本
+  在讀 `pair_evidence`,注意它現在可能以 `hreflang=` 開頭。
+- 不想要這個行為就別把 `hreflang` 列進 `pairing.fallback`——預設沒有它。
+
 ## 2.2.1
 
 **送到使用者手上之後才看得到的三件事。** 對外契約與 exit code 不變。

@@ -1,5 +1,9 @@
-<!-- 與 ch/events/2026_chanxiu 共用海報 → shared_media 建議配對 -->
-<html><head><title>Example Temple - Meditation Retreat</title></head><body>
+<!-- 與 ch/events/2026_chanxiu 共用海報 → shared_media;並互指 hreflang(此側寫絕對 URL,
+     兩種寫法都要算成同一頁)→ reciprocal=True -->
+<html><head><title>Example Temple - Meditation Retreat</title>
+<link rel="alternate" hreflang="en" href="/en/events/enRetreat.php">
+<link rel="alternate" hreflang="zh-Hant" href="https://legacy.example.org/ch/events/2026_chanxiu.php">
+</head><body>
 <section id="header">NAV</section>
 <section id="event">
   <img src="../../ch/events/images/chanxiu_poster.jpg" alt="retreat poster">

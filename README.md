@@ -13,7 +13,7 @@ PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, 
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
 Config-driven, fully offline-rerunnable, built on .NET.
 
-**Status: 2.2.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
+**Status: 2.3.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
 surface and the Phase output contracts remain stable** (unchanged since 1.0): new features bump
 the minor version, fixes bump the patch. 2.0 was an engineering release — it narrowed the
@@ -21,8 +21,9 @@ the minor version, fixes bump the patch. 2.0 was an engineering release — it n
 config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages).
 2.2 closed a blind spot in `verify` — pages nothing links to were reported as fine, because a
 link-following audit never reaches them — and added `slugs` for keeping up with a source site
-that is still being updated. **Upgrading to 2.2 can turn a passing `verify` into exit 1**;
-see the [CHANGELOG](CHANGELOG.md) for that and the other migration notes.
+that is still being updated. **Upgrading to 2.2 can turn a passing `verify` into exit 1**.
+2.3 reads the source site's own `hreflang` declarations (see below) and reports them in a new
+`hreflang_map.csv`. See the [CHANGELOG](CHANGELOG.md) for the migration notes.
 
 ## Why
 
@@ -33,13 +34,35 @@ the pairing to you. PolyMigrate:
 
 - **pairs automatically** where filenames are symmetric (`/ch/news/x` ↔ `/en/news/x` share a
   `translation_key`),
-- **suggests pairs heuristically** where they are not — shared photo albums, normalized dates
+- **reads the site's own `hreflang` declarations** — `<link rel="alternate" hreflang>` is the one
+  pairing signal the site's authors *stated* rather than something a tool inferred, so it is
+  tried first and can pair across sections (`/ch/news/` ↔ `/en/press/`),
+- **suggests pairs heuristically** where neither applies — shared photo albums, normalized dates
   hidden in slugs (`20240121` vs `01212024`), title similarity,
 - **honestly reports what it cannot pair**, producing a review-ready gap inventory instead of
   guessing wrong.
 
+Note what PolyMigrate deliberately does *not* do: match language versions by URL string
+similarity. `/products/`, `/produkte/` and `/產品/` have a similarity of zero and are the same
+page; symmetric-path pairing is an exact match after the language prefix is stripped, never a
+fuzzy one.
+
 Languages are not limited to two: declare any number in `lang_map` and every output
 (frontmatter, inventories, pairing) expands accordingly. All locale output is standard BCP-47.
+
+### About `hreflang`
+
+Legacy sites are exactly the sites whose `hreflang` is missing or wrong — usually bolted on by
+an SEO contractor years later. So PolyMigrate treats it as strong evidence, not as gospel:
+a declaration is only used for pairing if it isn't `x-default`, doesn't point at the page
+itself, and resolves to a page that is actually in your mirror (same host included — plenty of
+sites put the English version on `en.example.org`, where a path-only comparison would make a
+page its own translation). Everything declared — including the unusable ones — is written to
+`hreflang_map.csv` with `in_mirror` / `reciprocal` / `usable` columns, because "can I trust
+this site's hreflang?" is a question you want answered with data before you rely on it.
+
+Pairs are still only ever *suggested*: `hreflang` raises the evidence quality, it does not
+switch the tool into merging pages on its own.
 
 ## Battle-tested defaults
 
@@ -55,6 +78,7 @@ things generic tools and LLM extractors silently get wrong:
 | `<title>` polluted with dates and site name | body-first title extraction + configurable cleanup |
 | Mixed date formats (`YYYYMMDD` / `MMDDYYYY` / `DDMMYYYY`) | all recognized and normalized |
 | Old articles removed from indexes but still served | orphan probing (per-day URL candidates + suffix variants) |
+| `hreflang` pointing at dead URLs, other hosts, or itself | validated against the mirror; unusable ones recorded, not applied |
 | Broken images on the source site | detected, recorded, never blocks the run |
 | Bot protection (JS cookie challenge → 409) | declarative cookie workaround in config |
 | Legacy encodings (Big5, GB2312, …) | declared or defaulted per site |
@@ -128,7 +152,7 @@ url_pattern:
 extract:
   content: "section[id]:not(#header):not(#footer)"
 pairing:
-  fallback: [shared_media, date, title_similarity]
+  fallback: [hreflang, shared_media, date, title_similarity]
 ```
 
 ## Use as a library

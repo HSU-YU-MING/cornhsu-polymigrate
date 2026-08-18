@@ -149,6 +149,7 @@ public static class Cli
             Console.WriteLine($"  flags            : {Format(report.FlagCounts)}");
             Console.WriteLine($"  single-locale    : {Format(report.OnlyInLocale)}");
             Console.WriteLine($"  suggested pairs  : {report.SuggestedPairs} (heuristic, review in content_inventory.csv)");
+            Console.WriteLine($"  hreflang links   : {report.HreflangDeclared} declared, {report.HreflangUsable} usable for pairing (hreflang_map.csv)");
             Console.WriteLine($"  media referenced : {report.MediaReferenced}");
             Console.WriteLine($"  missing images   : {report.MissingImages} (recorded in missing_images.csv, non-blocking)");
             Console.WriteLine($"  need-fetch media : {report.NeedFetchMedia} (recorded in need_fetch_media.txt)");

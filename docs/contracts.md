@@ -76,9 +76,40 @@ documents: [...]
 | image_count | int | 各語版取最大 |
 | notes | string | 留空,人工覆核填 |
 
-啟發式只「建議」不自動合併,順序由 config `pairing.fallback` 決定
-(`shared_media` 共用相簿 / `date` slug 日期正規化後相等 / `title_similarity` bigram Dice ≥ 0.5);
+配對線索只「建議」不自動合併,順序由 config `pairing.fallback` 決定,也決定 `pair_evidence` 的加權:
+
+| 名稱 | 依據 | 備註 |
+|---|---|---|
+| `hreflang` | 原站 `<link rel="alternate" hreflang>` 宣告的對應 | 唯一「作者宣告」而非工具推測的線索,故通常放第一位;**不受同 section 限制**(語言版換 section 是真的會發生) |
+| `shared_media` | 兩語版共用相簿圖片,值 = 共用張數 | |
+| `date` | slug 內日期正規化後相等(`20240121` = `01212024`) | |
+| `title_similarity` | 字元 bigram Sørensen–Dice ≥ 0.5 | 跨語言本就偏弱,故墊底 |
+
+`hreflang` 以外的啟發式一律要求兩端同 section(跨 section 太容易巧合)。
+配對分兩趟:先把 `hreflang` 配得起來的配完,啟發式才上場——同一趟內是貪婪、先到先得,
+一趟做完的話宣告關係會被字典序在前的推測關係搶走對象。
 無任何證據就不硬配(missing),最終決定權在人。
+
+**`hreflang_map.csv`**(2.3 起;原站宣告的 hreflang 全紀錄,**含不可用的**):
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| source_url | string | 宣告這則 hreflang 的頁(排序鍵,ordinal) |
+| hreflang | string | 屬性原值,不正規化(`en` / `zh-Hant` / `x-default`) |
+| target_url | string | 以來源頁 URL 解析後的絕對 URL |
+| target_translation_key | string | 目標頁的配對鍵;不在鏡像裡則留空 |
+| in_mirror | True/False | 目標頁同 host、且該路由真的抽到過一頁 |
+| reciprocal | True/False | 目標頁也宣告了一則指回來的 hreflang |
+| usable | True/False | 通過四道門,可用於配對 |
+
+排序:`source_url`、`hreflang`、`target_url` 字典序。恆輸出(沒宣告 hreflang 的站只有表頭)。
+
+四道門:不是 `x-default`、不指向自己、`in_mirror`、兩端都不是站級頁(`/` 開頭的 key)。
+**刻意不要求 `reciprocal`**——只有一半宣告在真實站上太常見,互指是可信度加分而非門檻;
+這一層只建議、不合併,守門標準本來就該比直接覆寫 `translation_key` 寬。
+
+這份檔案刻意保留不可用的宣告:它的用途是回答「這個站的 hreflang 能不能信」,
+只留可用的等於把品質問題藏起來。
 
 **`redirect_map.csv`**:`old_url, new_path, lang, translation_key`。
 `new_path` 由 LinkRewriter 的同一套路由規則自動填(與內文連結改寫一致,兩者不同步 = 301 打到破頁);
