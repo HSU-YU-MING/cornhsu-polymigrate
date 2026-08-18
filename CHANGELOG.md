@@ -14,20 +14,30 @@
   `examples/ibps-austin.yaml`)。它是全站唯一由作者**宣告**而非工具**推測**的配對關係,
   所以是唯一**不受「兩端須同 section」限制**的線索——中文在 `/ch/news/`、英文在 `/en/press/`
   是真的會發生,而那正是對稱路徑配不起來的原因之一。
-- **宣告不等於正確,所以要查證。** 會需要搬遷的老站正好就是 hreflang 壞掉的那些站
-  (整站 alternate 都指首頁、指到早就 404 的 URL、只有單向)。一則宣告要能用於配對,
-  必須不是 `x-default`、不指向自己、目標頁真的在鏡像裡(**含 host 要一致**——不少站的英文版在
-  `en.example.org`,只比路徑的話 `/ch/news/a.php` 會配到自己身上)、兩端都不是站級頁。
+- **宣告不等於正確,所以要查證。** 會需要搬遷的老站正好就是 hreflang 壞掉的那些站。
+  一則宣告要能用於配對,必須通過五道門,不可用的原因照實寫進 `reject_reason` 欄:
+  `not_in_mirror`(指到別的 host 或早就 404 的 URL——**含 host 要一致**,不少站的英文版在
+  `en.example.org`,只比路徑的話 `/ch/news/a.php` 會配到自己身上)、`x_default`、
+  `self_reference`、`site_level`、`ambiguous_target`。
+  **`ambiguous_target` 擋的是最常見的那一種**:同一段 `<link>` 被貼進全站模板,
+  於是每一頁中文都宣告英文首頁是自己的英文版。一頁不可能是三頁的翻譯,所以那些宣告
+  全部作廢——否則會產出「英文首頁 = 某篇中文新聞」這種建議,還掛著 hreflang 這個最權威的
+  證據標籤,比誠實回報 missing 糟得多。限定「同語言」是為了不誤傷多語站的合法情況
+  (中文版與日文版可以各自宣告同一個英文版)。
   **刻意不要求互指**:只有一半宣告在真實站上太常見,互指是可信度加分而非門檻,照實記在
   `reciprocal` 欄由人判斷——這一層只建議、不合併,守門標準本來就該比直接覆寫
   `translation_key` 寬。
 - **配對改成兩趟**:`hreflang` 配得起來的先配完,啟發式才上場。同一趟內是貪婪配對、
   先到先得,而「先到」只是 translation_key 的字典序——一趟做完的話,宣告的關係會被
   字典序剛好排在前面的共用相簿搶走對象,等於讓推測贏過宣告。
-- **`extract` 摘要多一行** `hreflang links : N declared, M usable for pairing`。
-  先讓人看得到數字,再決定要不要信它。
+- **`extract` 摘要多一行** `hreflang links : N declared, M passed validation (…)`。
+  措辭刻意是「通過查證」而不是「可用」:通過查證不等於配到了對象,更不等於有被用——
+  `pairing.fallback` 沒列 `hreflang` 的話,這兩個數字純粹是觀察,摘要會直接講出來。
 
 ### 升級注意
+
+- **輸出目錄會多一個檔案**(`hreflang_map.csv`)。有在比對輸出檔案清單的下游(golden 測之類)
+  要更新一次基準。
 
 - `pairing.fallback` 加上 `hreflang` 之後,原本靠 `shared_media` / `date` / `title_similarity`
   建議的那些配對,`pair_evidence` 可能多出 `hreflang=…` 一項,建議對象也可能改變

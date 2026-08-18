@@ -149,7 +149,12 @@ public static class Cli
             Console.WriteLine($"  flags            : {Format(report.FlagCounts)}");
             Console.WriteLine($"  single-locale    : {Format(report.OnlyInLocale)}");
             Console.WriteLine($"  suggested pairs  : {report.SuggestedPairs} (heuristic, review in content_inventory.csv)");
-            Console.WriteLine($"  hreflang links   : {report.HreflangDeclared} declared, {report.HreflangUsable} usable for pairing (hreflang_map.csv)");
+            // 「passed validation」不等於「配到了對象」,更不等於「有被用」——
+            // pairing.fallback 沒列 hreflang 的話,這兩個數字純粹是觀察,必須講出來
+            var hreflangUse = report.HreflangInFallback
+                ? "used for pairing"
+                : "NOT used — add 'hreflang' to pairing.fallback";
+            Console.WriteLine($"  hreflang links   : {report.HreflangDeclared} declared, {report.HreflangUsable} passed validation ({hreflangUse}; why not: hreflang_map.csv)");
             Console.WriteLine($"  media referenced : {report.MediaReferenced}");
             Console.WriteLine($"  missing images   : {report.MissingImages} (recorded in missing_images.csv, non-blocking)");
             Console.WriteLine($"  need-fetch media : {report.NeedFetchMedia} (recorded in need_fetch_media.txt)");

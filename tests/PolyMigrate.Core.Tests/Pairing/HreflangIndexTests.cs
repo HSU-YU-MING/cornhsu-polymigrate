@@ -18,11 +18,12 @@ public class HreflangIndexTests
     private static readonly LinkRewriter Links = new(Config.Site, Config.UrlPattern);
 
     /// <summary>用真的 LinkRewriter 算路由,與 pipeline 走同一套規則(否則測的是假的)。</summary>
-    private static HreflangLink Link(string sourcePath, string sourceKey, string hreflang, string targetUrl)
+    private static HreflangLink Link(string sourcePath, string sourceKey, string hreflang, string targetUrl,
+        string sourceLocale = "zh-Hant")
     {
         var sourceUrl = Base + sourcePath;
         return new HreflangLink(
-            sourceUrl, Links.RouteForPath(new Uri(sourceUrl).AbsolutePath), sourceKey,
+            sourceUrl, Links.RouteForPath(new Uri(sourceUrl).AbsolutePath), sourceKey, sourceLocale,
             hreflang, targetUrl, Links.RouteForUrl(targetUrl));
     }
 
@@ -72,6 +73,7 @@ public class HreflangIndexTests
         var row = Assert.Single(index.Rows);
         Assert.False(row.InMirror);
         Assert.False(row.Usable);
+        Assert.Equal(HreflangIndex.NotInMirror, row.RejectReason);
         Assert.Equal("", row.TargetKey);
         Assert.Empty(index.AlternatesByKey);
     }
@@ -102,7 +104,62 @@ public class HreflangIndexTests
         Assert.Equal(2, index.Declared);
         Assert.Equal(0, index.Usable);
         Assert.All(index.Rows, r => Assert.True(r.InMirror));   // 兩個目標都在鏡像裡,只是配對上零資訊
+        Assert.Equal(
+            [HreflangIndex.SelfReference, HreflangIndex.IsXDefault],
+            index.Rows.Select(r => r.RejectReason).Order(StringComparer.Ordinal));
         Assert.Empty(index.AlternatesByKey);
+    }
+
+    [Fact]
+    public void SameTargetClaimedByManySameLocalePages_IsRejectedEntirely()
+    {
+        // 舊站最常見的壞法:SEO 外包把同一段 <link> 複製進每一頁的模板,整站 alternate 都指首頁。
+        // 少了這道門,會產出「英文首頁 = 某篇中文新聞」這種建議,還掛著最權威的證據標籤。
+        var index = HreflangIndex.Build(
+        [
+            Link("/ch/news/a.php", "news/a", "en", $"{Base}/en/home.php"),
+            Link("/ch/news/b.php", "news/b", "en", $"{Base}/en/home.php"),
+            Link("/ch/news/c.php", "news/c", "en", $"{Base}/en/home.php"),
+        ],
+        Mirror(("/ch/news/a.php", "news/a"), ("/ch/news/b.php", "news/b"),
+               ("/ch/news/c.php", "news/c"), ("/en/home.php", "home")));
+
+        Assert.Equal(3, index.Declared);
+        Assert.Equal(0, index.Usable);
+        Assert.All(index.Rows, r => Assert.Equal(HreflangIndex.AmbiguousTarget, r.RejectReason));
+        Assert.Empty(index.AlternatesByKey);
+    }
+
+    [Fact]
+    public void SameTargetClaimedByDifferentLocales_IsLegitimate()
+    {
+        // 三語站的合法情況長得很像:中文版與日文版各自宣告同一個英文版。
+        // 門檻限定「同語言」就是為了不誤傷這種站。
+        var index = HreflangIndex.Build(
+        [
+            Link("/ch/news/a.php", "news/a", "en", $"{Base}/en/news/x.php"),
+            Link("/jp/news/b.php", "news/b", "en", $"{Base}/en/news/x.php", sourceLocale: "ja"),
+        ],
+        Mirror(("/ch/news/a.php", "news/a"), ("/jp/news/b.php", "news/b"), ("/en/news/x.php", "news/x")));
+
+        Assert.Equal(2, index.Usable);
+        Assert.Equal("en", index.AlternatesByKey["news/a"]["news/x"]);
+        Assert.Equal("en", index.AlternatesByKey["news/b"]["news/x"]);
+    }
+
+    [Fact]
+    public void SamePageDeclaringTheSameTargetTwice_IsNotAmbiguous()
+    {
+        // en 與 en-US 同時指向同一頁是合法寫法,來源只有一個 key,不該被當成多對一
+        var index = HreflangIndex.Build(
+        [
+            Link("/ch/news/a.php", "news/a", "en", $"{Base}/en/news/b.php"),
+            Link("/ch/news/a.php", "news/a", "en-US", $"{Base}/en/news/b.php"),
+        ],
+        Mirror(("/ch/news/a.php", "news/a"), ("/en/news/b.php", "news/b")));
+
+        Assert.Equal(2, index.Usable);
+        Assert.Equal("en", index.AlternatesByKey["news/a"]["news/b"]);
     }
 
     [Fact]

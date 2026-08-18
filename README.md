@@ -53,13 +53,22 @@ Languages are not limited to two: declare any number in `lang_map` and every out
 ### About `hreflang`
 
 Legacy sites are exactly the sites whose `hreflang` is missing or wrong — usually bolted on by
-an SEO contractor years later. So PolyMigrate treats it as strong evidence, not as gospel:
-a declaration is only used for pairing if it isn't `x-default`, doesn't point at the page
-itself, and resolves to a page that is actually in your mirror (same host included — plenty of
-sites put the English version on `en.example.org`, where a path-only comparison would make a
-page its own translation). Everything declared — including the unusable ones — is written to
-`hreflang_map.csv` with `in_mirror` / `reciprocal` / `usable` columns, because "can I trust
-this site's hreflang?" is a question you want answered with data before you rely on it.
+an SEO contractor years later. So PolyMigrate treats it as strong evidence, not as gospel.
+A declaration is only used for pairing if it:
+
+- isn't `x-default` (that's "where to go when nothing matches", not a language version),
+- doesn't point at the page itself,
+- resolves to a page actually in your mirror — **same host included**, since plenty of sites put
+  the English version on `en.example.org`, where a path-only comparison would make a page its
+  own translation,
+- and **isn't one of many same-language pages claiming the same target**. This is the classic
+  failure: one `<link>` pasted into the site-wide template, so every Chinese page declares the
+  English homepage as its English version. One page cannot be the translation of three others,
+  so all of those claims are dropped rather than turned into a confident-looking wrong pair.
+
+Everything declared — including the rejected ones — is written to `hreflang_map.csv` with
+`in_mirror` / `reciprocal` / `usable` and a `reject_reason` naming which rule it failed, because
+"can I trust this site's hreflang?" is a question you want answered with data, not a total.
 
 Pairs are still only ever *suggested*: `hreflang` raises the evidence quality, it does not
 switch the tool into merging pages on its own.

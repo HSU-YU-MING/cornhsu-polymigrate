@@ -36,6 +36,7 @@ internal sealed record HreflangLink(
     string SourceUrl,
     string SourceRoute,
     string SourceKey,
+    string SourceLocale,
     string Hreflang,
     string TargetUrl,
     string? TargetRoute);
@@ -100,7 +101,8 @@ internal sealed class InventoryAggregator(LinkRewriter links)
         var route = links.RouteForPath(new Uri(page.SourceUrl).AbsolutePath);
         RouteToKey[route] = page.TranslationKey;
         HreflangLinks.AddRange(extracted.Alternates.Select(a => new HreflangLink(
-            page.SourceUrl, route, page.TranslationKey, a.Hreflang, a.TargetUrl, links.RouteForUrl(a.TargetUrl))));
+            page.SourceUrl, route, page.TranslationKey, page.Locale,
+            a.Hreflang, a.TargetUrl, links.RouteForUrl(a.TargetUrl))));
 
         Redirects.Add(new Redirect(page.SourceUrl, route, page.Locale, page.TranslationKey));
     }

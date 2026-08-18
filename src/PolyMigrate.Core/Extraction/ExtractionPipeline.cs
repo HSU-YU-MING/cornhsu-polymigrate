@@ -43,8 +43,14 @@ public sealed class ExtractionReport
     /// <summary>原站宣告的 <c>hreflang</c> 則數(全部,含指到站外/自我指涉/x-default)。</summary>
     public int HreflangDeclared { get; init; }
 
-    /// <summary>其中查證後可用於配對的則數(見 <see cref="Pairing.HreflangIndex"/> 的四道門)。</summary>
+    /// <summary>其中通過全部門檻、可用於配對的則數(見 <see cref="Pairing.HreflangIndex"/>)。</summary>
     public int HreflangUsable { get; init; }
+
+    /// <summary>
+    /// <c>pairing.fallback</c> 有沒有列 <c>hreflang</c>。false = 上面兩個數字只是觀察,
+    /// 這次跑完全沒拿 hreflang 配過任何一頁——不講的話,看到 usable 有數字的人會以為它有作用。
+    /// </summary>
+    public bool HreflangInFallback { get; init; }
 
     /// <summary>路徑安全問題(§3.4):error = 拒寫並跳過該頁;warning = 照寫但記錄(如超長路徑)。</summary>
     public required List<PathIssue> PathIssues { get; init; }
@@ -326,12 +332,12 @@ public sealed class ExtractionPipeline(SiteConfig config)
         var rows = new List<IReadOnlyList<string>>
         {
             new[] { "source_url", "hreflang", "target_url", "target_translation_key",
-                "in_mirror", "reciprocal", "usable" },
+                "in_mirror", "reciprocal", "usable", "reject_reason" },
         };
         rows.AddRange(hreflang.Rows.Select(r => new[]
         {
             r.SourceUrl, r.Hreflang, r.TargetUrl, r.TargetKey,
-            r.InMirror.ToString(), r.Reciprocal.ToString(), r.Usable.ToString(),
+            r.InMirror.ToString(), r.Reciprocal.ToString(), r.Usable.ToString(), r.RejectReason,
         }));
         Csv.Write(Path.Combine(outDir, "hreflang_map.csv"), rows);
     }
@@ -382,7 +388,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
         Csv.Write(Path.Combine(outDir, "missing_images.csv"), rows);
     }
 
-    private static ExtractionReport BuildReport(
+    private ExtractionReport BuildReport(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
         int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs,
         List<PathIssue> pathIssues, List<string> staleOutputs, HreflangIndex hreflang)
@@ -416,6 +422,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             SuggestedPairs = suggestedPairs,
             HreflangDeclared = hreflang.Declared,
             HreflangUsable = hreflang.Usable,
+            HreflangInFallback = config.Pairing.Fallback.Contains(PairingSuggester.Hreflang),
             PathIssues = pathIssues,
             StaleOutputs = staleOutputs,
         };

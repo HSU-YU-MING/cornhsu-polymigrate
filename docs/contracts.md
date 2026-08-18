@@ -100,11 +100,25 @@ documents: [...]
 | target_translation_key | string | 目標頁的配對鍵;不在鏡像裡則留空 |
 | in_mirror | True/False | 目標頁同 host、且該路由真的抽到過一頁 |
 | reciprocal | True/False | 目標頁也宣告了一則指回來的 hreflang |
-| usable | True/False | 通過四道門,可用於配對 |
+| usable | True/False | 通過全部門檻,可用於配對(不代表一定產生了建議) |
+| reject_reason | enum | 卡在哪一條;`usable` 為 True 時留空 |
 
 排序:`source_url`、`hreflang`、`target_url` 字典序。恆輸出(沒宣告 hreflang 的站只有表頭)。
 
-四道門:不是 `x-default`、不指向自己、`in_mirror`、兩端都不是站級頁(`/` 開頭的 key)。
+`reject_reason` 的值(即全部門檻,依判定順序):
+
+| 值 | 意思 |
+|---|---|
+| `not_in_mirror` | 指到別的 host,或指到原站早就下架的 URL |
+| `x_default` | `x-default` 是「都不符合時去哪」,不是某個語言版本 |
+| `self_reference` | 指向自己。標準做法,但配對上零資訊 |
+| `site_level` | 兩端任一是站級頁(`/` 開頭的 key,如語言選擇頁) |
+| `ambiguous_target` | 同一個目標頁被**多個同語言**的來源頁宣告——一頁不可能是三頁的翻譯 |
+
+`ambiguous_target` 擋的是最常見的壞法:同一段 `<link>` 被貼進全站模板,於是整站的
+alternate 都指向首頁。限定「同語言」是因為多語站的合法情況長得很像——中文版與日文版
+可以各自宣告同一個英文版。
+
 **刻意不要求 `reciprocal`**——只有一半宣告在真實站上太常見,互指是可信度加分而非門檻;
 這一層只建議、不合併,守門標準本來就該比直接覆寫 `translation_key` 寬。
 
