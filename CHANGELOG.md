@@ -8,7 +8,7 @@
 `pairing.fallback` 沒列 `hreflang` 的 config 行為與 2.2 逐位元相同。
 
 - **新增輸出 `hreflang_map.csv`**:原站每一則 `<link rel="alternate" hreflang>` 的全紀錄,
-  附 `in_mirror` / `reciprocal` / `usable` 三欄。**含不可用的宣告**——這份檔案的用途是回答
+  附 `in_mirror` / `reciprocal` / `usable` / `reject_reason` 四欄。**含不可用的宣告**——這份檔案的用途是回答
   「這個站的 hreflang 能不能信」,只留可用的等於把品質問題藏起來。恆輸出,沒宣告的站只有表頭。
 - **新增配對線索 `hreflang`**,可放進 `pairing.fallback`(建議放第一位,見
   `examples/ibps-austin.yaml`)。它是全站唯一由作者**宣告**而非工具**推測**的配對關係,
@@ -41,7 +41,6 @@
 - **`extract` 摘要多一行** `hreflang links : N declared, M passed validation (…)`。
   措辭刻意是「通過查證」而不是「可用」:通過查證不等於配到了對象,更不等於有被用——
   `pairing.fallback` 沒列 `hreflang` 的話,這兩個數字純粹是觀察,摘要會直接講出來。
-
 - **`reject_reason` 明定為開放集合**(見 `docs/contracts.md`):未來新增門檻會新增值,
   消費端須容忍沒見過的值。先講明,以後新增門檻才不必動 `config_version`。
 - **新增 `docs/hreflang_量測與決策.md`**:為什麼只拿 hreflang「建議」而不直接配,
