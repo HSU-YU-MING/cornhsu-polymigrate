@@ -166,6 +166,13 @@ dotnet test
 dotnet run --project src/PolyMigrate.Cli -- --help
 ```
 
+## 另見
+
+[**多語言網站搬遷最容易搬丟的東西**](https://cornhsu.com/articles/multilingual-site-migration-pairing)
+—— 講的是整個品類而不是這個工具:五種配對訊號的優先序;為什麼「先讀 `hreflang`」
+在真實舊站上常常撲空(實測一個站:528 頁、**0** 則宣告、sitemap 404);
+一則 hreflang 宣告要過哪五道門才可用;以及為什麼不能用 URL 字串相似度配語言版本。
+
 授權:[MIT](LICENSE)。依賴全為 MIT/BSD/Apache-2.0(影像處理用 **Magick.NET**;
 ImageSharp 因 4.x 起建置即要求授權金鑰而棄用)。
 另見[第三方授權聲明](THIRD-PARTY-NOTICES.md)。

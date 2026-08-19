@@ -3,7 +3,15 @@
 [![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![## See also
+
+[**多語言網站搬遷最容易搬丟的東西**](https://cornhsu.com/articles/multilingual-site-migration-pairing)
+(in Traditional Chinese) — background on the category rather than this tool: the five pairing
+signals in priority order, why "just read `hreflang`" often misses on real legacy sites
+(measured on one: 528 pages, **0** declarations, sitemap 404), the five gates a declaration has to
+pass before it is usable at all, and why URL string similarity is the wrong tool for this job.
+
+License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
