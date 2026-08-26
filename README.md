@@ -3,15 +3,7 @@
 [![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
-[![## See also
-
-[**多語言網站搬遷最容易搬丟的東西**](https://cornhsu.com/articles/multilingual-site-migration-pairing)
-(in Traditional Chinese) — background on the category rather than this tool: the five pairing
-signals in priority order, why "just read `hreflang`" often misses on real legacy sites
-(measured on one: 528 pages, **0** declarations, sitemap 404), the five gates a declaration has to
-pass before it is usable at all, and why URL string similarity is the wrong tool for this job.
-
-License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
@@ -135,7 +127,7 @@ dotnet tool install -g Cornhsu.PolyMigrate  # .NET
 ```
 
 > The npm build ships a self-contained native binary and only downloads the one
-> matching your platform (win32-x64 / linux-x64 / darwin-x64 / darwin-arm64).
+> matching your platform (win32 / linux / darwin, each in x64 and arm64).
 > Migrating a site is usually a one-off job — installing a whole SDK for a single
 > run is friction most people won't accept, so the tool meets you where you are.
 
@@ -213,6 +205,14 @@ dotnet build
 dotnet test
 dotnet run --project src/PolyMigrate.Cli -- --help
 ```
+
+## See also
+
+[**多語言網站搬遷最容易搬丟的東西**](https://cornhsu.com/articles/multilingual-site-migration-pairing)
+(in Traditional Chinese) — background on the category rather than this tool: the five pairing
+signals in priority order, why "just read `hreflang`" often misses on real legacy sites
+(measured on one: 528 pages, **0** declarations, sitemap 404), the five gates a declaration has to
+pass before it is usable at all, and why URL string similarity is the wrong tool for this job.
 
 License: [MIT](LICENSE). All dependencies are MIT/BSD/Apache-2.0
 (imaging via **Magick.NET**; ImageSharp was dropped when its 4.x line began requiring a

@@ -19,9 +19,14 @@ const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
 // 平台 → 子套件名 / 執行檔名
+// ⚠ 這份清單要與 npm/prepare.mjs 的 TARGETS 一致。
+// 兩邊漂開的話症狀很隱蔽:平台包會被 npm 正確裝好,啟動時卻說「沒有預先建置版本」。
+// (2.1.0 加了 win32-arm64 / linux-arm64,但漏改這裡,2.1.0~2.3.0 的 arm64 使用者都中。)
 const TARGETS = {
   "win32 x64": { pkg: "@cornhsu/polymigrate-win32-x64", bin: "polymigrate.exe" },
+  "win32 arm64": { pkg: "@cornhsu/polymigrate-win32-arm64", bin: "polymigrate.exe" },
   "linux x64": { pkg: "@cornhsu/polymigrate-linux-x64", bin: "polymigrate" },
+  "linux arm64": { pkg: "@cornhsu/polymigrate-linux-arm64", bin: "polymigrate" },
   "darwin x64": { pkg: "@cornhsu/polymigrate-darwin-x64", bin: "polymigrate" },
   "darwin arm64": { pkg: "@cornhsu/polymigrate-darwin-arm64", bin: "polymigrate" },
 };
