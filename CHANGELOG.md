@@ -2,6 +2,39 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 2.3.1
+
+**兩件已經壞了三個版本、但沒有人回報的事。** 對外契約與 exit code 不變。
+
+- **修正:npm 通路在 Windows / Linux arm64 上完全裝不起來**(影響 2.1.0～2.3.0)。
+  `bin/polymigrate.js` 的平台對照表停在四個平台,缺 `win32 arm64` 與 `linux arm64`——
+  而 2.1.0 明明已經在 `release.yml`、`npm/prepare.mjs` 與主套件的 `optionalDependencies`
+  三處都補上了 arm64。**症狀特別隱蔽**:npm 依 `os`/`cpu` 正確下載了對應的平台包、
+  安裝完全成功,但啟動腳本查不到自己的平台鍵,回一句「沒有預先建置版本」就 exit 1——
+  看起來像沒發布那個平台,實際上檔案就躺在 `node_modules` 裡。
+  根因是**同一份平台清單散在四個地方**,加平台時漏掉了最後一處;現在對照表旁邊留了
+  「要與 `prepare.mjs` 一致」的警語,`CLAUDE.md` 也記下了那四個地方的完整清單。
+- **修正:README 開頭的 License 徽章跑版**。`8244632` 本意是在文末加一節「See also」,
+  結果整段被貼進了徽章的 alt text 裡,於是徽章不呈現、而文末那一節根本不存在
+  (中文版的「另見」是好的,只有英文版壞)。**這份 README 隨 NuGet 套件
+  (`PackageReadmeFile`)與 npm 主套件一起出貨**,所以壞掉的版面是直接掛在
+  nuget.org 與 npmjs 的套件頁上給人看的。徽章已還原,See also 補到 License 段之前
+  (與中文版同位置),安裝說明的平台清單也從四個更正為六個。
+
+### 內部
+
+- **`NuGet/login` 改以 commit SHA 釘選**(`8d19675…` = v1.2.0)。它是發佈鏈上唯一
+  非 `actions/*` 官方命名空間、又直接經手憑證的第三方 action(拿 OIDC token 去
+  nuget.org 換臨時 API key)。tag 可以被上游挪動到任意 commit,SHA 不行——
+  四個姊妹套件的發佈完整性原本都繫在同一個 `v1` tag 上。**本版是第一次實際走過
+  這條釘選後的路徑。**
+- **刪除一次性的 `npm-backfill.yml`**。它是 2.1.0 補發時的產物,檔頭自己就寫著
+  「補完即可刪除」。刪除前核對過七個 npm 套件的 2.1.0 全數在線,且 2.2.0～2.3.0
+  都由 `release.yml` 的 OIDC 信任發布正常發出——token 通道不再需要。repo 的
+  secret 清單同時確認為空,發佈路徑收斂成 OIDC 一條。
+- 新增 `CLAUDE.md`:開發慣例、npm 發佈線的兩種認證互卡、對外契約的邊界、
+  以及從 git log 整理出的已知教訓。
+
 ## 2.3.0
 
 **開始讀原站自己宣告的 `hreflang`。** 對外契約只增不改:既有欄位、exit code、CLI 介面全部不變,
