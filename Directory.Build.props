@@ -6,8 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
-    <!-- 版本的唯一真相源是 git tag。release.yml 與 npm-backfill.yml 一律以
-         -p:Version= 覆寫這一格,所以這個值只會出現在「從原始碼建置」的產物上。
+    <!-- 版本的唯一真相源是 git tag。release.yml 一律以 -p:Version= 覆寫這一格,
+         所以這個值只會出現在「從原始碼建置」的產物上。
 
          固定寫 0.0.0-dev,三種寫法裡只有它是對的:
            寫死真版本號 → 一定會跟 tag 漂開,而且發版時沒人會記得回來改
