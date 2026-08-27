@@ -4,7 +4,7 @@
 //   version     發布版號(取自 git tag,例:1.1.0)
 //   publishRoot 內含各 RID 子目錄的資料夾,例:artifacts/publish/win-x64/…
 //
-// 產出:npm/dist/ 底下五個可直接 `npm publish` 的資料夾
+// 產出:npm/dist/ 底下七個可直接 `npm publish` 的資料夾(6 個平台包 + 1 個主套件)
 //   cornhsu-polymigrate/         主套件(啟動腳本)
 //   polymigrate-win32-x64/ 等    平台套件(自帶執行環境的 .NET 產物)
 //

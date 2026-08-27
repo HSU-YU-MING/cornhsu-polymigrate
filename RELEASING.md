@@ -52,8 +52,9 @@ dotnet tool uninstall --global Cornhsu.PolyMigrate
 
 同一條 `release.yml` 在 NuGet job 成功後跑 `npm` job(見該檔),不需另外操作。機制:
 
-- 對四個 RID(win-x64 / linux-x64 / osx-x64 / osx-arm64)`dotnet publish --self-contained`,
-  由 `npm/prepare.mjs` 組成主套件 `cornhsu-polymigrate`(只含啟動腳本)+ 四個平台包
+- 對六個 RID(win-x64 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64)
+  `dotnet publish --self-contained`,
+  由 `npm/prepare.mjs` 組成主套件 `cornhsu-polymigrate`(只含啟動腳本)+ 六個平台包
   (`@cornhsu/polymigrate-*`,掛 `optionalDependencies`,npm 依 os/cpu 只下載當前平台那份)。
 - **只有 CLI 上 npm**;`Cornhsu.PolyMigrate.Core` 是給 .NET 開發者的函式庫,受眾在 NuGet。
 - 認證自動切換:有 `NPM_TOKEN` secret → token(首次發布只能這樣,信任發布需先有套件才設定得了);
