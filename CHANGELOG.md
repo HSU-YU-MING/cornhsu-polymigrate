@@ -73,6 +73,12 @@
   原本以目前文化格式化:th-TH 寫出佛曆(`date=2569-02-14`)、fa-IR 寫出波斯曆、de-DE 寫出 `0,84`
   (CSV 欄位因此被加引號),違反決定性輸出,也與契約範例的 ISO 日期不符。現在一律 invariant。
   配對決策本身不受影響;en-US 等文化的輸出不變。
+- **修正(patch):Windows 上 Markdown 的 frontmatter 是 CRLF,同一個檔混用兩種行尾。** YamlDotNet 預設用
+  `Environment.NewLine`,所以 Windows 上 frontmatter 各行是 `\r\n`、圍欄與內文卻是 `\n`,兩平台產出的位元組不同
+  (YAML 解析器兩者都吃,不會壞,但跨平台比對與 git diff 會有雜訊)。現在整檔一律 `\n`。
+  golden 比對原本把所有 `\r` 刪掉再比,所以三平台 CI 都沒抓到——Markdown 現在逐字比對,
+  基準也重產過(只少了 `\r`)。**升級注意:Windows 上重跑 `extract` 後,每一個 `.md` 的位元組都會改變
+  (只有行尾),第一次 commit 會是整片的行尾 diff。**
 
 ## 2.3.1
 

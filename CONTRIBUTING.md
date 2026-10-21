@@ -24,9 +24,10 @@ dotnet run --project src/PolyMigrate.Cli -- --help
   (`tests/fixtures/site`) and diff every output file (except `verify_report.csv` and
   `.polymigrate/`) against committed baselines in `tests/fixtures/golden` — this is how
   output-contract stability is guarded. The diff compares *text*: it reads each file with the
-  BOM dropped and strips every `\r`, so BOMs and line endings are not checked there; the byte
-  format (CSV = UTF-8 with BOM + CRLF, Markdown without BOM) is pinned by
-  `Extraction/OutputBytesTests.cs`.
+  BOM dropped and, for everything except Markdown, strips every `\r` (CSVs are CRLF by contract),
+  so BOMs and CSV line endings are not checked there. Markdown is compared as-is because its
+  contract is LF-only on every platform. The byte format (CSV = UTF-8 with BOM + CRLF, Markdown
+  without BOM and LF-only) is pinned by `Extraction/OutputBytesTests.cs`.
 
 ### Updating the golden baselines
 

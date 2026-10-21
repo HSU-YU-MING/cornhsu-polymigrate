@@ -147,6 +147,9 @@ public class OutputBytesTests : IDisposable
 
             // 第一個位元組就必須是圍欄:前面多一個 BOM,Hugo/Eleventy 等就認不出 frontmatter
             Assert.True(bytes.AsSpan().StartsWith("---\n"u8), $"{name}:開頭不是 '---\\n'(有 BOM 或行尾不對)");
+            // 整檔一律 LF,frontmatter 內部也是:原本 YamlDotNet 用 Environment.NewLine,Windows 上
+            // 同一個檔混用 CRLF(frontmatter 各行)與 LF(圍欄與內文),兩平台產出的位元組不同(§3.10)
+            Assert.False(bytes.AsSpan().Contains((byte)'\r'), $"{name}:含 CR(frontmatter 行尾隨平台)");
             var text = strictUtf8.GetString(bytes);
 
             var close = text.IndexOf("\n---\n\n", 3, StringComparison.Ordinal);

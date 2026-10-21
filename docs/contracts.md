@@ -11,10 +11,9 @@
 - **CSV 公式注入防護**(1.1.2 起):交付用 CSV 的欄位若以 `=` `+` `-` `@`、tab 或 CR 開頭,寫出時會前置一個單引號 `'`
   (Excel 才不會把它當公式執行),所以這類欄位讀回來比原始資料多一個前綴字元。內部快取 `.polymigrate/media_sha1_cache.csv` 不加。
 - Markdown(`content/**/*.md`)UTF-8 **無 BOM**;結構為 `---\n` + frontmatter + `---\n\n` + 內文 + `\n`,
-  `---` 圍欄與內文以 `\n` 換行。內文非空時檔尾是單一 `\n`;內文為空時(正文節點是空的,或 `images_to_gallery: true`
-  把只有照片的正文清空)檔尾即為 `---\n\n\n`。
-  frontmatter 內部各行的換行目前隨執行平台(Windows 為 `\r\n`、Linux/macOS 為 `\n`);YAML 解析器兩者都吃,
-  但跨平台逐位元組比對前要先正規化行尾。
+  整檔一律以 `\n` 換行(`---` 圍欄、frontmatter 內部各行、內文),與執行平台無關。內文非空時檔尾是單一 `\n`;
+  內文為空時(正文節點是空的,或 `images_to_gallery: true` 把只有照片的正文清空)檔尾即為 `---\n\n\n`。
+  (2.3.1 以前 frontmatter 內部各行隨執行平台:Windows 上是 `\r\n`。)
 - 路徑一律用 `/` 分隔、相對於各自根目錄。
 - 語言一律用 BCP-47 標準 locale(§3.3)。frontmatter `lang` 與清單 lang 欄輸出 locale;
   Markdown 輸出目錄與站內連結改寫仍沿用來源站 URL 前綴(= 新站路由),此為每站的路由決策,後續可 config 化。
