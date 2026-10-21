@@ -90,6 +90,9 @@
   一個請求都不發;檢查不留痕跡(既有檔內容與修改時間不變,原本沒有的檔不會被建成空檔)。exit code 仍是 2。
   (中斷時把已命中的部分寫出**刻意不做**:那會用半份清單蓋掉上一次完整的清單;命中的 slug 已即時印在
   stdout 的 `hit …` 行。)
+- **修正(patch):`content/` 不存在時,`verify` 的摘要印出一個從未寫出的報告路徑,媒體列也印 `media refs : 0`。**
+  exit 2 與 `[error] no_content` 明細本來就對,只有摘要誤導。現在印 `report : (not written)` 與
+  `media checks : skipped (content directory not found)`。
 
 ## 2.3.1
 

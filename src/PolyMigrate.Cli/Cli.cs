@@ -224,16 +224,22 @@ public static class Cli
             var report = new PolyMigrate.Core.Verify.OutputVerifier()
                 .Run(outDir, mediaDir, mediaPrefix, allowUnlinked, ct);
 
+            // content/ 不存在時巡檢一開始就停:報告檔不寫、媒體也沒檢查——摘要要照實講,
+            // 不能印一個從未寫出的報告路徑,或「media refs : 0」這種看起來像檢查過、零筆的數字
+            var noContent = report.Issues.Any(i => i.Kind == "no_content");
             Console.WriteLine(new string('=', 50));
             Console.WriteLine("Verify done.");
             Console.WriteLine($"  pages checked   : {report.PagesChecked}");
             Console.WriteLine($"  links checked   : {report.LinksChecked}");
-            Console.WriteLine(report.MediaChecksSkipped
-                ? "  media checks    : skipped (media directory not found)"
+            Console.WriteLine(
+                noContent ? "  media checks    : skipped (content directory not found)"
+                : report.MediaChecksSkipped ? "  media checks    : skipped (media directory not found)"
                 : $"  media refs      : {report.MediaChecked}");
             Console.WriteLine($"  errors          : {report.Errors}");
             Console.WriteLine($"  warnings        : {report.Warnings}");
-            Console.WriteLine($"  report          : {Path.Combine(outDir, "verify_report.csv")}");
+            Console.WriteLine(noContent
+                ? "  report          : (not written)"
+                : $"  report          : {Path.Combine(outDir, "verify_report.csv")}");
             Console.WriteLine(new string('=', 50));
             foreach (var issue in report.Issues.Where(i => i.Severity == Severity.Error).Take(20))
             {

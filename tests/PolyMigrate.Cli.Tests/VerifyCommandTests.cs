@@ -52,6 +52,11 @@ public class VerifyCommandTests : CliTestBase
         Assert.Equal(2, r.Exit);
         Assert.Contains("  errors          : 1\n", r.Out);
         Assert.Contains($"  [error] : no_content content directory not found: {PathOf("out/content")}\n", r.Out);
+        // 摘要不可以誤導:原本照印一個從未寫出的報告路徑,媒體列也印「media refs : 0」(像是檢查過、零筆)
+        Assert.Contains("  media checks    : skipped (content directory not found)\n", r.Out);
+        Assert.Contains("  report          : (not written)\n", r.Out);
+        Assert.DoesNotContain("verify_report.csv", r.Out);
+        Assert.False(File.Exists(PathOf("out/verify_report.csv")));
     }
 
     [Fact]
