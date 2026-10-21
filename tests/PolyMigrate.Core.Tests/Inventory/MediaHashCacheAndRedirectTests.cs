@@ -66,6 +66,27 @@ public class MediaHashCacheAndRedirectTests : IDisposable
     }
 
     [Fact]
+    public void SameSizeEdit_WithNewMtime_StillInvalidatesTheCache()
+    {
+        // 快取鍵是(路徑, 大小, mtime):重新存檔的圖常常大小不變(同尺寸重新壓縮、改一個 byte),
+        // 只看大小的話 manifest 的 sha1 會永遠停在舊值。mtime 明確指定,不靠兩次寫檔之間的時間差
+        AddRaw("ch/news/a.php.html", "<img src=\"/img/x.jpg\">");
+        AddMedia("img/x.jpg", "v1");
+        var media = Path.Combine(MediaDir, "img", "x.jpg");
+        File.SetLastWriteTimeUtc(media, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        Run();
+
+        File.WriteAllText(media, "v2");   // 同樣 2 bytes
+        File.SetLastWriteTimeUtc(media, new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        Run();
+
+        // SHA1("v2"),而不是快取裡 SHA1("v1") 的 5a6df720…
+        var manifest = File.ReadAllText(Path.Combine(_root, "media_manifest.csv"));
+        Assert.Contains(",a1047eab1035d58682a53557e0b2a75edbfd15fd,2\r\n", manifest);
+        Assert.DoesNotContain("5a6df720540c20d95d530d3fd6885511223d5d20", manifest);
+    }
+
+    [Fact]
     public void CorruptCacheRows_Ignored_RealHashRecomputed()
     {
         // 快取是內部加速檔:被手改壞、被截斷都只能讓它變慢,不能讓 manifest 寫出錯的 sha1

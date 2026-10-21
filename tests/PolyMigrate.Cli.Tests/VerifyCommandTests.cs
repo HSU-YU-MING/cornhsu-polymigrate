@@ -105,6 +105,23 @@ public class VerifyCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task WarningsOtherThanUnlinked_GetNoUnlinkedHint_AndNoErrorLines()
+    {
+        // 「去選單加連結、或用 --allow-unlinked」的提示只屬於 unlinked_page:原站壞圖這類 warning
+        // 跟選單無關,印出來只會誤導。warning 也只出現在 [warning] 明細,不可混進 [error]
+        var outDir = WriteSite("![已知壞圖](/media/gone.jpg)");
+        Directory.CreateDirectory(PathOf("out/media"));
+        Write("out/missing_images.csv", "source_page,missing_image\r\nx,/media/gone.jpg\r\n");
+
+        var r = await Run("verify", outDir);
+
+        Assert.Equal(1, r.Exit);
+        Assert.Contains("  [warning] index.md: known_missing_media /media/gone.jpg\n", r.Out);
+        Assert.DoesNotContain("[error]", r.Out);
+        Assert.DoesNotContain("unlinked pages can only be reached", r.Out);
+    }
+
+    [Fact]
     public async Task ReportPath_IsPrinted_AndTheFileExists()
     {
         var outDir = WriteSite("沒有引用");
