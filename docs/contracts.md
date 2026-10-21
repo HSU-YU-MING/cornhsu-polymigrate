@@ -156,8 +156,12 @@ alternate 都指向首頁。限定「同語言」是因為多語站的合法情�
 不安全路徑被拒寫的頁不出現。恆輸出。
 另出兩種可直接部署的 301 格式(old==new 略過防迴圈,依 old path 排序):
 
-- `redirects.nginx.conf` — 每列 `location = {old} { return 301 {new}; }`
-- `_redirects` — Netlify 格式 `{old} {new} 301`
+- `redirects.nginx.conf` — 每列 `location = {old} { return 301 {new}; }`。
+  `{old}` 寫**解碼後**的路徑(nginx 的 location 比對的是 `%XX` 解碼後的 URI,設定檔字串照字面;
+  寫編碼形式的話中日韓或含空白的舊網址永遠對不上);`{new}` 維持單次編碼(Location 標頭應為 ASCII),
+  其中的 `$` 另編成 `%24`(`return` 會展開變數)。兩者含空白、`; { } " ' \ # $` 或控制字元時才加雙引號,
+  引號內的 `"` 與 `\` 以反斜線跳脫。排序依寫出來的(解碼後的)路徑。
+- `_redirects` — Netlify 格式 `{old} {new} 301`(兩者皆為單次編碼的路徑)
 
 兩者皆 UTF-8 無 BOM、`\n` 行尾、含結尾換行。
 

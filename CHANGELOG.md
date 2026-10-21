@@ -38,6 +38,15 @@
   註明 `PolyMigrate did not run.`,並說明這個 exit code 1 來自啟動腳本、不是 PolyMigrate 的 warning。
   **exit code 仍是 1**——它和契約的「1 = 只有 warning」撞號,依「0/1 放行」的 CI 會把「工具沒跑」
   當成通過;改成 2 屬既有情境的 exit code 改變,留給維護者裁定。
+- **修正(patch):`redirects.nginx.conf` 對中日韓或含空白的舊網址寫出永遠不會命中的 `location`。**
+  舊路徑原本寫成百分號編碼(`location = /ch/news/%E7%A6%AA%E4%BF%AE.php`),但 nginx 的 location
+  比對的是 `%XX` **解碼後**的 URI、設定檔字串照字面(ngx_http_core_module 文件「location」段),
+  所以這些 301 永遠不會命中,舊網址直接 404;含空白的路徑更會讓 `nginx -t` 整份設定載入失敗。
+  現在 `{old}` 寫解碼後的路徑(`location = /ch/news/禪修.php`),含空白或 `; { } " ' \ # $` 時加雙引號並跳脫;
+  `return 301` 的目標維持編碼(另把 `$` 編成 `%24`,避免被當成 nginx 變數)。排序改依寫出來的
+  (解碼後的)路徑。格式 `location = {old} { return 301 {new}; }` 不變,純 ASCII 的路徑逐位元組相同。
+  **升級注意:重跑 `extract` 後,含非 ASCII 或特殊字元的列會改變寫法與順序,部署前請重新 `nginx -t`。**
+  `_redirects`(Netlify)不變——Netlify 怎麼比對編碼路徑沒有查到文件,未經實測前不動。
 
 ## 2.3.1
 

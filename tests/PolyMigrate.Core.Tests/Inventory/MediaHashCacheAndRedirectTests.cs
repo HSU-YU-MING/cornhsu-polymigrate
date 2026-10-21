@@ -142,6 +142,58 @@ public class MediaHashCacheAndRedirectTests : IDisposable
     }
 
     [Fact]
+    public void NginxExport_NonAsciiOldPath_IsWrittenDecoded_SoTheLocationCanMatch()
+    {
+        // nginx 文件(ngx_http_core_module「location」):比對的對象是正規化後的 URI——
+        // 先把 %XX 解碼、解析 . 與 ..、合併斜線;設定檔裡的 location 字串則照字面。
+        // 寫成 location = /ch/news/%E7%A6%AA… 的話,只有「解碼後字面就是 %E7…」的請求才對得上,
+        // 也就是永遠不會命中:舊網址不 301、直接 404,而這正是 i18n-first 的旗艦情境。
+        // return 的目標維持編碼(Location 標頭應為 ASCII);_redirects 未經查證,不動
+        AddRaw("ch/news/禪修.php.html", "b");
+
+        Run();
+
+        Assert.Equal("location = /ch/news/禪修.php { return 301 /ch/news/%E7%A6%AA%E4%BF%AE; }\n",
+            File.ReadAllText(Path.Combine(_root, "redirects.nginx.conf")));
+        Assert.Equal("/ch/news/%E7%A6%AA%E4%BF%AE.php /ch/news/%E7%A6%AA%E4%BF%AE 301\n",
+            File.ReadAllText(Path.Combine(_root, "_redirects")));
+    }
+
+    [Theory]
+    // 空白:不加引號的話 nginx -t 直接失敗(整份設定載入不了,比 404 更糟)
+    [InlineData("/ch/news/a%20b.php", "/ch/news/a%20b", "location = \"/ch/news/a b.php\" { return 301 /ch/news/a%20b; }")]
+    // ; { } 在不加引號時會結束 token;引號與反斜線在引號內要跳脫
+    [InlineData("/ch/a;b.php", "/ch/a;b", "location = \"/ch/a;b.php\" { return 301 \"/ch/a;b\"; }")]
+    [InlineData("/ch/%7Bx%7D.php", "/ch/%7Bx%7D", "location = \"/ch/{x}.php\" { return 301 /ch/%7Bx%7D; }")]
+    [InlineData("/ch/%22q%22%5C.php", "/ch/%22q%22%5C", "location = \"/ch/\\\"q\\\"\\\\.php\" { return 301 /ch/%22q%22%5C; }")]
+    // return 的值會展開 $變數(引號內也會):目標裡的 $ 一律編碼
+    [InlineData("/ch/%24a.php", "/ch/$a", "location = \"/ch/$a.php\" { return 301 /ch/%24a; }")]
+    // 解碼出 # 開頭以外的 # 不是註解,但保守起見一樣加引號
+    [InlineData("/ch/c%23.php", "/ch/c%23", "location = \"/ch/c#.php\" { return 301 /ch/c%23; }")]
+    public void NginxExport_QuotesAndEscapes_WhatNginxWouldOtherwiseMisparse(string oldPath, string newPath, string line)
+    {
+        var rendered = new PolyMigrate.Core.Redirects.NginxRedirectExporter().Render([(oldPath, newPath)]);
+
+        Assert.Equal(line + "\n", rendered);
+    }
+
+    [Fact]
+    public void NginxExport_SortedByTheDecodedPathItWrites()
+    {
+        // contracts.md「依 old path 排序」:nginx 寫的是解碼後的路徑,排序就依寫出來的那個字串
+        var rendered = new PolyMigrate.Core.Redirects.NginxRedirectExporter().Render(
+        [
+            ("/ch/news/%E7%A6%AA%E4%BF%AE.php", "/ch/news/%E7%A6%AA%E4%BF%AE"),
+            ("/ch/news/zz.php", "/ch/news/zz"),
+        ]);
+
+        Assert.Equal(
+            "location = /ch/news/zz.php { return 301 /ch/news/zz; }\n"
+            + "location = /ch/news/禪修.php { return 301 /ch/news/%E7%A6%AA%E4%BF%AE; }\n",
+            rendered);
+    }
+
+    [Fact]
     public void RedirectExports_SortedByOldPath_SelfRedirectsDropped()
     {
         // contracts.md:兩份 301 設定檔「old==new 略過防迴圈,依 old path 排序」。
