@@ -107,6 +107,9 @@
   public、已經出貨,屬於公開面;這段文件會打包進 `PolyMigrate.Core.xml` 出現在 IntelliSense,原本的說法
   會讓人以為它們可以隨時被換掉。現在寫成「較底層的進階用途、同樣受 semver 約束」,並點明探測/抓回孤兒頁
   目前沒有 facade 入口。(隨下一版 nupkg 更新。)
+- **文件(none):README 的相對連結改成絕對網址**(`622edd4`)。README.md 隨 NuGet 與 npm 主套件出貨,
+  nuget.org 會把相對連結清成 `href=""`,v2.3.1 套件頁上的 License 徽章、CHANGELOG、THIRD-PARTY-NOTICES、
+  繁體中文說明、hreflang 文件、examples 都是死連結。新增測試擋住之後再貼回相對路徑。
 
 ## 2.3.1
 
