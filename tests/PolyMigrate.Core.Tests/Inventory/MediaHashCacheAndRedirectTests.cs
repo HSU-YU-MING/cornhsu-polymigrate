@@ -66,6 +66,42 @@ public class MediaHashCacheAndRedirectTests : IDisposable
     }
 
     [Fact]
+    public void CorruptCacheRows_Ignored_RealHashRecomputed()
+    {
+        // 快取是內部加速檔:被手改壞、被截斷都只能讓它變慢,不能讓 manifest 寫出錯的 sha1
+        AddRaw("ch/news/a.php.html", "<img src=\"/img/x.jpg\">");
+        AddMedia("img/x.jpg", "v1");
+        Directory.CreateDirectory(Path.GetDirectoryName(CachePath)!);
+        File.WriteAllText(CachePath,
+            "path,size,mtime_ticks,sha1\r\nimg/x.jpg,not-a-number,0,bogus\r\nimg/x.jpg,2\r\n");
+
+        Run();
+
+        var manifest = File.ReadAllText(Path.Combine(_root, "media_manifest.csv"));
+        Assert.DoesNotContain("bogus", manifest);
+        // SHA1("v1") 的小寫十六進位,與 manifest 的 sha1 欄一致
+        Assert.Contains(",5a6df720540c20d95d530d3fd6885511223d5d20,2\r\n", manifest);
+    }
+
+    [Fact]
+    public void ManifestRow_HasEveryColumnInContractOrder()
+    {
+        // media_manifest.csv 的欄序(local_path, original_url, referenced_by, alt, sha1, bytes);
+        // 引用到但磁碟上不存在的媒體不進 manifest(它記在 missing_images.csv)
+        AddRaw("ch/news/a.php.html", "<img src=\"/img/x.jpg\" alt=\"圖\"><img src=\"/img/gone.jpg\">");
+        AddMedia("img/x.jpg", "12345");
+
+        Run();
+
+        var rows = File.ReadAllText(Path.Combine(_root, "media_manifest.csv")).Split("\r\n");
+        Assert.Equal("local_path,original_url,referenced_by,alt,sha1,bytes", rows[0]);
+        Assert.Equal(
+            "media/img/x.jpg,https://example.org/img/x.jpg,https://example.org/ch/news/a.php,圖,8cb2237d0679ca88db6464eac60da96345513964,5",
+            rows[1]);
+        Assert.Equal("", rows[2]);
+    }
+
+    [Fact]
     public void RedirectMap_NewPathAutoFilled_AndExportsWritten()
     {
         AddRaw("ch/news/20260101.php.html", "hello");

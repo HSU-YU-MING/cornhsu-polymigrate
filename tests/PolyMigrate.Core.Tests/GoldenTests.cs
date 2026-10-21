@@ -116,6 +116,23 @@ public class GoldenTests : IDisposable
         }
     }
 
+    [Fact]
+    public void StaleOutputs_OnlyMarkdown_SortedOrdinal()
+    {
+        // 殘檔清單是 CLI 摘要的 [stale] 那幾行(只印前 10 筆),順序必須決定性(§3.10):
+        // 用 ordinal 而不是檔案系統的列舉順序(NTFS 不分大小寫字母序、ext4 依雜湊)
+        foreach (var name in (string[])["content/zz/a.md", "content/zz/B.md", "content/notes.txt"])
+        {
+            var path = Path.Combine(_out, name.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "left over");
+        }
+
+        var report = RunPipeline();
+
+        Assert.Equal(["content/zz/B.md", "content/zz/a.md"], report.StaleOutputs);   // 'B' < 'a'(ordinal)
+    }
+
     private static void CopyDirectory(string source, string target)
     {
         Directory.CreateDirectory(target);
