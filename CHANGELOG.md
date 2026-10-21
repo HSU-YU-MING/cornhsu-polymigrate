@@ -69,6 +69,10 @@
   一律寫無 BOM 的 UTF-8**。接到 console 或管線時刻意維持 console 編碼:Windows PowerShell 5.1 讀原生指令輸出
   走管線、依 console 編碼解讀,那條路改寫 UTF-8 反而會變亂碼。行尾仍是 `Environment.NewLine`。
   **升級注意:Windows 上導檔得到的非 ASCII slug 位元組會改變**(原本的值本來就讀不回來)。
+- **修正(patch):`content_inventory.csv` 的 `pair_evidence` 隨機器文化改變。** `date=` 與 `title_similarity=`
+  原本以目前文化格式化:th-TH 寫出佛曆(`date=2569-02-14`)、fa-IR 寫出波斯曆、de-DE 寫出 `0,84`
+  (CSV 欄位因此被加引號),違反決定性輸出,也與契約範例的 ISO 日期不符。現在一律 invariant。
+  配對決策本身不受影響;en-US 等文化的輸出不變。
 
 ## 2.3.1
 

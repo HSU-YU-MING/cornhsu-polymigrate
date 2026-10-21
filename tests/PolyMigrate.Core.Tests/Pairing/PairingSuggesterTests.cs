@@ -193,6 +193,32 @@ public class PairingSuggesterTests
         Assert.Contains("date=2024-01-21", s.Evidence);
     }
 
+    [Theory]
+    [InlineData("th-TH")]   // 佛曆:原本寫出 date=2567-01-21
+    [InlineData("fa-IR")]   // 波斯曆
+    [InlineData("de-DE")]   // 小數逗號:原本 title_similarity=0,50(CSV 欄位因此被加引號)
+    [InlineData("ar-SA")]
+    public void Evidence_IsCultureInvariant(string culture)
+    {
+        // §3.10 決定性輸出:pair_evidence 不可隨執行機器的文化改變;contracts.md 的範例是 ISO 日期
+        var original = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+        try
+        {
+            var suggestions = WithFallback("date", "title_similarity").Suggest(
+            [
+                Group("news/20240121", "zh-Hant", "20240121", "abc", "news"),
+                Group("news/01212024", "en", "01212024", "abd", "news"),
+            ]);
+
+            Assert.Equal("date=2024-01-21;title_similarity=0.50", Assert.Single(suggestions).Evidence);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+    }
+
     [Fact]
     public void DifferentSection_NeverSuggested()
     {

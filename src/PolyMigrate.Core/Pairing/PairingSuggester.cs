@@ -1,3 +1,4 @@
+using System.Globalization;
 using PolyMigrate.Core.Configuration;
 
 namespace PolyMigrate.Core.Pairing;
@@ -100,7 +101,11 @@ internal sealed class PairingSuggester(SiteConfig config)
         }
     }
 
-    /// <summary>回傳命中的證據(依 fallback 順序);空 = 無任何依據,不建議。</summary>
+    /// <summary>
+    /// 回傳命中的證據(依 fallback 順序);空 = 無任何依據,不建議。
+    /// 數值一律以 invariant 文化格式化(§3.10 決定性輸出):原本跟著執行機器的文化,
+    /// th-TH 寫出佛曆 <c>date=2567-01-21</c>、de-DE 寫出 <c>title_similarity=0,50</c>。
+    /// </summary>
     private List<KeyValuePair<string, string>> Evaluate(UnpairedGroup a, UnpairedGroup b)
     {
         var evidence = new List<KeyValuePair<string, string>>();
@@ -125,20 +130,20 @@ internal sealed class PairingSuggester(SiteConfig config)
                     var shared = a.Media.Intersect(b.Media, StringComparer.Ordinal).Count();
                     if (shared > 0)
                     {
-                        evidence.Add(new(SharedMedia, shared.ToString()));
+                        evidence.Add(new(SharedMedia, shared.ToString(CultureInfo.InvariantCulture)));
                     }
                     break;
                 case Date:
                     if (SlugDates.FromSlug(a.Slug) is { } da && SlugDates.FromSlug(b.Slug) is { } db && da == db)
                     {
-                        evidence.Add(new(Date, da.ToString("yyyy-MM-dd")));
+                        evidence.Add(new(Date, da.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
                     }
                     break;
                 case TitleSimilarity:
                     var sim = BigramDice(a.Title, b.Title);
                     if (sim >= TitleSimilarityThreshold)
                     {
-                        evidence.Add(new(TitleSimilarity, sim.ToString("0.00")));
+                        evidence.Add(new(TitleSimilarity, sim.ToString("0.00", CultureInfo.InvariantCulture)));
                     }
                     break;
             }

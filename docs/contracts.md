@@ -88,7 +88,7 @@ documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,o
 | flags | string | `;` 分隔(如 `needs_rebuild;text_in_image`) |
 | pair_status | enum | `paired` / `missing` / `heuristic_suggested` / `site_level`;單語站留空 |
 | suggested_pair | string | 啟發式建議的對方 translation_key(§1.4;僅 heuristic_suggested 有值) |
-| pair_evidence | string | 證據,`;` 分隔(如 `shared_media=3;date=2026-01-21`) |
+| pair_evidence | string | 證據,`;` 分隔(如 `shared_media=3;date=2026-01-21`);數值與執行機器的文化無關:日期為 ISO `yyyy-MM-dd`(西曆)、相似度兩位小數並以 `.` 為小數點 |
 | text_len_{locale}… | int | 每個 locale 一欄;缺該語版 = 0 |
 | image_count | int | 各語版取最大 |
 | notes | string | 留空,人工覆核填 |
