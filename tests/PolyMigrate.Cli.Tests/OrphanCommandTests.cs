@@ -178,10 +178,14 @@ public class OrphanCommandTests : CliTestBase
 
         Assert.Equal(0, r.Exit);
         Assert.Equal("20190101\n20190102", File.ReadAllText(slugFile));
+        // 審查 minor 6:預設的 --out 是各 section 共用的 <root>/orphan_slugs.txt,保留下來的可能是另一個
+        // section 的清單——接著跑 fetch-orphans --section news 就會拿別人的 slug 去抓。警告要講明這一點
         Assert.Equal(
-            $"warning: none of the 732 probes got a usable answer (HTTP 503: 732), so {slugFile} was not written"
-            + "; an empty list would read as \"no orphan pages\". Check site.base_url, site.auth_workaround"
-            + " and site.polite.delay_ms, then rerun.\n",
+            "warning: none of the 732 probes got a usable answer (HTTP 503: 732)."
+            + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.\n"
+            + $"warning: {slugFile} was left as it was: it holds an earlier probe's list, possibly for another"
+            + " --section (the default --out is shared by all sections). Don't feed it to"
+            + " 'fetch-orphans --section news' until a probe of news succeeds; give each section its own --out.\n",
             r.Err);
         Assert.Contains($"Probe done: 0 orphan slugs (no usable answers; {slugFile} left as it was)\n", r.Out);
     }
@@ -198,6 +202,7 @@ public class OrphanCommandTests : CliTestBase
         Assert.Equal(0, r.Exit);
         Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
         Assert.StartsWith("warning: none of the 732 probes got a usable answer (HTTP 403: 732)", r.Err);
+        Assert.EndsWith($"warning: {PathOf("site/orphan_slugs.txt")} was not written; an empty list would read as \"no orphan pages\".\n", r.Err);
         Assert.True(r.Err.All(char.IsAscii), "警告要是純 ASCII:cp437 等 console 印不出 × 與 —");
     }
 

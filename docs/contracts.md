@@ -227,6 +227,9 @@ exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_p
 不是「有/沒有」的狀態)時不寫——既有檔原樣保留,沒有檔也不建空檔(空清單會被讀成「沒有孤兒頁」),
 stderr 印 `warning:` 並列出原因,exit code 仍是 0。部分候選沒拿到回答時照寫,stderr 警告清單可能不完整。
 「確定沒有」的回答是 404、410、其他 2xx,以及 3xx(probe 不跟轉址,轉址頁不算命中)。
+**檔案是各 section 共用的**:預設 `--out` 對每個 `--section` 都是同一個 `<root>/orphan_slugs.txt`,所以「保留下來的舊檔」
+可能是另一個 section 探到的清單(stderr 會明講);探不只一個 section 時,請每個 section 各自指定 `--out`,
+並以 `fetch-orphans --slugs` 餵回同一個 section 的清單。
 `fetch-orphans` 讀取時逐行去頭尾空白、略過空行,所以 `slugs` 的輸出或手寫清單也能直接餵。
 清單以 UTF-8 讀取(有 BOM 時依 BOM 判斷 UTF-8 / UTF-16 / UTF-32)。
 

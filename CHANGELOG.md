@@ -26,7 +26,8 @@ exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不�
   「確定沒有」(404、410、3xx)與「沒拿到回答」:**一個回答都沒拿到時不寫 `--out`**(既有檔原樣保留,
   沒有檔也不建空檔),stderr 印 `warning:` 並列出原因(例如 `HTTP 503: 732`);部分沒拿到回答時照寫,
   另警告清單可能不完整。**exit code 不變(仍是 0)**——要不要改成非零屬既有情境的 exit code 改變,
-  留給維護者裁定。
+  留給維護者裁定。預設的 `--out` 是各 section 共用的同一個檔,所以保留下來的舊檔可能是**另一個 section** 的
+  清單:這時 stderr 另外講明、提醒不要拿它跑該 section 的 `fetch-orphans`,`--help` 也建議每個 section 各用一個 `--out`。
 - **修正(patch;verify 的 exit code 變動待裁定,見下):YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說
   其他 iframe「保留原樣」,實際上它們留在 DOM 裡交給 ReverseMarkdown,而未知標籤的處理是只輸出子節點——
   iframe 沒有子節點,於是 Google 地圖、行事曆、表單、Vimeo 等嵌入靜默消失,沒有任何清單或 warning 記得。

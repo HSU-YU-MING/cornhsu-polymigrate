@@ -111,10 +111,12 @@ public static class Cli
                           Polite (site.polite.delay_ms) and sends site.auth_workaround cookies.
                           --years: one year (2021) or a range (2021-2023).
                           --lang: defaults to the first url_pattern.lang_map key.
-                          --out: defaults to <root>/orphan_slugs.txt.
+                          --out: defaults to <root>/orphan_slugs.txt, shared by every --section;
+                          probing more than one section? give each its own --out.
                     {Synopsis(FetchUsage)}
                           Fetch probed orphan pages (all langs) into raw/ and their assets into media/.
-                          --slugs: defaults to <root>/orphan_slugs.txt (one slug per line).
+                          --slugs: defaults to <root>/orphan_slugs.txt (one slug per line); pass the list
+                          probed for the same --section.
                     {Synopsis(VerifyUsage)}
                           Verify extracted output: frontmatter fields, internal links, media refs,
                           and unlinked pages — pages no other page links to, which visitors can
@@ -483,9 +485,15 @@ public static class Cli
             if (result.Checks > 0 && result.UnansweredCount == result.Checks)
             {
                 Console.Error.WriteLine(
-                    $"warning: none of the {result.Checks} probes got a usable answer ({unanswered}), so {outFile} was not written"
-                    + "; an empty list would read as \"no orphan pages\". Check site.base_url, site.auth_workaround"
-                    + " and site.polite.delay_ms, then rerun.");
+                    $"warning: none of the {result.Checks} probes got a usable answer ({unanswered})."
+                    + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.");
+                // 保留下來的舊檔不一定是這個 section 的:預設的 --out 是各 section 共用的同一個檔,
+                // B 全部失敗時留著的可能是 A 的清單,接著跑 fetch-orphans --section B 就會拿 A 的 slug 去抓
+                Console.Error.WriteLine(File.Exists(outFile)
+                    ? $"warning: {outFile} was left as it was: it holds an earlier probe's list, possibly for another"
+                        + " --section (the default --out is shared by all sections). Don't feed it to"
+                        + $" 'fetch-orphans --section {section}' until a probe of {section} succeeds; give each section its own --out."
+                    : $"warning: {outFile} was not written; an empty list would read as \"no orphan pages\".");
                 Console.WriteLine($"Probe done: 0 orphan slugs (no usable answers; {outFile} left as it was)");
                 return 0;
             }
