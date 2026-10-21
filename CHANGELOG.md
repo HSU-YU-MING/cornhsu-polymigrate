@@ -4,11 +4,17 @@
 
 ## 未發佈
 
-**產品 bug 修正累積中,目前全部是 patch 或 none(下一版可為 2.3.2)。** 以下每一條都標了 semver;
-CLI 參數、輸出檔欄位、YAML 欄位、函式庫的 public 面(`PublicApi.approved.txt`)都沒有動。exit code 只有兩處
-從契約外拉回契約內:selector 寫壞時的未處理例外改為 2、同步指令的第一次 Ctrl-C 改為 130。會改變既有情境
-exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不要非零結束、npm 啟動腳本失敗時要不要回 2)
-留給維護者裁定,沒有做。
+**產品 bug 修正累積中。** 以下每一條都標了 semver;CLI 參數、輸出檔欄位、YAML 欄位、函式庫的 public 簽章
+(`PublicApi.approved.txt`)都沒有動。**下一版能不能是 patch(2.3.2),取決於兩項待維護者裁定的 exit code 判讀**
+(見下面的 exit code 一覽);若判為破壞性,這兩項要留到 3.0 或先撤回。
+
+exit code 一覽:
+
+- **從契約外拉回契約內**(原本不是 0/1/2/130 任何一個):config 的 selector 寫壞時,未處理例外 → 2。
+- **既有情境的 exit code 改變,semver 判讀待裁定**:
+  - 同步指令(`extract` / `thumbs` / `verify` / `slugs`)按一次 Ctrl-C:原本照常跑完回 0/1/2,現在回 130。
+  - `verify`:`extract` 現在保留其他 iframe,指向沒搬過來的站內頁時 `verify` 報 `broken_link`,可能由 0/1 變 2。
+- **刻意沒動、留給維護者裁定**:`probe-orphans` 一個回答都沒拿到時要不要非零結束、npm 啟動腳本失敗時要不要回 2。
 
 - **修正(patch):config 的 CSS selector 寫壞時,`extract` 與 `fetch-orphans` 以未處理例外崩潰。**
   `extract.content`、`type_rules.*.title_selector`、`type_rules.*.remove_selectors` 不合語法時,
@@ -60,10 +66,14 @@ exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不�
   現在已鏡像的日期本身不探、後綴照探;已鏡像的後綴版不探也不列,「`A` 有才會有 `B`」的鏈繼續往下。
   **升級注意:`orphan_slugs.txt` 可能多出原本漏掉的後綴孤兒、少掉已鏡像的後綴版;
   每個已鏡像的日期多一個 HEAD 請求(探它的 `A`)。**
+  **函式庫:public 的 `OrphanProber.ProbeAsync` 簽章不變,但 `known` 參數的語意改了**——原本是「這些候選完全不碰」,
+  現在是「這些候選已存在:本身不探,但它的 `A`～`D` 後綴照探;已知的後綴版不探、不列」。拿 `known` 限制探測範圍的
+  呼叫端,請求數會變多,回傳的清單也可能不同。判為 patch(修正錯誤的輸出),判讀理由見決策紀錄。
 - **修正(patch):沒有語言前綴的站(`lang_map` 的 key 是 `""`)在 `probe-orphans` / `fetch-orphans`
   請求 `//news/…` 這種雙斜線網址。** nginx 預設合併斜線所以看不出來,但不合併斜線的伺服器或框架路由
   會讓 probe 全部落空、fetch 全部 404。現在只接非空的路徑段(`/news/…`);進度訊息與
-  `fetch-orphans` 的錯誤列(`[404] news/…`)同樣不再多一個斜線。
+  `fetch-orphans` 的錯誤列(`[404] news/…`)同樣不再多一個斜線。函式庫的 `OrphanProber.ProbeAsync` /
+  `OrphanFetcher.FetchAsync` 請求的網址與 `FetchReport.Errors` 的字串隨之改變(只影響 key 為 `""` 的站)。
 - **修正(patch):`slugs`(與 `probe-orphans` 的已知 slug 集、函式庫的 `PolyMigrator.MirrorSlugs`)
   在檔名第一個點就截斷,和 `extract` 寫出的 slug 不一致。** `raw/ch/news/v1.2-release.php.html` 原本印 `v1`
   (`extract` 寫的是 `slug: v1.2-release`),餵給 `fetch-orphans --slugs` 就去抓不存在的網址。
@@ -91,12 +101,14 @@ exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不�
   golden 比對原本把所有 `\r` 刪掉再比,所以三平台 CI 都沒抓到——Markdown 現在逐字比對,
   基準也重產過(只少了 `\r`)。**升級注意:Windows 上重跑 `extract` 後,每一個 `.md` 的位元組都會改變
   (只有行尾),第一次 commit 會是整片的行尾 diff。**
-- **修正(patch):`extract`、`thumbs`、`verify`、`slugs` 按 Ctrl-C 拿不到 130,第一次 Ctrl-C 也沒有作用。**
+- **修正(patch;exit code 的 semver 判讀待確認,見下):`extract`、`thumbs`、`verify`、`slugs` 按 Ctrl-C 拿不到 130,第一次 Ctrl-C 也沒有作用。**
   2.2.0 說 `extract` / `thumbs` 會乾淨回 130,但只有 `probe-orphans` / `fetch-orphans` 真的看取消訊號:
   同步指令按一次 Ctrl-C 照常跑完、回 0/1/2,按第二次由 runtime 直接終止(Windows 結束碼 `0xC000013A`)。
   現在第一次 Ctrl-C 就在下一頁/下一張圖/下一個媒體檔的雜湊之前停下,stderr 印 `cancelled.`、回 **130**;已寫出的 `.md` 與縮圖保留,
   清單檔、`verify_report.csv` 不會只寫一半,`slugs` 不印半份清單。第二次 Ctrl-C 的行為不變。
-  對逐指令的 exit code 表而言是 130 欄由「—」變成可達(增補,不改既有情境)。
+  稽核清單判為 patch:逐指令 exit code 表的 130 欄由「—」變成可達,而且 2.2.0 早就宣稱 extract/thumbs 會回 130。
+  但「按一次 Ctrl-C」這個情境原本得到 0/1/2,嚴格說是既有情境的 exit code 改變——**semver 判讀待維護者確認**,
+  確認前請勿把它當成已定案的 patch。
 - **修正(patch):`probe-orphans` 要整批探完才發現 `--out` 寫不出去。** 目錄不存在或 `--out` 指到一個目錄時,
   原本先發完一整輪請求(一年 730 個以上,預設延遲下約 36 分鐘)才在寫檔時 exit 2。現在探測前就檢查,
   一個請求都不發;檢查不留痕跡(既有檔內容與修改時間不變,原本沒有的檔不會被建成空檔)。exit code 仍是 2。
