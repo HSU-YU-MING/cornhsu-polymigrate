@@ -50,6 +50,22 @@ public class MirrorSlugsTests : IDisposable
     }
 
     [Theory]
+    [InlineData("v1.2-release.php.html", "v1.2-release")]   // 原本取第一個點之前 → v1
+    [InlineData("2019.05.01.php.html", "2019.05.01")]       // 原本 → 2019
+    [InlineData("2019.05.01.html", "2019.05.01")]           // 沒有動態副檔名的乾淨網址:.01 不是副檔名
+    [InlineData("v1.2-release.html", "v1.2-release")]
+    [InlineData("about.asp.html", "about")]
+    [InlineData("20260101.html", "20260101")]
+    public void DottedSlug_StripsOnlyHtmlAndOneDynamicExtension_LikeExtract(string fileName, string slug)
+    {
+        // 與 extract 的 slug 同一把尺(RawPageParser 只剝 strip_extensions + .html):含點的 slug 原本被截在
+        // 第一個點,餵給 fetch-orphans --slugs 會去抓不存在的網址
+        AddMirrored("ch", "news", fileName);
+
+        Assert.Equal([slug], PolyMigrator.MirrorSlugs(Raw, "news"));
+    }
+
+    [Theory]
     [InlineData("C:\\Windows")]     // Path.Combine 遇到絕對路徑會丟掉前面的 rawDir
     [InlineData("/etc")]
     [InlineData("../../elsewhere")]

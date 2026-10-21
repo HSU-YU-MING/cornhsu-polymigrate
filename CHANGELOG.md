@@ -57,6 +57,12 @@
   請求 `//news/…` 這種雙斜線網址。** nginx 預設合併斜線所以看不出來,但不合併斜線的伺服器或框架路由
   會讓 probe 全部落空、fetch 全部 404。現在只接非空的路徑段(`/news/…`);進度訊息與
   `fetch-orphans` 的錯誤列(`[404] news/…`)同樣不再多一個斜線。
+- **修正(patch):`slugs`(與 `probe-orphans` 的已知 slug 集、函式庫的 `PolyMigrator.MirrorSlugs`)
+  在檔名第一個點就截斷,和 `extract` 寫出的 slug 不一致。** `raw/ch/news/v1.2-release.php.html` 原本印 `v1`
+  (`extract` 寫的是 `slug: v1.2-release`),餵給 `fetch-orphans --slugs` 就去抓不存在的網址。
+  現在去掉結尾的 `.html` 再去掉一個動態副檔名——`slugs` 不帶 config、不知道 `strip_extensions`,
+  所以只認全是 ASCII 字母的那一段(`.php`、`.asp`、`.aspx`…),`2019.05.01.html` 這類乾淨網址不會被多剝。
+  **升級注意:含點的 slug 輸出會改變**(原本的截斷值本來就無法回餵 `fetch-orphans`)。列表頁 `index` 照舊列出。
 
 ## 2.3.1
 

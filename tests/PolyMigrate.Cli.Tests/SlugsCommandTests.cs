@@ -76,6 +76,23 @@ public class SlugsCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task DottedSlug_MatchesTheSlugExtractWrites()
+    {
+        // 盤點 §1.3 的實測:raw/ch/news/v1.2-release.php.html → slugs 印 v1,extract 卻寫出 slug: v1.2-release。
+        // 把 v1 餵給 fetch-orphans --slugs 會去抓 /ch/news/v1.php
+        var config = Write("site.yaml", Config());
+        Write("raw/ch/news/v1.2-release.php.html", Page("<p>release notes</p>"));
+
+        var slugs = await Run("slugs", Root, "--section", "news");
+        var extract = await Run("extract", config);
+
+        Assert.Equal(0, slugs.Exit);
+        Assert.Equal("v1.2-release\n", slugs.Out);
+        Assert.Equal(0, extract.Exit);
+        Assert.Contains("\nslug: v1.2-release\n", File.ReadAllText(PathOf("content/ch/news/v1.2-release.md")).Replace("\r", ""));
+    }
+
+    [Fact]
     public async Task UnknownLang_ExitsTwo_NamingTheLang()
     {
         AddMirrored("raw/ch/news", "20260101.php.html");

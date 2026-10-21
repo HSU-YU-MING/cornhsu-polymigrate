@@ -12,7 +12,7 @@ namespace PolyMigrate.Core.Inventory;
 internal static class MirrorSlugs
 {
     /// <summary>
-    /// 檔名 → slug:<c>20260101.php.html</c> → <c>20260101</c>。
+    /// 目錄裡的 slug(檔名 → slug 見 <see cref="SlugOf"/>):<c>20260101.php.html</c> → <c>20260101</c>。
     /// 只認 <c>*.html</c>——這正是 ExtractionPipeline 對「一個鏡像頁」的定義,同一把尺。
     /// 逐檔取名的話,鏡像目錄被 Finder / 檔案總管開過長出來的 .DS_Store 會變成空字串 slug
     /// (輸出第一行就是空行),Thumbs.db 會變成一個叫「Thumbs」的假文章——
@@ -21,9 +21,29 @@ internal static class MirrorSlugs
     private static IEnumerable<string> InDirectory(string dir) =>
         Directory.Exists(dir)
             ? Directory.EnumerateFiles(dir, "*.html")
-                .Select(f => Path.GetFileName(f).Split('.')[0])
+                .Select(f => SlugOf(Path.GetFileName(f)))
                 .Where(slug => slug.Length > 0)
             : [];
+
+    /// <summary>
+    /// 鏡像檔名 → slug,與 extract(<see cref="Extraction.RawPageParser"/>:只剝 <c>strip_extensions</c>
+    /// + <c>.html</c>)同一把尺:先去掉結尾的 <c>.html</c>,再去掉一個動態副檔名。
+    ///
+    /// <para>原本取「第一個點之前」,含點的 slug 會被截斷(<c>v1.2-release.php.html</c> → <c>v1</c>、
+    /// <c>2019.05.01.php.html</c> → <c>2019</c>),餵給 <c>fetch-orphans --slugs</c> 就去抓不存在的網址。</para>
+    ///
+    /// <para><c>slugs</c> 與函式庫的 <c>MirrorSlugs</c> 不帶 config、不知道 <c>strip_extensions</c>,
+    /// 所以「動態副檔名」只認全是 ASCII 字母的那一段(<c>.php</c>、<c>.asp</c>、<c>.aspx</c>、<c>.jsp</c>…):
+    /// 沒有動態副檔名的乾淨網址站(<c>2019.05.01.html</c>、<c>v1.2-release.html</c>)不會被多剝一段。</para>
+    /// </summary>
+    internal static string SlugOf(string fileName)
+    {
+        var name = fileName.EndsWith(".html", StringComparison.Ordinal) ? fileName[..^".html".Length] : fileName;
+        var extension = Path.GetExtension(name);
+        return extension.Length > 1 && extension.Skip(1).All(char.IsAsciiLetter)
+            ? name[..^extension.Length]
+            : name;
+    }
 
     /// <summary>
     /// section / lang 是「一段目錄名」,不是路徑。<c>Path.Combine</c> 只要後段是絕對路徑
