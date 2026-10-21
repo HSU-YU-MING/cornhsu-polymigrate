@@ -4,9 +4,11 @@
 
 ## 未發佈
 
-**產品 bug 修正累積中。** 以下每一條都標了 semver;CLI 參數、輸出檔欄位、YAML 欄位都沒有動,
-也沒有讓既有情境的 exit code 改變。會動到 exit code 的那一半(例如 `probe-orphans` 全部請求失敗時
-要不要非零結束)留給維護者裁定,沒有做。
+**產品 bug 修正累積中,目前全部是 patch 或 none(下一版可為 2.3.2)。** 以下每一條都標了 semver;
+CLI 參數、輸出檔欄位、YAML 欄位、函式庫的 public 面(`PublicApi.approved.txt`)都沒有動。exit code 只有兩處
+從契約外拉回契約內:selector 寫壞時的未處理例外改為 2、同步指令的第一次 Ctrl-C 改為 130。會改變既有情境
+exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不要非零結束、npm 啟動腳本失敗時要不要回 2)
+留給維護者裁定,沒有做。
 
 - **修正(patch):config 的 CSS selector 寫壞時,`extract` 與 `fetch-orphans` 以未處理例外崩潰。**
   `extract.content`、`type_rules.*.title_selector`、`type_rules.*.remove_selectors` 不合語法時,
