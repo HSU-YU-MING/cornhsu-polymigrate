@@ -3,11 +3,11 @@
 [![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/LICENSE)
 
 > **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
-**[Project write-up](https://cornhsu.com/polymigrate) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](README.zh-Hant.md) · MIT**
+**[Project write-up](https://cornhsu.com/polymigrate) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/README.zh-Hant.md) · MIT**
 
 PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, static-site-ready
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
@@ -24,7 +24,7 @@ the npm launcher could only start the Windows/Linux arm64 builds from 2.3.1 on.
 link-following audit never reaches them — and added `slugs` for keeping up with a source site
 that is still being updated. **Upgrading to 2.2 can turn a passing `verify` into exit 1**.
 2.3 reads the source site's own `hreflang` declarations (see below) and reports them in a new
-`hreflang_map.csv`. See the [CHANGELOG](CHANGELOG.md) for the migration notes.
+`hreflang_map.csv`. See the [CHANGELOG](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/CHANGELOG.md) for the migration notes.
 
 ## Why
 
@@ -75,7 +75,7 @@ Everything declared — including the rejected ones — is written to `hreflang_
 Pairs are still only ever *suggested*: `hreflang` raises the evidence quality, it does not
 switch the tool into merging pages on its own. That is a deliberate call, not an unfinished
 one — the measurement behind it, and what would have to change to revisit it, are recorded in
-[docs/hreflang_量測與決策.md](docs/hreflang_量測與決策.md).
+[docs/hreflang_量測與決策.md](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/docs/hreflang_%E9%87%8F%E6%B8%AC%E8%88%87%E6%B1%BA%E7%AD%96.md).
 
 ## Battle-tested defaults
 
@@ -152,7 +152,7 @@ polymigrate slugs . --section news          # slugs already mirrored under ./raw
 > `npx cornhsu-polymigrate extract site.yaml`, `npx cornhsu-polymigrate verify .`, and so on.
 
 One YAML config per site describes everything site-specific — see
-[examples/ibps-austin.yaml](examples/ibps-austin.yaml) for a fully-annotated real example.
+[examples/ibps-austin.yaml](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/examples/ibps-austin.yaml) for a fully-annotated real example.
 
 ```yaml
 config_version: 1
@@ -215,9 +215,9 @@ signals in priority order, why "just read `hreflang`" often misses on real legac
 (measured on one: 528 pages, **0** declarations, sitemap 404), the five gates a declaration has to
 pass before it is usable at all, and why URL string similarity is the wrong tool for this job.
 
-License: [MIT](LICENSE). All dependencies are MIT/BSD/Apache-2.0
+License: [MIT](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/LICENSE). All dependencies are MIT/BSD/Apache-2.0
 (imaging via **Magick.NET**; ImageSharp was dropped when its 4.x line began requiring a
-license key at build time). See [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES.md).
+license key at build time). See [THIRD-PARTY-NOTICES](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/THIRD-PARTY-NOTICES.md).
 
 PolyMigrate fetches pages from the site you point it at, and can be configured to send
 cookies past a bot challenge. **It assumes the site is yours, or that you are migrating

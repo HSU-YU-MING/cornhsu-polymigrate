@@ -224,4 +224,4 @@ exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_p
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | — |
 
 130 目前只有 `probe-orphans` / `fetch-orphans` 回得出來:其餘指令是同步執行、不接取消訊號,
-第一次 Ctrl-C 不會中斷它們,第二次由 runtime 直接終止行程,結束碼由作業系統決定,不是 130。
+第一次 Ctrl-C 不會中斷它們,第二次由 runtime 直接終止行程,不經 PolyMigrate 收尾,結束碼由作業系統決定。
