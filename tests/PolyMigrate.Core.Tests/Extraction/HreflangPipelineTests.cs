@@ -54,7 +54,7 @@ public class HreflangPipelineTests : IDisposable
         // 要不要改成只讀 <head> 待維護者裁定,見稽核 L3)。理由之一:舊 PHP 站的 include 檔常存成帶 BOM 的
         // UTF-8,BOM 字元出現在 <head> 中段,HTML5 解析器就提早開 <body>,之後的 <link> 全進了 body——
         // 只讀 doc.Head 的話,這類站的宣告會整批安靜地消失
-        var html = "<html><head><title>a</title>﻿" + Alternate("en", "/en/news/b.php")
+        var html = "<html><head><title>a</title>" + (char)0xFEFF + Alternate("en", "/en/news/b.php")
             + "</head><body><main>中文</main></body></html>";
         Assert.Null(new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html).Head!.QuerySelector("link"));   // 防呆:確實落在 body
         var path = Path.Combine(_root, "raw", "ch", "news", "a.php.html");

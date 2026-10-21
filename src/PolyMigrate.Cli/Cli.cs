@@ -474,7 +474,8 @@ public static class Cli
             var result = await new PolyMigrate.Core.Orphans.OrphanProber(config, http)
                 .ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known, Console.WriteLine, ct);
             var found = result.Found;
-            var unanswered = string.Join(", ", result.Unanswered.Select(kv => $"{kv.Key} ×{kv.Value}"));
+            // 訊息只用 ASCII:cp437 之類的 console 印不出 × 與 —(會變成問號)
+            var unanswered = string.Join(", ", result.Unanswered.Select(kv => $"{kv.Key}: {kv.Value}"));
 
             // 一個回答都沒拿到(伺服器掛了、被 WAF 擋、base_url 打錯):空清單會被讀成「沒有孤兒頁」,
             // 還會蓋掉先前探好的清單——所以不寫,既有檔原樣保留。exit code 刻意不動:
@@ -483,7 +484,7 @@ public static class Cli
             {
                 Console.Error.WriteLine(
                     $"warning: none of the {result.Checks} probes got a usable answer ({unanswered}), so {outFile} was not written"
-                    + " — an empty list would read as \"no orphan pages\". Check site.base_url, site.auth_workaround"
+                    + "; an empty list would read as \"no orphan pages\". Check site.base_url, site.auth_workaround"
                     + " and site.polite.delay_ms, then rerun.");
                 Console.WriteLine($"Probe done: 0 orphan slugs (no usable answers; {outFile} left as it was)");
                 return 0;

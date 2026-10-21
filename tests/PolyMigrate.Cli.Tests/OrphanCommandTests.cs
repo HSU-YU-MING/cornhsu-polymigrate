@@ -179,8 +179,8 @@ public class OrphanCommandTests : CliTestBase
         Assert.Equal(0, r.Exit);
         Assert.Equal("20190101\n20190102", File.ReadAllText(slugFile));
         Assert.Equal(
-            $"warning: none of the 732 probes got a usable answer (HTTP 503 ×732), so {slugFile} was not written"
-            + " — an empty list would read as \"no orphan pages\". Check site.base_url, site.auth_workaround"
+            $"warning: none of the 732 probes got a usable answer (HTTP 503: 732), so {slugFile} was not written"
+            + "; an empty list would read as \"no orphan pages\". Check site.base_url, site.auth_workaround"
             + " and site.polite.delay_ms, then rerun.\n",
             r.Err);
         Assert.Contains($"Probe done: 0 orphan slugs (no usable answers; {slugFile} left as it was)\n", r.Out);
@@ -197,7 +197,8 @@ public class OrphanCommandTests : CliTestBase
 
         Assert.Equal(0, r.Exit);
         Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
-        Assert.StartsWith("warning: none of the 732 probes got a usable answer (HTTP 403 ×732)", r.Err);
+        Assert.StartsWith("warning: none of the 732 probes got a usable answer (HTTP 403: 732)", r.Err);
+        Assert.True(r.Err.All(char.IsAscii), "警告要是純 ASCII:cp437 等 console 印不出 × 與 —");
     }
 
     [Fact]
@@ -218,7 +219,7 @@ public class OrphanCommandTests : CliTestBase
         Assert.Equal("20200101"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
         // 12 月 31 天 × 2 種格式 = 62 個沒回答;20200101 命中後的 A 探測(404)也算一次
         Assert.Equal(
-            "warning: 62 of 733 probes got no usable answer (HTTP 429 ×62); the list may be incomplete."
+            "warning: 62 of 733 probes got no usable answer (HTTP 429: 62); the list may be incomplete."
             + " Rerun later to fill the gaps.\n",
             r.Err);
     }
