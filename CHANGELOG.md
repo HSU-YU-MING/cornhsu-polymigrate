@@ -77,7 +77,9 @@ exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不�
   2.2.0 與 `docs/搬完之後你還要做的事.md` 教的就是 `slugs … > local.txt` 這條管線;在 zh-TW Windows(cp950)
   用 cmd 或 Git Bash 導檔,`禪修` 寫成 Big5,`fetch-orphans` 以 UTF-8 讀回成 U+FFFD。現在 **stdout 導到檔案時
   一律寫無 BOM 的 UTF-8**。接到 console 或管線時刻意維持 console 編碼:Windows PowerShell 5.1 讀原生指令輸出
-  走管線、依 console 編碼解讀,那條路改寫 UTF-8 反而會變亂碼。行尾仍是 `Environment.NewLine`。
+  走管線、依 console 編碼解讀,那條路改寫 UTF-8 反而會變亂碼。**PowerShell 7.4 起不在修正範圍內**:它的 `>`
+  同樣走管線、但保留原始位元組,檔案仍是 console 碼頁——先 `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()`
+  (或 `chcp 65001`)再導檔(見 `docs/contracts.md`)。行尾仍是 `Environment.NewLine`。
   **升級注意:Windows 上導檔得到的非 ASCII slug 位元組會改變**(原本的值本來就讀不回來)。
 - **修正(patch):`content_inventory.csv` 的 `pair_evidence` 隨機器文化改變。** `date=` 與 `title_similarity=`
   原本以目前文化格式化:th-TH 寫出佛曆(`date=2569-02-14`)、fa-IR 寫出波斯曆、de-DE 寫出 `0,84`
