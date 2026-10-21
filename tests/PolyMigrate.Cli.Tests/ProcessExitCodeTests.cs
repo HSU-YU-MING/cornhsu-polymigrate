@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace PolyMigrate.Cli.Tests;
 
@@ -100,6 +101,45 @@ public class ProcessExitCodeTests : CliTestBase
         Assert.Contains("  markdown files   : 1\n", stdout);
         Assert.True(File.Exists(PathOf("site/content/ch/index.md")));
         Assert.False(Directory.Exists(PathOf("content")));
+    }
+
+    [Fact]
+    public async Task Slugs_RedirectedToAFile_IsUtf8_EvenUnderANonUtf8ConsoleCodePage()
+    {
+        // CHANGELOG 2.2.0 與 docs/搬完之後你還要做的事.md 教的管線:slugs 導成檔案 → fetch-orphans --slugs
+        // (後者以 UTF-8 讀)。原本 stdout 跟著 console 碼頁:zh-TW Windows(cp950)用 cmd 或 Git Bash 導檔,
+        // 禪修 寫成 Big5,讀回成 U+FFFD,請求變成亂碼網址。這要真的讓 shell 把 stdout 接到一個檔案:
+        // Windows 用 cmd 的 > ,並先 chcp 950(cmd 開在一個隱藏的 console 裡,chcp 才有對象);
+        // 其他平台用 sh 的 >(console 編碼取自 locale,一般本來就是 UTF-8)
+        Write("raw/ch/news/禪修.php.html", "<html></html>");
+        var outFile = PathOf("slugs.txt");
+        Process process;
+        if (OperatingSystem.IsWindows())
+        {
+            process = Process.Start(new ProcessStartInfo("cmd.exe",
+                $"/d /s /c \"chcp 950 >nul & \"{DotnetHost()}\" \"{CliDll}\" slugs \"{Root}\" --section news > \"{outFile}\"\"")
+            {
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            })!;
+        }
+        else
+        {
+            var psi = new ProcessStartInfo("/bin/sh") { UseShellExecute = false };
+            foreach (var arg in (string[])["-c", "\"$0\" \"$1\" slugs \"$2\" --section news > \"$3\"", DotnetHost(), CliDll, Root, outFile])
+            {
+                psi.ArgumentList.Add(arg);
+            }
+            process = Process.Start(psi)!;
+        }
+        using (process)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            await process.WaitForExitAsync(timeout.Token);
+            Assert.Equal(0, process.ExitCode);
+        }
+
+        Assert.Equal(new UTF8Encoding(false).GetBytes("禪修" + Environment.NewLine), File.ReadAllBytes(outFile));
     }
 
     [Fact]

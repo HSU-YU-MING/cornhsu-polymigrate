@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Text;
 using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Diagnostics;
 using PolyMigrate.Core.Extraction;
@@ -307,10 +308,18 @@ public static class Cli
                     + (langPrefix is null ? "." : $" for lang '{langPrefix}'."));
                 return 2;
             }
+            // stdout 是資料通道:導成檔案後要餵給 fetch-orphans --slugs,而它以 UTF-8 讀。
+            // Windows 上 stdout 跟著 console 碼頁(zh-TW 為 cp950),cmd / Git Bash 導檔時中日韓 slug 會寫成 Big5,
+            // 讀回成亂碼網址——所以導到檔案時改以無 BOM 的 UTF-8 寫出(管線與 console 維持原樣,理由見 StandardOutput)
+            using var utf8File = StandardOutput.IsRedirectedToFileOnWindows()
+                ? new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false), bufferSize: -1, leaveOpen: true)
+                : null;
+            var output = (TextWriter?)utf8File ?? Console.Out;
             foreach (var slug in slugs)
             {
-                Console.WriteLine(slug);
+                output.WriteLine(slug);
             }
+            output.Flush();
             // 摘要走 stderr:stdout 只放 slug,才能直接導成檔案再餵給 fetch-orphans --slugs
             Console.Error.WriteLine($"{slugs.Count} slugs mirrored under {section}"
                 + (langPrefix is null ? " (all langs)." : $" ({langPrefix})."));

@@ -63,6 +63,12 @@
   現在去掉結尾的 `.html` 再去掉一個動態副檔名——`slugs` 不帶 config、不知道 `strip_extensions`,
   所以只認全是 ASCII 字母的那一段(`.php`、`.asp`、`.aspx`…),`2019.05.01.html` 這類乾淨網址不會被多剝。
   **升級注意:含點的 slug 輸出會改變**(原本的截斷值本來就無法回餵 `fetch-orphans`)。列表頁 `index` 照舊列出。
+- **修正(patch):Windows 上 `slugs` 導成檔案時跟著 console 碼頁,回餵 `fetch-orphans` 變成亂碼網址。**
+  2.2.0 與 `docs/搬完之後你還要做的事.md` 教的就是 `slugs … > local.txt` 這條管線;在 zh-TW Windows(cp950)
+  用 cmd 或 Git Bash 導檔,`禪修` 寫成 Big5,`fetch-orphans` 以 UTF-8 讀回成 U+FFFD。現在 **stdout 導到檔案時
+  一律寫無 BOM 的 UTF-8**。接到 console 或管線時刻意維持 console 編碼:Windows PowerShell 5.1 讀原生指令輸出
+  走管線、依 console 編碼解讀,那條路改寫 UTF-8 反而會變亂碼。行尾仍是 `Environment.NewLine`。
+  **升級注意:Windows 上導檔得到的非 ASCII slug 位元組會改變**(原本的值本來就讀不回來)。
 
 ## 2.3.1
 

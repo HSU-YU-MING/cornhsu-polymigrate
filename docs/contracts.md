@@ -229,13 +229,15 @@ stderr 印 `warning:` 並列出原因,exit code 仍是 0。部分候選沒拿到
 `fetch-orphans` 讀取時逐行去頭尾空白、略過空行,所以 `slugs` 的輸出或手寫清單也能直接餵。
 清單以 UTF-8 讀取(有 BOM 時依 BOM 判斷 UTF-8 / UTF-16 / UTF-32)。
 
-但書:`slugs` 寫的是 stdout,編碼跟著 console 的輸出編碼、行尾為 `Environment.NewLine`(Windows 為 `\r\n`),
-不是上面 `orphan_slugs.txt` 的固定格式。行尾不影響 `fetch-orphans`(逐行讀取);編碼會:
-在 console 碼頁不是 UTF-8 的 Windows 上(例如 zh-TW 的 cp950)用 cmd 或 Git Bash 把 `slugs` 導成檔案,
-非 ASCII slug(中日韓檔名)會以該碼頁寫出,`fetch-orphans` 用 UTF-8 讀回就成了亂碼網址。
-先把碼頁切成 UTF-8 再導檔(cmd 用 `chcp 65001`,Git Bash 用 `chcp.com 65001`),或在 PowerShell 裡導檔(PowerShell 先依 console 編碼解讀輸出、再用自己的編碼寫檔,
-例如 Windows PowerShell 5.1 預設存成含 BOM 的 UTF-16,`fetch-orphans` 讀得回來)。
-Linux / macOS 的 console 編碼取自 locale,一般就是 UTF-8,沒有這個問題。
+但書:`slugs` 寫的是 stdout,行尾為 `Environment.NewLine`(Windows 為 `\r\n`),不是上面 `orphan_slugs.txt`
+的固定格式;行尾不影響 `fetch-orphans`(逐行讀取)。編碼:
+- **stdout 被導到檔案時(cmd、Git Bash 的 `>`)一律是無 BOM 的 UTF-8**,與 console 碼頁無關——
+  在 zh-TW Windows(cp950)上導檔,`fetch-orphans` 也讀得回中日韓 slug。
+- 接到 console(沒有導向)或管線時跟著 console 的輸出編碼:Windows PowerShell 5.1(與 7.4 之前的 PowerShell)
+  讀原生指令輸出走管線、依 console 編碼解讀後再用自己的編碼寫檔(5.1 預設含 BOM 的 UTF-16,`fetch-orphans` 讀得回來),
+  所以 PowerShell 裡導檔不受影響。**Git Bash 的管線**(例如 `slugs … | sort > x.txt`)仍是 console 碼頁:
+  先把碼頁切成 UTF-8(`chcp.com 65001`)再跑。
+- Linux / macOS 的 console 編碼取自 locale,一般就是 UTF-8,沒有這個問題。
 
 ## exit code
 
