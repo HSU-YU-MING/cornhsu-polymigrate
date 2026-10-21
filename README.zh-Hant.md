@@ -13,10 +13,11 @@
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
 
 **狀態:2.3。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
-並以一次真實的整站搬遷驗證(見下)。**CLI 介面與 Phase 輸出契約維持穩定**(自 1.0 未變):
+並以一次真實的整站搬遷驗證(見下)。**CLI 介面與 Phase 輸出契約維持穩定**(自 1.0 起只增不改):
 新功能升 minor、修正升 patch。2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
 收束到意圖中的進入點、移除未使用的 config 欄位;2.1 修補發佈管線(arm64 的 npm 平台包、
-符號套件);2.2 補上 `verify` 的盲點——沒有任何頁連過去的孤兒頁,因為巡檢是「跟著連結走」
+符號套件),不過 Windows / Linux 的 arm64 平台包要到 2.3.1 修好啟動腳本才真的跑得起來;
+2.2 補上 `verify` 的盲點——沒有任何頁連過去的孤兒頁,因為巡檢是「跟著連結走」
 所以永遠走不到,一直被回報成沒問題——並新增 `slugs` 指令。**升到 2.2 可能讓原本通過的
 `verify` 變成 exit 1**。2.3 開始讀原站自己宣告的 `hreflang`(見下),並輸出
 `hreflang_map.csv`。遷移說明見 [CHANGELOG](CHANGELOG.md)。
@@ -99,7 +100,7 @@ PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品
 
 ```
 npx cornhsu-polymigrate extract site.yaml   # 有 Node,不需要安裝 .NET
-dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET
+dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET 10
 ```
 
 > npm 版是自帶執行環境的原生執行檔,只下載你這個平台的那一份
@@ -110,7 +111,7 @@ dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
-polymigrate verify out/                     # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
+polymigrate verify .                        # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
 polymigrate probe-orphans site.yaml --section news --years 2021-2023
 polymigrate fetch-orphans site.yaml --section news
@@ -123,15 +124,29 @@ polymigrate slugs . --section news          # 列出 ./raw 底下已鏡像的 sl
 > 來源站要收掉的話請另外備份。
 
 > 沒有 .NET?上面每個指令都可用 npm **免安裝**執行,前面加 `npx cornhsu-polymigrate` 即可:
-> `npx cornhsu-polymigrate extract site.yaml`、`npx cornhsu-polymigrate verify out/`,以此類推。
+> `npx cornhsu-polymigrate extract site.yaml`、`npx cornhsu-polymigrate verify .`,以此類推。
 
 一站一份 YAML config,站別知識全在裡面——完整註解的真實範例見
 [examples/ibps-austin.yaml](examples/ibps-austin.yaml)。
 
+```yaml
+config_version: 1
+site:
+  base_url: https://legacy.example.org
+url_pattern:
+  lang_map: { ch: zh-Hant, en: en }     # 語言數不限
+  default_lang: zh-Hant
+  strip_extensions: [.php]
+extract:
+  content: "section[id]:not(#header):not(#footer)"
+pairing:
+  fallback: [hreflang, slug_normalized, shared_media, date, title_similarity]
+```
+
 ## 當函式庫用
 
 CLI 只是 `Cornhsu.PolyMigrate.Core` 之上的薄殼。要在自己的 .NET 程式裡驅動搬遷,
-用 `PolyMigrator` facade 即可 —— 唯一有文件的進入點,不必碰內部實作型別:
+用 `PolyMigrator` facade 即可 —— 唯一有文件的進入點,不必碰底層的實作型別:
 
 ```
 dotnet add package Cornhsu.PolyMigrate.Core
@@ -156,6 +171,7 @@ Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
 | `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
 | `tests/` | 單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
+| `docs/hreflang_量測與決策.md` | 為什麼 `hreflang` 只「建議」配對——背後的量測與決策 |
 | `docs/搬遷工具_評估與規劃書.md` | 原始評估與規劃書(原始碼中滿地的 `§X.Y` 都指向這份) |
 
 ## 開發

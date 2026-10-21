@@ -6,24 +6,36 @@
 
 ## 通用規則
 
-- 所有清單一律 CSV、UTF-8 **含 BOM**(人工覆核走 Excel,無 BOM 中文會亂碼)、`\r\n` 行尾、RFC 4180 跳脫;欄位順序固定,列排序規則明確(決定性輸出,§3.10)。
+- 表格清單(`*.csv`,含 `verify_report.csv`)一律 UTF-8 **含 BOM**(人工覆核走 Excel,無 BOM 中文會亂碼)、`\r\n` 行尾(最後一列也是)、RFC 4180 跳脫;欄位順序固定,列排序規則明確(決定性輸出,§3.10)。
+  純文字清單 `need_fetch_media.txt`、`orphan_slugs.txt` 不是 CSV,格式見各自段落。
+- **CSV 公式注入防護**(1.1.2 起):交付用 CSV 的欄位若以 `=` `+` `-` `@`、tab 或 CR 開頭,寫出時會前置一個單引號 `'`
+  (Excel 才不會把它當公式執行),所以這類欄位讀回來比原始資料多一個前綴字元。內部快取 `.polymigrate/media_sha1_cache.csv` 不加。
+- Markdown(`content/**/*.md`)UTF-8 **無 BOM**;`---` 圍欄與內文以 `\n` 換行,檔尾單一 `\n`。
+  frontmatter 內部各行的換行目前隨執行平台(Windows 為 `\r\n`、Linux/macOS 為 `\n`);YAML 解析器兩者都吃,
+  但跨平台逐位元組比對前要先正規化行尾。
 - 路徑一律用 `/` 分隔、相對於各自根目錄。
 - 語言一律用 BCP-47 標準 locale(§3.3)。frontmatter `lang` 與清單 lang 欄輸出 locale;
   Markdown 輸出目錄與站內連結改寫仍沿用來源站 URL 前綴(= 新站路由),此為每站的路由決策,後續可 config 化。
 - `translation_key` = 去語言前綴的路徑;**以 `/` 開頭 = 無語言前綴的站級頁**(如語言選擇頁),不參與配對。
 - 每份輸出檔案的 schema 變更須升 `config_version` 或在此文件記錄遷移方式。
 
-## Phase 1 → Phase 2:鏡像 + `url_inventory.csv`
+## Phase 1 → Phase 2:鏡像目錄
 
-**鏡像目錄結構**(TODO 0.1 定案):
+鏡像由現成爬蟲產出(§2.4);PolyMigrate 自己只有 `fetch-orphans` 會往裡面補檔(只寫不刪、已存在就跳過)。
+`extract` 讀 `<root>/raw` 與 `<root>/media`(`--raw` / `--media` 可改位置):
 
 ```
-mirror/
-  <host>/
-    <path...>          # 磁碟存「解碼後」檔名(§2.6:%20 雙重編碼坑)
+raw/
+  <URL 路徑>.html      # 原始 URL 路徑 + ".html",沒有 host 這一層:/ch/news/a.php → raw/ch/news/a.php.html
+media/
+  <URL 路徑>           # 磁碟存「解碼後」檔名(§2.6:%20 雙重編碼坑):/images/logo%20a.jpg → media/images/logo a.jpg
 ```
 
-**`url_inventory.csv`**(source of truth,§2.4):
+- `extract` 只認 `raw/` 底下的 `*.html`;第一層目錄是 `lang_map` 的 key 時即為語言前綴,下一層為 section。
+- 只有一個 host:`source_url` 一律以 `site.base_url` 還原;媒體不論原本在哪個 host,都只按 URL 路徑放進 `media/`。
+
+**`url_inventory.csv`**(§2.4 規劃的 URL 清單):**尚未實作**——目前沒有任何指令產出或讀取它,不屬於契約。
+以下是規劃時的欄位草案,留著備查:
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
@@ -39,7 +51,7 @@ mirror/
 
 ## Phase 2 → Phase 3:Markdown + 清單 + 配對結果
 
-**Markdown frontmatter**(欄位序即輸出序;`verify` 檢查前六個為必填):
+**Markdown frontmatter**(欄位序即輸出序;`verify` 檢查 `source_url` / `lang` / `slug` / `translation_key` / `title` / `page_type` 為必填,`section` 不在內):
 
 ```yaml
 source_url: ...
@@ -49,12 +61,12 @@ slug: ...
 translation_key: ...  # 去語言前綴的路徑(§1.4)
 title: ...            # 內文標題優先、剝除日期前綴(§2.6)
 page_type: ...        # 由 extract.section_types 分類(§classify)
-flags: [...]          # needs_rebuild / text_in_image 等
+flags: [...]          # config extract.section_flags 指定的值(如 needs_rebuild)+ 內建的 text_in_image
 text_length: 0
 image_count: 0
 images: [...]         # 相簿:每筆 {local, alt}
-videos: [...]
-documents: [...]
+videos: [...]         # 每筆 {type: youtube, url} 或 {type: local, src}
+documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,orig = 原始絕對 URL)
 ```
 
 - YAML 一律由 YamlDotNet 序列化(§2.6:冒號、數字 slug、以及 YAML 1.1 會誤判成日期/數字的字串,一律強制引號)。
@@ -137,15 +149,31 @@ alternate 都指向首頁。限定「同語言」是因為多語站的合法情�
 `new_path` 由 LinkRewriter 的同一套路由規則自動填(與內文連結改寫一致,兩者不同步 = 301 打到破頁);
 人工可在 CSV 覆改。另出兩種可直接部署的 301 格式(old==new 略過防迴圈,依 old path 排序):
 
-- `redirects.nginx.conf` — `location = {old} {{ return 301 {new}; }}`
+- `redirects.nginx.conf` — 每列 `location = {old} { return 301 {new}; }`
 - `_redirects` — Netlify 格式 `{old} {new} 301`
 
+兩者皆 UTF-8 無 BOM、`\n` 行尾、含結尾換行。
+
 **`path_issues.csv`**(§3.4):`severity, page, issue`。
-error(保留裝置名/非法字元/尾點空白/大小寫碰撞)= 該頁在**任何平台**都一致地拒寫並記錄
+error(保留裝置名/非法字元或控制字元/尾點空白/兩個來源檔映到同一輸出路徑(1.1.2 起)/大小寫碰撞)
+= 該頁在**任何平台**都一致地拒寫並記錄
 ——兩平台產出必須相同;warning(超長路徑)照寫但記錄。恆輸出(乾淨站只有表頭)。
 
+**`media_manifest.csv`**:`local_path, original_url, referenced_by, alt, sha1, bytes`。
+`local_path` 相對於輸出根目錄(媒體目錄不在輸出目錄底下時一律寫成 `media/<相對路徑>`);
+`original_url` 為首見的原始絕對 URL;`referenced_by`(引用頁的 `source_url`)與 `alt`(非空的 alt 文字)
+各自 ordinal 排序後以 ` | ` 連接;`sha1` 小寫十六進位、`bytes` 為檔案大小,檔案不存在時兩者皆空。
+排序:媒體相對路徑(`media/` 底下那一段)ordinal。恆輸出。
+
+**`missing_images.csv`**:`source_page, missing_image`(引用頁的 `source_url`、單次編碼的媒體網路路徑)。
+恆輸出。**跨 Phase**:`verify` 讀它的第 2 欄,命中的 `missing_media` 降為 `known_missing_media`(warning)。
+
+**`need_fetch_media.txt`**:PDF iframe 與 `<video><source>` 引用、需要另外抓回來的原始絕對 URL,一行一個。
+UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**(0 筆時為空檔);ordinal 排序、去重。恆輸出。
+
 **執行報告**(§3.8):warning / error 分級、壞圖清單、配不起來的頁面、跳過原因;
-exit code:0 乾淨 / 1 warning(壞圖、待補媒體、超長路徑)/ 2 error(不安全路徑拒寫)。
+`extract` 的 exit code:0 乾淨 / 1 warning(壞圖、待補媒體、超長路徑;殘檔不算)/ 2 error(不安全路徑拒寫)。
+全部指令的 exit code 見文末「exit code」。
 
 **內部加速檔(非交付物)**:`.polymigrate/media_sha1_cache.csv` —
 (路徑, 大小, mtime)→ sha1 快取,沒動過的媒體免重讀(4.6GB 實測重跑 30s → 5s);
@@ -157,6 +185,43 @@ exit code:0 乾淨 / 1 warning(壞圖、待補媒體、超長路徑)/ 2 error(�
 
 檢查項:frontmatter 必填欄位(source_url/lang/slug/translation_key/title/page_type)、
 內部連結對路由集(content 樹推導;index 檔代表目錄路由)、`/media/` 引用對磁碟
-(URL 解碼後比對;`missing_images.csv` 已記錄的原站壞圖降為 warning)。
+(URL 解碼後比對;`missing_images.csv` 已記錄的原站壞圖降為 warning)、
+孤島頁(2.2 起:沒有任何內容頁連到的頁;內建豁免站根與各語言首頁——深度 ≤ 1 的目錄 index——
+以及 `page_type: listing` 的列表頁,其餘可用 `--allow-unlinked <file>` 豁免,一行一頁、content 相對路徑或路由皆可、`#` 開頭為註解)。
 
-輸出:`verify_report.csv`(severity, page, kind, detail);exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。
+輸出:`verify_report.csv`(severity, page, kind, detail);`content/` 不存在時不寫。`kind` 目前的值:
+
+| kind | severity | detail |
+|---|---|---|
+| `no_content` | error | `content/` 不存在(此時不寫報告檔) |
+| `invalid_frontmatter` | error | 沒有 frontmatter 區塊,或 YAML 解析錯誤訊息 |
+| `missing_field` | error | 缺少(或不是非空字串)的必填欄位名 |
+| `missing_media` | error | 原始引用字串 |
+| `known_missing_media` | warning | 原始引用字串(已記錄於 `missing_images.csv`) |
+| `broken_link` | error | 原始引用字串 |
+| `unlinked_page` | warning | `not linked from any content page (menus are not checked)` |
+
+exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_page` 之後,
+原本 exit 0 的專案可能變成 exit 1。
+
+## `probe-orphans` → `fetch-orphans`:`orphan_slugs.txt`
+
+`probe-orphans` 的輸出、`fetch-orphans --slugs` 的預設輸入(皆預設 `<root>/orphan_slugs.txt`)。
+一行一個 slug,依探測順序;UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**;每次探測跑完整份覆寫。
+`fetch-orphans` 讀取時逐行去頭尾空白、略過空行,所以 `slugs` 的輸出或手寫清單也能直接餵。
+
+## exit code
+
+0 乾淨 / 1 warning / 2 error / 130 中斷。所有指令的用法錯誤、config 錯誤、IO 錯誤一律 2;未知指令 2。
+
+| 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
+|---|---|---|---|---|
+| `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | — |
+| `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | — |
+| `probe-orphans` | 跑完(不論命中幾筆) | — | `--years` 不合法 | Ctrl-C |
+| `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在 | Ctrl-C |
+| `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | — |
+| `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | — |
+
+130 目前只有 `probe-orphans` / `fetch-orphans` 回得出來:其餘指令是同步執行、不接取消訊號,
+第一次 Ctrl-C 不會中斷它們,第二次由 runtime 直接終止行程,結束碼由作業系統決定,不是 130。

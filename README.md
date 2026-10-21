@@ -15,10 +15,11 @@ Config-driven, fully offline-rerunnable, built on .NET.
 
 **Status: 2.3.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
-surface and the Phase output contracts remain stable** (unchanged since 1.0): new features bump
+surface and the Phase output contracts remain stable** (only added to since 1.0): new features bump
 the minor version, fixes bump the patch. 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
-config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages).
+config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages) — though
+the npm launcher could only start the Windows/Linux arm64 builds from 2.3.1 on.
 2.2 closed a blind spot in `verify` — pages nothing links to were reported as fine, because a
 link-following audit never reaches them — and added `slugs` for keeping up with a source site
 that is still being updated. **Upgrading to 2.2 can turn a passing `verify` into exit 1**.
@@ -123,7 +124,7 @@ Two channels — pick whichever runtime you already have. **Same tool, same beha
 
 ```
 npx cornhsu-polymigrate extract site.yaml   # Node — no .NET install needed
-dotnet tool install -g Cornhsu.PolyMigrate  # .NET
+dotnet tool install -g Cornhsu.PolyMigrate  # .NET 10
 ```
 
 > The npm build ships a self-contained native binary and only downloads the one
@@ -134,7 +135,7 @@ dotnet tool install -g Cornhsu.PolyMigrate  # .NET
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
-polymigrate verify out/                     # link/media/frontmatter/unlinked-page audit, CI exit codes
+polymigrate verify .                        # link/media/frontmatter/unlinked-page audit, CI exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
 polymigrate probe-orphans site.yaml --section news --years 2021-2023
 polymigrate fetch-orphans site.yaml --section news
@@ -148,7 +149,7 @@ polymigrate slugs . --section news          # slugs already mirrored under ./raw
 > off, and back them up if the source is going away.
 
 > No .NET? Every command above also runs with **zero install** via npm — just prefix it:
-> `npx cornhsu-polymigrate extract site.yaml`, `npx cornhsu-polymigrate verify out/`, and so on.
+> `npx cornhsu-polymigrate extract site.yaml`, `npx cornhsu-polymigrate verify .`, and so on.
 
 One YAML config per site describes everything site-specific — see
 [examples/ibps-austin.yaml](examples/ibps-austin.yaml) for a fully-annotated real example.

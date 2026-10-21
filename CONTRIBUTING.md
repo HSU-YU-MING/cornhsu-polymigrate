@@ -21,8 +21,12 @@ dotnet run --project src/PolyMigrate.Cli -- --help
 - **Unit tests** live in `tests/PolyMigrate.Core.Tests` (library) and `tests/PolyMigrate.Cli.Tests`
   (CLI arg-parsing + exit codes). Internal types are testable via `InternalsVisibleTo`.
 - **Golden tests** (`GoldenTests.cs`) run the full pipeline over the offline fixture site
-  (`tests/fixtures/site`) and diff every output file against committed baselines in
-  `tests/fixtures/golden` — this is how output-contract stability is guarded.
+  (`tests/fixtures/site`) and diff every output file (except `verify_report.csv` and
+  `.polymigrate/`) against committed baselines in `tests/fixtures/golden` — this is how
+  output-contract stability is guarded. The diff compares *text*: it reads each file with the
+  BOM dropped and strips every `\r`, so BOMs and line endings are not checked there; the byte
+  format (CSV = UTF-8 with BOM + CRLF, Markdown without BOM) is pinned by
+  `Extraction/OutputBytesTests.cs`.
 
 ### Updating the golden baselines
 
@@ -34,8 +38,9 @@ git diff tests/fixtures/golden      # eyeball every change before committing
 ```
 
 Never regenerate to make a red test green without understanding *why* the output changed —
-the golden diff is the review. `tests/fixtures/**` is pinned `-text` in `.gitattributes` so the
-byte-for-byte comparison is deterministic across platforms; don't let an editor reformat them.
+the golden diff is the review. `tests/fixtures/**` is pinned `-text` in `.gitattributes` so git
+never converts line endings in the fixture input or the baselines on any platform; don't let an
+editor reformat them.
 
 ## Conventions
 
