@@ -42,6 +42,22 @@ the golden diff is the review. `tests/fixtures/**` is pinned `-text` in `.gitatt
 never converts line endings in the fixture input or the baselines on any platform; don't let an
 editor reformat them.
 
+### Updating the public API baseline
+
+`PublicApiTests.PublicSurface_MatchesApprovedBaseline` snapshots every public type and member of
+`Cornhsu.PolyMigrate.Core` into `tests/PolyMigrate.Core.Tests/PublicApi.approved.txt`. It goes red
+whenever the library's public surface changes — including changes that still compile for callers,
+such as adding an optional parameter (source-compatible, binary-breaking). The failure message
+lists what was added and what was removed or changed.
+
+**Decide the semver bump first, then update the baseline:** additions are minor; removing or
+changing an existing signature, or narrowing visibility, is major. Once the change is intentional:
+
+```sh
+POLYMIGRATE_UPDATE_API=1 dotnet test -c Release --filter PublicSurface_MatchesApprovedBaseline
+git diff tests/PolyMigrate.Core.Tests/PublicApi.approved.txt   # the diff is the semver review
+```
+
 ## Conventions
 
 - **Branch + PR** into `main`; CI (format + 3-OS test + pack) must be green. Releases go out by

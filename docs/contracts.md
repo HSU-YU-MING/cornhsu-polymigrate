@@ -108,7 +108,7 @@ documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,o
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | source_url | string | 宣告這則 hreflang 的頁(排序鍵,ordinal) |
-| hreflang | string | 屬性原值,不正規化(`en` / `zh-Hant` / `x-default`) |
+| hreflang | string | 屬性原值,只去頭尾空白,不做大小寫或格式正規化(`en` / `zh-Hant` / `x-default`) |
 | target_url | string | 以來源頁 URL 解析後的絕對 URL |
 | target_translation_key | string | 目標頁的配對鍵;不在鏡像裡則留空 |
 | in_mirror | True/False | 目標頁同 host、且該路由真的抽到過一頁 |
@@ -147,7 +147,9 @@ alternate 都指向首頁。限定「同語言」是因為多語站的合法情�
 
 **`redirect_map.csv`**:`old_url, new_path, lang, translation_key`。
 `new_path` 由 LinkRewriter 的同一套路由規則自動填(與內文連結改寫一致,兩者不同步 = 301 打到破頁);
-人工可在 CSV 覆改。另出兩種可直接部署的 301 格式(old==new 略過防迴圈,依 old path 排序):
+人工可在 CSV 覆改。排序:鏡像檔相對路徑(`raw/` 底下那一段)ordinal,即處理順序;
+不安全路徑被拒寫的頁不出現。恆輸出。
+另出兩種可直接部署的 301 格式(old==new 略過防迴圈,依 old path 排序):
 
 - `redirects.nginx.conf` — 每列 `location = {old} { return 301 {new}; }`
 - `_redirects` — Netlify 格式 `{old} {new} 301`
@@ -158,6 +160,7 @@ alternate 都指向首頁。限定「同語言」是因為多語站的合法情�
 error(保留裝置名/非法字元或控制字元/尾點空白/兩個來源檔映到同一輸出路徑(1.1.2 起)/大小寫碰撞)
 = 該頁在**任何平台**都一致地拒寫並記錄
 ——兩平台產出必須相同;warning(超長路徑)照寫但記錄。恆輸出(乾淨站只有表頭)。
+排序:`severity` 字串 ordinal(所以 `error` 列在 `warning` 前)→ `page` ordinal。
 
 **`media_manifest.csv`**:`local_path, original_url, referenced_by, alt, sha1, bytes`。
 `local_path` 相對於輸出根目錄(媒體目錄不在輸出目錄底下時一律寫成 `media/<相對路徑>`);
@@ -166,7 +169,8 @@ error(保留裝置名/非法字元或控制字元/尾點空白/兩個來源檔�
 排序:媒體相對路徑(`media/` 底下那一段)ordinal。恆輸出。
 
 **`missing_images.csv`**:`source_page, missing_image`(引用頁的 `source_url`、單次編碼的媒體網路路徑)。
-恆輸出。**跨 Phase**:`verify` 讀它的第 2 欄,命中的 `missing_media` 降為 `known_missing_media`(warning)。
+排序:處理順序——鏡像檔相對路徑 ordinal,同一頁內依正文 `<img>` 出現的順序;不去重。恆輸出。
+**跨 Phase**:`verify` 讀它的第 2 欄,命中的 `missing_media` 降為 `known_missing_media`(warning)。
 
 **`need_fetch_media.txt`**:PDF iframe 與 `<video><source>` 引用、需要另外抓回來的原始絕對 URL,一行一個。
 UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**(0 筆時為空檔);ordinal 排序、去重。恆輸出。
@@ -189,7 +193,8 @@ UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**(0 筆時為空檔);ordinal 
 孤島頁(2.2 起:沒有任何內容頁連到的頁;內建豁免站根與各語言首頁——深度 ≤ 1 的目錄 index——
 以及 `page_type: listing` 的列表頁,其餘可用 `--allow-unlinked <file>` 豁免,一行一頁、content 相對路徑或路由皆可、`#` 開頭為註解)。
 
-輸出:`verify_report.csv`(severity, page, kind, detail);`content/` 不存在時不寫。`kind` 目前的值:
+輸出:`verify_report.csv`(severity, page, kind, detail);`content/` 不存在時不寫。
+排序:`severity` 字串 ordinal(`error` 在 `warning` 前)→ `page` ordinal → `detail` ordinal。`kind` 目前的值:
 
 | kind | severity | detail |
 |---|---|---|

@@ -29,6 +29,10 @@ POLYMIGRATE_UPDATE_GOLDEN=1 dotnet test -c Release --filter FixtureSite_MatchesG
 git diff tests/fixtures/golden    # 逐檔看過再 commit，diff 本身就是 review
 ```
 
+函式庫公開面快照 `tests/PolyMigrate.Core.Tests/PublicApi.approved.txt` 是第二份要重產的基準
+（改到 `Cornhsu.PolyMigrate.Core` 的 public 型別或成員時才會紅）。**先判 semver 再更新**，
+流程見 [CONTRIBUTING.md](CONTRIBUTING.md)「Updating the public API baseline」。
+
 本機乾跑封裝（不發佈，只確認裝得起來、跑得動）的指令在 [RELEASING.md](RELEASING.md)；
 tool 套件約 **100 MB**（內含 Magick.NET 全平台原生檔），這個大小是預期的，不是打包壞掉。
 
@@ -172,8 +176,8 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
 
 ## 技術債與判讀留帳
 
-- **⚠ 尚未出貨的修補：arm64 啟動腳本與 README 徽章（2026-08-26 修好，等下次發版）**
-  兩個都已修進 `main`，但**使用者手上的 2.1.0～2.3.0 仍是壞的**，要推下一個 tag 才會到他們手上：
+- **已於 2.3.1 出貨：arm64 啟動腳本與 README 徽章（2026-08-26 修好）**
+  2.1.0～2.3.0 這兩處是壞的，升到 2.3.1 以上才會好（CHANGELOG 2.3.1 有記載）：
   - `bin/polymigrate.js` 的 `TARGETS` 原本只有四個平台，缺 `win32 arm64` / `linux arm64`。
     2.1.0 在 `release.yml`、`prepare.mjs`、`optionalDependencies` 三處都加了 arm64，**唯獨啟動
     腳本沒改**（該檔自 1.1.0 的 `1c8bf09` 起未曾變動）。症狀極隱蔽：平台包被 npm 正確裝好，
@@ -181,13 +185,10 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
   - `README.md` 的 License 徽章被 `8244632` 把整段「See also」貼進 alt text 裡，徽章不呈現、
     且底部缺 See also 一節。這份 README 隨 NuGet（`PackageReadmeFile`）與 npm 主套件出貨，
     所以壞掉的徽章會出現在套件頁上。已還原徽章並把該節補到 License 段之前（比照中文版位置）。
-- **四→六的平台數描述漂移**（arm64 是 2.1.0 加的，這幾處還停在四個；README 已於 2026-08-26 修）：
-  - `RELEASING.md`「npm 通路」段寫「四個 RID … 四個平台包」
-  - `npm/prepare.mjs` 檔頭註解寫「五個可直接 npm publish 的資料夾」（實為 6 平台包 + 1 主套件 = 7）
-  - `release.yml` 註解說 arm64「是 **2.0.2** 補上的」——沒有 v2.0.2 這個 tag，CHANGELOG 記的是 2.1.0
-- **已刪的 `npm-backfill.yml` 仍被文件提到**：`Directory.Build.props` 的 `<Version>` 註解與
-  CHANGELOG 2.2.1「內部」段都還寫著它。CHANGELOG 是歷史紀錄、留著合理；`Directory.Build.props`
-  那句可以順手改掉。
+- **四→六的平台數描述漂移、已刪的 `npm-backfill.yml` 殘留引用：已於 `e241ea9`、`4f890cd` 修正**
+  （`RELEASING.md`「npm 通路」段、`npm/prepare.mjs` 檔頭註解、`release.yml` 的「2.0.2」註解、
+  `Directory.Build.props` 的 `<Version>` 註解；都是文件或註解，不隨套件出貨）。
+  CHANGELOG 2.2.1「內部」段仍提到 `npm-backfill.yml`，那是歷史紀錄，留著合理。
 - **沒有 README 示範輸出的自動比對**。`ReadmeDriftTests` 只擋「README 列的指令 = `--help` 列的指令」
   （中英文各一），**不比對說明文字，也不比對貼在 README 裡的示範輸出**（刻意如此：逐字比對只會
   製造假警報，反而讓人把測試關掉）。姊妹 repo 有 `verify-readme-sample.ps1`（XamlContrast）與

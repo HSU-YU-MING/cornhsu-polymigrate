@@ -15,7 +15,8 @@ Config-driven, fully offline-rerunnable, built on .NET.
 
 **Status: 2.3.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
-surface and the Phase output contracts remain stable** (only added to since 1.0): new features bump
+surface and the Phase output contracts remain stable** (additive since 1.0, apart from the 2.2
+`verify` exit-code change noted below): new features bump
 the minor version, fixes bump the patch. 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
 config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages) — though
