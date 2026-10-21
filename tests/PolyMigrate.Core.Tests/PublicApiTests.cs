@@ -61,6 +61,26 @@ public class PublicApiTests
         }
     }
 
+    [Fact]
+    public void FacadeDocs_DoNotCallPublicTypesInternal()
+    {
+        // PolyMigrator 的 XML 文件會打包進 PolyMigrate.Core.xml、出現在使用者的 IntelliSense 裡。
+        // 它原本把 ExtractionPipeline / OutputVerifier 等稱為「內部的…實作型別」,但它們自 2.0.0 起就是
+        // public、已經出貨,依 semver 屬於公開面——文件不可以叫使用者把公開面當成可以隨時換掉的內部細節
+        var xml = System.Xml.Linq.XDocument.Load(Path.Combine(AppContext.BaseDirectory, "PolyMigrate.Core.xml"));
+        var summary = xml.Descendants("member")
+            .Single(m => (string?)m.Attribute("name") == "T:PolyMigrate.Core.PolyMigrator")
+            .Element("summary")!.Value;
+
+        Assert.DoesNotContain("內部", summary);
+        var exported = typeof(PolyMigrator).Assembly.GetExportedTypes().Select(t => t.Name).ToHashSet();
+        foreach (var name in (string[])["ExtractionPipeline", "OutputVerifier", "ThumbnailGenerator", "OrphanProber", "OrphanFetcher"])
+        {
+            Assert.Contains(name, exported);   // 文件提到的確實是 public 型別
+            Assert.Contains(name, summary);
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // 快照格式:每個 exported type 一段,成員一行一個、依字串排序(反射回傳順序不保證)。
     // 簽章含 nullability、預設值、ref/out、static、init、required——這些都是消費端看得到的面。

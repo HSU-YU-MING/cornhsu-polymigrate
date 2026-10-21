@@ -7,8 +7,12 @@ namespace PolyMigrate.Core;
 
 /// <summary>
 /// PolyMigrate 函式庫的進入點(<c>Cornhsu.PolyMigrate.Core</c>)。
-/// polymigrate CLI 是這層之上的殼;要在自己的 .NET 程式裡驅動搬遷,用這個型別即可,
-/// 不必碰內部的 ExtractionPipeline / OutputVerifier 等實作型別。
+/// polymigrate CLI 是這層之上的殼;要在自己的 .NET 程式裡驅動抽取、縮圖、巡檢與列出已鏡像的 slug,
+/// 用這個型別即可。
+/// <para>其餘 public 型別(ExtractionPipeline、OutputVerifier、ThumbnailGenerator、OrphanProber、
+/// OrphanFetcher 等)是較底層的進階用途:它們同樣屬於公開面、受 semver 約束,只是沒有這一層的便利。
+/// 探測與抓回孤兒頁(CLI 的 probe-orphans / fetch-orphans)目前沒有 facade 入口,
+/// 要直接用 OrphanProber / OrphanFetcher。</para>
 /// </summary>
 /// <example>
 /// <code>

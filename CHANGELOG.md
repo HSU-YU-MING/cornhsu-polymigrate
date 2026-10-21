@@ -102,6 +102,11 @@
   `--help` 另補上:`--years` 可只給一年、`probe-orphans` 的 `--lang` 預設是 `lang_map` 第一個 key、
   `probe-orphans --out` 與 `fetch-orphans --slugs` 預設 `<root>/orphan_slugs.txt`、`-h` / `-v` 別名,
   以及「`--root` 預設是 config 所在目錄」。參數行為沒有任何改變。
+- **文件(none):`PolyMigrator` 的 XML 文件不再把 public 型別稱為「內部實作型別」。**
+  `ExtractionPipeline`、`OutputVerifier`、`ThumbnailGenerator`、`OrphanProber`、`OrphanFetcher` 等自 2.0.0 起就是
+  public、已經出貨,屬於公開面;這段文件會打包進 `PolyMigrate.Core.xml` 出現在 IntelliSense,原本的說法
+  會讓人以為它們可以隨時被換掉。現在寫成「較底層的進階用途、同樣受 semver 約束」,並點明探測/抓回孤兒頁
+  目前沒有 facade 入口。(隨下一版 nupkg 更新。)
 
 ## 2.3.1
 
