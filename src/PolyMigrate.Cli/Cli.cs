@@ -16,6 +16,56 @@ public static class Cli
     private static readonly string Version = Assembly.GetExecutingAssembly()
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
 
+    // 每個指令的語法列只寫在這裡一次:--help 與參數錯誤時印的「Usage:」共用。原本兩邊各抄一份,
+    // extract 的 Usage 就少了 --dry-run(文件與程式各自演化一定會走鐘,見 CLAUDE.md「已知教訓」)
+    private const string ExtractUsage =
+        "polymigrate extract <config.yaml> [--root <dir>] [--raw|--media|--out <dir>] [--dry-run]";
+    private const string ThumbsUsage =
+        "polymigrate thumbs <config.yaml> [--root <dir>] [--media <dir>] [--out <dir>]";
+    private const string ProbeUsage =
+        "polymigrate probe-orphans <config.yaml> --section <name> --years <from-to> [--lang <prefix>] [--root <dir>] [--out <file>]";
+    private const string FetchUsage =
+        "polymigrate fetch-orphans <config.yaml> --section <name> [--slugs <file>] [--root <dir>]";
+    private const string VerifyUsage =
+        "polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/] [--allow-unlinked <file>]";
+    private const string SlugsUsage =
+        "polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]";
+
+    /// <summary>
+    /// --help 裡的語法列:縮排兩格,太長時在 <c>[…]</c> 之間折行,續行對齊到指令名之後。
+    /// 參數錯誤時的 Usage 印的是同一個字串、不折行。
+    /// </summary>
+    private static string Synopsis(string usage)
+    {
+        const int width = 92;
+        var indent = new string(' ', 2 + usage.IndexOf(' ', "polymigrate ".Length) + 1);
+        var segments = new List<string>();
+        var start = 0;
+        for (var i = usage.IndexOf(" [", StringComparison.Ordinal); i >= 0; i = usage.IndexOf(" [", i + 1, StringComparison.Ordinal))
+        {
+            segments.Add(usage[start..i]);
+            start = i + 1;
+        }
+        segments.Add(usage[start..]);
+
+        var lines = new List<string>();
+        var line = "  " + segments[0];
+        foreach (var segment in segments.Skip(1))
+        {
+            if (line.Length + 1 + segment.Length > width)
+            {
+                lines.Add(line);
+                line = indent + segment;
+            }
+            else
+            {
+                line += " " + segment;
+            }
+        }
+        lines.Add(line);
+        return string.Join('\n', lines);
+    }
+
     public static async Task<int> RunAsync(string[] args, CancellationToken ct = default)
     {
         switch (args.FirstOrDefault())
@@ -48,33 +98,38 @@ public static class Cli
                     polymigrate {Version} — the i18n-first static-site migrator
 
                     Usage:
-                      polymigrate extract <config.yaml> [--root <dir>] [--raw|--media|--out <dir>] [--dry-run]
+                    {Synopsis(ExtractUsage)}
                           Run Phase 2 extraction. Reads <root>/raw and <root>/media, writes
                           <root>/content plus inventories to <root>. Default root: config's directory.
                           --dry-run: full run and report, but nothing written.
-                      polymigrate thumbs <config.yaml> [--root <dir>] [--media <dir>] [--out <dir>]
+                    {Synopsis(ThumbsUsage)}
                           Generate thumbnails: media/ -> media_thumb/ (same layout). EXIF auto-orient,
                           downscale to media.thumbnails.max_width. Existing thumbnails are skipped.
-                      polymigrate probe-orphans <config.yaml> --section <name> --years <from-to>
-                                                [--lang <prefix>] [--root <dir>] [--out <file>]
+                    {Synopsis(ProbeUsage)}
                           Probe the live site for orphan pages (removed from indexes but still served):
                           per-day slugs in both YYYYMMDD and MMDDYYYY forms, plus A-D suffix variants.
                           Polite (site.polite.delay_ms) and sends site.auth_workaround cookies.
-                      polymigrate fetch-orphans <config.yaml> --section <name> [--slugs <file>] [--root <dir>]
+                          --years: one year (2021) or a range (2021-2023).
+                          --lang: defaults to the first url_pattern.lang_map key.
+                          --out: defaults to <root>/orphan_slugs.txt.
+                    {Synopsis(FetchUsage)}
                           Fetch probed orphan pages (all langs) into raw/ and their assets into media/.
-                      polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/]
-                                                      [--allow-unlinked <file>]
+                          --slugs: defaults to <root>/orphan_slugs.txt (one slug per line).
+                    {Synopsis(VerifyUsage)}
                           Verify extracted output: frontmatter fields, internal links, media refs,
                           and unlinked pages — pages no other page links to, which visitors can
                           only reach by typing the URL. Unlinked pages are warnings.
                           Default media dir: <output-dir>/media (media checks skipped if absent).
                           --allow-unlinked: file of pages to exempt, one per line (# comments ok).
-                      polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]
+                    {Synopsis(SlugsUsage)}
                           List slugs already mirrored under <root>/raw, sorted, one per line on stdout
                           (the summary goes to stderr, so stdout stays pipeable). During a
                           parallel run: diff this against the live site's current list, then
                           feed the difference to fetch-orphans --slugs. Local only, no network.
-                      polymigrate --version               Print version
+                      polymigrate --help, -h              Print this help
+                      polymigrate --version, -v           Print version
+
+                    For every command that takes <config.yaml>, --root defaults to the config file's directory.
                     """);
                 return 0;
 
@@ -116,7 +171,7 @@ public static class Cli
         }
         if (configPath is null)
         {
-            Console.Error.WriteLine("Usage: polymigrate extract <config.yaml> [--root <dir>] [--raw <dir>] [--media <dir>] [--out <dir>]");
+            Console.Error.WriteLine("Usage: " + ExtractUsage);
             return 2;
         }
 
@@ -212,7 +267,7 @@ public static class Cli
         if (outDir is null)
         {
             Console.Error.WriteLine(
-                "Usage: polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/] [--allow-unlinked <file>]");
+                "Usage: " + VerifyUsage);
             return 2;
         }
         try
@@ -270,7 +325,7 @@ public static class Cli
 
     private static int RunSlugs(string[] args, CancellationToken ct)
     {
-        const string usage = "Usage: polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]";
+        const string usage = "Usage: " + SlugsUsage;
         string? root = null;
         string? section = null;
         string? langPrefix = null;
@@ -342,7 +397,7 @@ public static class Cli
 
     private static int RunThumbs(string[] args, CancellationToken ct)
     {
-        if (ParseArgs(args, "Usage: polymigrate thumbs <config.yaml> [--root <dir>] [--media <dir>] [--out <dir>]",
+        if (ParseArgs(args, "Usage: " + ThumbsUsage,
                 "--root", "--media", "--out") is not var (configPath, options))
         {
             return 2;
@@ -381,7 +436,7 @@ public static class Cli
 
     private static async Task<int> RunProbeOrphans(string[] args, CancellationToken ct)
     {
-        const string usage = "Usage: polymigrate probe-orphans <config.yaml> --section <name> --years <from-to> [--lang <prefix>] [--root <dir>] [--out <file>]";
+        const string usage = "Usage: " + ProbeUsage;
         if (ParseArgs(args, usage, "--section", "--years", "--lang", "--root", "--out") is not var (configPath, options))
         {
             return 2;
@@ -451,7 +506,7 @@ public static class Cli
 
     private static async Task<int> RunFetchOrphans(string[] args, CancellationToken ct)
     {
-        const string usage = "Usage: polymigrate fetch-orphans <config.yaml> --section <name> [--slugs <file>] [--root <dir>]";
+        const string usage = "Usage: " + FetchUsage;
         if (ParseArgs(args, usage, "--section", "--slugs", "--root") is not var (configPath, options))
         {
             return 2;

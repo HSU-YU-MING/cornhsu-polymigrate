@@ -97,6 +97,11 @@
   程式註解與 `docs/hreflang_量測與決策.md` 原本寫「`<head>` 裡的」,與實作不符;現在照實寫,並以測試釘住。
   行為沒有改:舊站的 `<head>` 常被 include 檔的 BOM 提早截斷、`<link>` 落進 body,只讀 head 會讓這類站的
   宣告整批消失。要不要改成只讀 head 留給維護者裁定。
+- **修正(patch):CLI 內建說明和 parser 不一致,也漏寫預設值與別名。** `extract` 參數錯誤時印的 `Usage:`
+  沒有 `--dry-run`(與 `--help` 不同);六個指令的語法列現在只寫一次,`--help` 與參數錯誤的 `Usage:` 共用。
+  `--help` 另補上:`--years` 可只給一年、`probe-orphans` 的 `--lang` 預設是 `lang_map` 第一個 key、
+  `probe-orphans --out` 與 `fetch-orphans --slugs` 預設 `<root>/orphan_slugs.txt`、`-h` / `-v` 別名,
+  以及「`--root` 預設是 config 所在目錄」。參數行為沒有任何改變。
 
 ## 2.3.1
 
