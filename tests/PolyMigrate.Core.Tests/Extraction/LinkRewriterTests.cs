@@ -34,6 +34,31 @@ public class LinkRewriterTests
         Assert.Equal("/", Rewriter.Rewrite("/index.php", PageUrl));
 
     [Theory]
+    // 解析後落在別的 host / 別的協定:不是站內頁,原樣保留(不可改寫成本站路由)
+    [InlineData("ftp://files.ibps-austin.org/a.pdf")]
+    [InlineData("HTTPS://WWW.FGS.ORG.TW/x.php")]       // 前綴比對不分大小寫
+    // 解析不了的 href(UriFormatException):原樣保留,不得讓整頁抽取失敗
+    [InlineData("http:[x")]
+    [InlineData("ftp://[::1")]
+    public void NonSiteOrMalformedHrefs_Untouched(string href) =>
+        Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
+
+    [Fact]
+    public void SiteHostMatch_IsCaseInsensitive()
+    {
+        // 主機名本來就不分大小寫;舊站內文裡大小寫混用的絕對連結仍是站內連結
+        Assert.Equal("/ch/news/a", Rewriter.RouteForUrl("https://WWW.IBPS-AUSTIN.ORG/ch/news/a.php"));
+        Assert.Null(Rewriter.RouteForUrl("https://en.ibps-austin.org/ch/news/a.php"));   // 子網域是別的站
+        Assert.Null(Rewriter.RouteForUrl("not a url"));
+    }
+
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    public void NullOrEmptyHref_YieldsEmpty(string? href, string expected) =>
+        Assert.Equal(expected, Rewriter.Rewrite(href, PageUrl));
+
+    [Theory]
     // query 與 fragment 是頁面身分的一部分,改寫時不可丟(?id=5 兩頁不能塌成同一路由)
     [InlineData("detail.php?id=5", "/ch/news/detail?id=5")]
     [InlineData("../about.php#team", "/ch/about#team")]

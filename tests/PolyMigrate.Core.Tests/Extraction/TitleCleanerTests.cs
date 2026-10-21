@@ -1,3 +1,4 @@
+using System.Globalization;
 using PolyMigrate.Core.Extraction;
 
 namespace PolyMigrate.Core.Tests.Extraction;
@@ -67,6 +68,51 @@ public class TitleCleanerTests
 
         Assert.Equal("八關齋戒", cleaner.Clean("2025/02/02:八關齋戒", stripSiteNoise: false));
         Assert.Equal("News 02/02/2025: Retreat", cleaner.Clean("News 02/02/2025: Retreat", stripSiteNoise: false));
+    }
+
+    [Fact]
+    public void MarkerMatching_DoesNotDependOnMachineCulture()
+    {
+        // IgnoreCase 一律搭 CultureInvariant:tr-TR 上 'i' 的大寫是 'İ' 不是 'I',
+        // 少了 CultureInvariant 的話「NOTICE:」在土耳其語系的機器上就不再被當成標記字——
+        // 同一份 config、同一個站,輸出隨跑的機器而變(與 §3.10 決定性輸出相悖)。
+        // regex 在建構時抓取文化,所以 TitleCleaner 必須在切換文化之後才建
+        var original = CultureInfo.CurrentCulture;
+        string cleaned;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("tr-TR");
+            var config = TestConfigs.IbpsLike();
+            config.Extract.TitleMarkers = ["Notice"];
+            cleaned = new TitleCleaner(config.Extract).Clean("IBPS Austin NOTICE: Winter Retreat", stripSiteNoise: true);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+
+        Assert.Equal("Winter Retreat", cleaned);
+    }
+
+    [Fact]
+    public void NoTitleMarkers_SiteNoiseStillStrippedFromTitleTag()
+    {
+        // title_markers: [] 只關掉「標記字:」那條捷徑,站名雜訊照剝
+        var config = TestConfigs.IbpsLike();
+        config.Extract.TitleMarkers = [];
+        var cleaner = new TitleCleaner(config.Extract);
+
+        Assert.Equal("About Us", cleaner.Clean("IBPS Austin | About Us", stripSiteNoise: true));
+    }
+
+    [Fact]
+    public void ConfiguredStripTitlePrefix_CombinesWithBuiltInDatePrefix()
+    {
+        var config = TestConfigs.IbpsLike();
+        config.Extract.StripTitlePrefix = [@"^\[[^\]]+\]\s*"];
+        var cleaner = new TitleCleaner(config.Extract);
+
+        Assert.Equal("浴佛法會", cleaner.Clean("[公告] 2025/05/04 新聞:浴佛法會", stripSiteNoise: false));
     }
 
     [Fact]

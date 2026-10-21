@@ -126,6 +126,158 @@ public class PageExtractorTests : IDisposable
     }
 
     [Fact]
+    public void LocalVideo_BecomesEmbed_FrontmatterLocalEntry_AndNeedFetch()
+    {
+        // 爬蟲當初沒抓 <source>,所以本地影片一律進待補清單;frontmatter 記 {type: local, src}
+        const string html =
+            """
+            <html><body><section id="personal">
+            <p>開場</p>
+            <video controls><source src="clips/opening.mp4" type="video/mp4"></video>
+            </section></body></html>
+            """;
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        var video = Assert.Single(result.Videos);
+        Assert.Equal(new Dictionary<string, string> { ["type"] = "local", ["src"] = "/media/ch/news/clips/opening.mp4" },
+            video);
+        Assert.Equal("https://www.ibps-austin.org/ch/news/clips/opening.mp4", Assert.Single(result.NeedFetch));
+        Assert.Contains("<video controls preload=\"metadata\" src=\"/media/ch/news/clips/opening.mp4\"", result.BodyMarkdown);
+        Assert.DoesNotContain("@@EMBED", result.BodyMarkdown);
+        Assert.DoesNotContain("type=\"video/mp4\"", result.BodyMarkdown);   // 原 <video> 已整個換掉
+    }
+
+    [Theory]
+    [InlineData("<video controls></video>")]                         // 沒有 source
+    [InlineData("<video><source src=\"http://[broken\"></video>")]   // src 解析不了
+    [InlineData("<video><source src=\"/\"></video>")]                // 指到站根,不是檔案
+    public void VideoWithoutUsableSource_IsRemoved(string videoHtml)
+    {
+        var html = $"<html><body><section id=\"personal\"><p>內文</p>{videoHtml}</section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Empty(result.Videos);
+        Assert.Empty(result.NeedFetch);
+        Assert.DoesNotContain("<video", result.BodyMarkdown);
+        Assert.Contains("內文", result.BodyMarkdown);
+    }
+
+    [Fact]
+    public void ScriptAndStyle_InsideContent_AreStripped()
+    {
+        // 正文 selector 常常整塊包到模板內嵌的 <script>/<style>;轉成 Markdown 後它們會變成
+        // 一段看得見的程式碼文字(最壞的情況是可執行的內嵌 script 被搬進新站)。
+        // 目前 PageExtractor 先剝、ReverseMarkdown 自己也會丟——這條守的是輸出結果,
+        // 不論是哪一層剝掉的(換 Markdown 轉換器或升版時,少了任一層都還要是乾淨的)
+        const string html =
+            """
+            <html><body><section id="intro">
+            <p>正文</p>
+            <script>window.tracker = 'abc';</script>
+            <style>.banner { color: red; }</style>
+            </section></body></html>
+            """;
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Contains("正文", result.BodyMarkdown);
+        Assert.DoesNotContain("tracker", result.BodyMarkdown);
+        Assert.DoesNotContain("banner", result.BodyMarkdown);
+        Assert.DoesNotContain("<script", result.BodyMarkdown);
+    }
+
+    [Fact]
+    public void UnresolvableImageSrc_IsIgnored_NotCountedMissing()
+    {
+        const string html =
+            """
+            <html><body><section id="intro"><p>這頁的文字夠長,不會被判成資訊鎖在圖裡的那一類頁面。</p>
+            <img src="http://[broken" alt="壞網址"></section></body></html>
+            """;
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Empty(result.Images);
+        Assert.Empty(result.MissingImages);
+        Assert.Empty(result.MediaUses);
+    }
+
+    [Fact]
+    public void ListingPage_ShortTextWithImage_IsNotFlaggedTextInImage()
+    {
+        // 列表頁本來就是一排縮圖配短標題,標 text_in_image 只會把每一個列表頁都列進待辦
+        AddMediaFile("ch/news/images/thumb.jpg");
+        var page = ArticlePage with { Slug = "index", TranslationKey = "news/index" };
+        const string html =
+            """
+            <html><body><section id="list"><img src="images/thumb.jpg" alt=""></section></body></html>
+            """;
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Equal("listing", result.PageType);
+        Assert.DoesNotContain("text_in_image", result.Flags);
+    }
+
+    [Fact]
+    public void NoTitleAnywhere_FallsBackToSlug()
+    {
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+
+        var result = _extractor.Extract(page, "<html><body><section id=\"x\">文字</section></body></html>", _mediaRoot);
+
+        Assert.Equal("intro", result.Title);   // verify 要求 title 非空,不能留空字串
+    }
+
+    [Fact]
+    public void PdfLabel_FallsBackToViewPdf_ForLocalesWithoutALabel()
+    {
+        var page = ArticlePage with { Locale = "ja", LangPrefix = "jp" };
+        const string html =
+            """
+            <html><body><section id="personal"><iframe src="/files/a.pdf"></iframe></section></body></html>
+            """;
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Contains("📄 View PDF", result.BodyMarkdown);
+    }
+
+    [Fact]
+    public void Alternates_OnlyLinkRelAlternateTokens_NotAnchorHreflang()
+    {
+        // 只認 <head> 的 <link rel="alternate" hreflang>(作者宣告的語言版本)。
+        // <a hreflang> 是「這個連結指向的東西是什麼語言」,內文一句「另見英文說明」不是本頁的英文版。
+        const string html =
+            """
+            <html><head>
+            <link rel="alternate" hreflang="en" href="/en/news/20260712.php">
+            <link rel="ALTERNATE stylesheet" hreflang=" ja " href="../../jp/news/20260712.php">
+            <link rel="canonical" hreflang="fr" href="/fr/x.php">
+            <link hreflang="de" href="/de/x.php">
+            <link rel="alternate" hreflang="  " href="/ko/x.php">
+            <link rel="alternate" hreflang="es" href="http://[broken">
+            </head><body><section id="personal">
+            <p>另見 <a rel="alternate" hreflang="en" href="/en/other.php">英文說明</a></p>
+            </section></body></html>
+            """;
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal(
+        [
+            ("en", "https://www.ibps-austin.org/en/news/20260712.php"),
+            ("ja", "https://www.ibps-austin.org/jp/news/20260712.php"),   // rel 是 token 集、不分大小寫;值去空白
+        ],
+        result.Alternates.Select(a => (a.Hreflang, a.TargetUrl)));
+        Assert.Equal("../../jp/news/20260712.php", result.Alternates[1].Href);   // 原值照記,不正規化
+    }
+
+    [Fact]
     public void ShortTextWithImage_FlagsTextInImage()
     {
         AddMediaFile("img/poster.jpg");

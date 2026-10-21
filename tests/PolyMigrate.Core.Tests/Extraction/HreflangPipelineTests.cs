@@ -105,6 +105,46 @@ public class HreflangPipelineTests : IDisposable
     }
 
     [Fact]
+    public void AlternatesTouchingTheLanguageChooser_AreRejectedAsSiteLevel()
+    {
+        // 無前綴的語言選擇頁(translation_key 以 / 開頭)不是任何頁的翻譯:
+        // 指向它、或由它宣告出去的 hreflang 都不可用於配對。
+        // 斷言 CSV 裡的**字面字串**——reject_reason 是對外契約,HreflangIndexTests 比的是常數,
+        // 常數值被改掉時那邊不會紅
+        AddRaw("ch/news/a.php.html", Alternate("en", "/index.php"));
+        AddRaw("index.php.html", Alternate("zh-Hant", "/ch/news/a.php"));
+
+        var report = Run(Config("hreflang"));
+
+        Assert.Equal(2, report.HreflangDeclared);
+        Assert.Equal(0, report.HreflangUsable);
+        var rows = HreflangRows();
+        Assert.Contains("https://old.example.org/ch/news/a.php,en,https://old.example.org/index.php,/index,True,True,False,site_level", rows);
+        Assert.Contains("https://old.example.org/index.php,zh-Hant,https://old.example.org/ch/news/a.php,news/a,True,True,False,site_level", rows);
+    }
+
+    [Fact]
+    public void RejectReasonLiterals_InTheCsv_MatchTheContract()
+    {
+        // contracts.md 列的五個值,逐一以 CSV 字面值出現一次(golden 只涵蓋其中三個)
+        AddRaw("ch/news/gone.php.html", Alternate("en", "/en/news/never-mirrored.php"));        // not_in_mirror
+        AddRaw("ch/news/xd.php.html", Alternate("x-default", "/en/news/b.php"));               // x_default
+        AddRaw("ch/news/self.php.html", Alternate("zh-Hant", "/ch/news/self.php"));            // self_reference
+        AddRaw("ch/news/site.php.html", Alternate("en", "/index.php"));                        // site_level
+        AddRaw("ch/news/t1.php.html", Alternate("en", "/en/news/b.php"));                      // ambiguous_target
+        AddRaw("ch/news/t2.php.html", Alternate("en", "/en/news/b.php"));                      // ambiguous_target
+        AddRaw("en/news/b.php.html");
+        AddRaw("index.php.html");
+
+        Run(Config("hreflang"));
+
+        var reasons = HreflangRows().Skip(1).Select(r => r.Split(',')[^1]).ToHashSet();
+        Assert.Equal(
+            new HashSet<string> { "not_in_mirror", "x_default", "self_reference", "site_level", "ambiguous_target" },
+            reasons);
+    }
+
+    [Fact]
     public void SiteWithoutAnyHreflang_StillWritesTheFileWithHeaderOnly()
     {
         // 缺檔與空檔在診斷時意思完全不同:一個是「這版沒跑到」,一個是「這個站沒宣告」

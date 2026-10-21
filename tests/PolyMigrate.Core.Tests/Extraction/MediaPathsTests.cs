@@ -22,6 +22,14 @@ public class MediaPathsTests
     public void EncodedTraversal_Rejected(string url) =>
         Assert.Null(MediaPaths.RelativeFromUrl(url));
 
+    [Theory]
+    // media.web_prefix 寫不寫結尾斜線都一樣;每段單次編碼(空白 → %20、中日韓 → UTF-8 百分號),'/' 保留
+    [InlineData("/assets", "img/a b.jpg", "/assets/img/a%20b.jpg")]
+    [InlineData("/assets/", "img/a b.jpg", "/assets/img/a%20b.jpg")]
+    [InlineData("/media/", "ch/禪修.jpg", "/media/ch/%E7%A6%AA%E4%BF%AE.jpg")]
+    public void WebPath_UsesConfiguredPrefix_SingleEncodedPerSegment(string prefix, string relative, string expected) =>
+        Assert.Equal(expected, new MediaPaths(new PolyMigrate.Core.Configuration.MediaSection { WebPrefix = prefix }).WebPath(relative));
+
     [Fact]
     public void RootPath_IsNull() =>
         Assert.Null(MediaPaths.RelativeFromUrl("https://h/"));
