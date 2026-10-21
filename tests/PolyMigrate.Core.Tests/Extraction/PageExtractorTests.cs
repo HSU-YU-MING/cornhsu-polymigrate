@@ -239,8 +239,9 @@ public class PageExtractorTests : IDisposable
 
         Assert.Empty(result.Videos);
         Assert.Empty(result.NeedFetch);
-        Assert.DoesNotContain("<video", result.BodyMarkdown);
-        Assert.Contains("內文", result.BodyMarkdown);
+        // 逐字比對整段內文:「移除」包含不留下空的 16:9 外框(VideoWrap)。
+        // 只斷言不含 "<video" 擋不住這種回歸——外框是 div,而 <video> 標籤 ReverseMarkdown 本來就會丟
+        Assert.Equal("內文", result.BodyMarkdown);
     }
 
     [Fact]
@@ -329,8 +330,10 @@ public class PageExtractorTests : IDisposable
     [Fact]
     public void Alternates_OnlyLinkRelAlternateTokens_NotAnchorHreflang()
     {
-        // 只認 <head> 的 <link rel="alternate" hreflang>(作者宣告的語言版本)。
-        // <a hreflang> 是「這個連結指向的東西是什麼語言」,內文一句「另見英文說明」不是本頁的英文版。
+        // 認的是文件中任何位置、rel 含 alternate token 的 <link hreflang href>(作者宣告的語言版本),
+        // 不限 <head>——現行實作對整份文件下 selector,body 裡的 <link> 也算(見 docs/公開介面盤點.md 3.5、7.5);
+        // 若之後決定只看 head,另寫一條測試把那個決定釘住。這裡的測資沒有 body 裡的 <link>。
+        // <a hreflang> 不算:它是「這個連結指向的東西是什麼語言」,內文一句「另見英文說明」不是本頁的英文版。
         const string html =
             """
             <html><head>

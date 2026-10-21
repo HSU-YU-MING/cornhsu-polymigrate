@@ -54,6 +54,8 @@ public class PolyMigratorTests : IDisposable
         // README「Use as a library」那段照抄:FromConfigFile → Extract("out/") → Verify("out/")。
         // Extract(string) 走預設佈局(root/raw、root/media → root),Verify 不給 mediaDir 時
         // 用 root/media——兩個預設值都只有這個範例在用,沒有別的測試會因為它們改掉而變紅。
+        // 三個目錄各有斷言在守:raw → PagesWritten;media → MediaReferenced / MissingImages
+        // (媒體目錄指錯時圖全變成「不存在」:引用 0 張、壞圖變多);out → 檔案位置。
         CopyDirectory(Path.Combine(FixtureDir, "raw"), Path.Combine(_out, "raw"));
         CopyDirectory(Path.Combine(FixtureDir, "media"), Path.Combine(_out, "media"));
 
@@ -63,6 +65,8 @@ public class PolyMigratorTests : IDisposable
 
         Assert.False(report.HasErrors);
         Assert.Equal(13, report.PagesWritten);
+        Assert.Equal(4, report.MediaReferenced);    // 與 FixtureReport_CountsMatchTheInventory 同一份 fixture
+        Assert.Equal(2, report.MissingImages);      // fixture 刻意放的 2 張原站壞圖
         Assert.True(File.Exists(Path.Combine(_out, "content", "ch", "news", "20260101.md")));
         Assert.True(File.Exists(Path.Combine(_out, "content_inventory.csv")));
 

@@ -180,6 +180,7 @@ public class OrphanFetcherTests : IDisposable
             <img src="images/slow.webp">
             <img src="images/script.js">
             <img src="http://[broken">
+            <img src="https://cdn.other.example/x.jpg">
             <video><source src="/video/clip.mp4"></video>
             </section></body></html>
             """;
@@ -207,6 +208,7 @@ public class OrphanFetcherTests : IDisposable
         Assert.True(File.Exists(Path.Combine(MediaDir, "video", "clip.mp4")));
         Assert.False(File.Exists(Path.Combine(MediaDir, "ch", "news", "images", "empty.gif")));
         Assert.DoesNotContain(handler.Requests, r => r.EndsWith(".js"));
+        Assert.DoesNotContain(handler.Requests, r => r.Contains("cdn.other.example"));   // 跨站資產連請求都不發
         Assert.Empty(Directory.GetFiles(MediaDir, "*.tmp", SearchOption.AllDirectories));
     }
 
@@ -331,8 +333,12 @@ public class OrphanFetcherTests : IDisposable
         var config = FastConfig();
         config.Site.Encoding = "big5";
         config.UrlPattern.LangMap = new Dictionary<string, string> { ["ch"] = "zh-Hant" };
-        var big5 = TextEncodings.Resolve("big5").GetBytes(
+        // 測資用 CodePages 的 950(Big5)獨立產生,不經產品的 TextEncodings.Resolve——
+        // 否則 Resolve 一旦壞掉(例如一律回 UTF-8),測資會跟著變成 UTF-8,這條就只剩 UTF-8 來回轉換
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var big5 = Encoding.GetEncoding(950).GetBytes(
             "<html><body><section id=\"main\"><img src=\"images/法會.jpg\"></section></body></html>");
+        Assert.Throws<DecoderFallbackException>(() => new UTF8Encoding(false, true).GetString(big5));   // 防呆:測資確實不是 UTF-8
         var handler = new StubHandler(req => req.RequestUri!.AbsolutePath switch
         {
             "/ch/news/20210505.php" => new HttpResponseMessage(HttpStatusCode.OK)

@@ -29,11 +29,15 @@ public class SourceEncodingTests : IDisposable
             extract:
               content: main
             """);
-        var big5 = TextEncodings.Resolve("big5");
+        // 測資用 CodePages 的 950(Big5)獨立產生,不經產品的 TextEncodings.Resolve——
+        // 否則 Resolve 一旦壞掉(例如一律回 UTF-8),測資會跟著變成 UTF-8,這條就只剩 UTF-8 來回轉換
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var bytes = Encoding.GetEncoding(950).GetBytes(
+            "<html><head><title>浴佛法會</title></head><body><main><p>歡迎大眾參加</p></main></body></html>");
+        Assert.Throws<DecoderFallbackException>(() => new UTF8Encoding(false, true).GetString(bytes));   // 防呆:測資確實不是 UTF-8
         var raw = Path.Combine(_root, "raw", "ch", "news");
         Directory.CreateDirectory(raw);
-        File.WriteAllBytes(Path.Combine(raw, "a.php.html"),
-            big5.GetBytes("<html><head><title>浴佛法會</title></head><body><main><p>歡迎大眾參加</p></main></body></html>"));
+        File.WriteAllBytes(Path.Combine(raw, "a.php.html"), bytes);
 
         new ExtractionPipeline(config).Run(
             new ExtractionPaths(Path.Combine(_root, "raw"), Path.Combine(_root, "media"), _root));

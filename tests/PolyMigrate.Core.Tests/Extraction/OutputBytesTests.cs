@@ -153,7 +153,8 @@ public class OutputBytesTests : IDisposable
             Assert.True(close > 0, $"{name}:找不到結束圍欄 '---' 與其後的空行");
             var body = text[(close + "\n---\n\n".Length)..];
 
-            // 內文由 CleanupMarkdown 逐行 TrimEnd,一律 LF;結尾恰好一個換行
+            // 內文由 CleanupMarkdown 逐行 TrimEnd,一律 LF;結尾恰好一個換行。
+            // 內文為空時這裡切出來的就是單一 "\n",整檔檔尾因此是 "---\n\n\n"(見 contracts.md「通用規則」;fixture 每頁都有內文)
             Assert.DoesNotContain('\r', body);
             Assert.EndsWith("\n", body);
             Assert.False(body.EndsWith("\n\n", StringComparison.Ordinal), $"{name}:結尾多了空行");

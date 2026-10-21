@@ -50,7 +50,9 @@ public class CsvTests : IDisposable
     [Fact]
     public void SpecialCharacters_RoundTrip()
     {
-        string[] fields = ["a,b", "say \"hi\"", "line1\nline2", "crlf\r\ninside", "標題,含逗號", ""];
+        // a"b:單個引號夾在中間。成對的 say "hi" 在「"" 之後漏跳過第二個引號」的錯誤解析下也能剛好還原,
+        // 單個的不行——漏跳過會讓解析器在 b 之後重新進入引號狀態,吃掉後面的逗號與換行
+        string[] fields = ["a,b", "say \"hi\"", "a\"b", "line1\nline2", "crlf\r\ninside", "標題,含逗號", ""];
 
         var row = WriteAndReadBack(guardFormulas: false, fields);
 

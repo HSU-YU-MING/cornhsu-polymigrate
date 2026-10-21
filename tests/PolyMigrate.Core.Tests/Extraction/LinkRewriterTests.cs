@@ -36,11 +36,18 @@ public class LinkRewriterTests
     [Theory]
     // 解析後落在別的 host / 別的協定:不是站內頁,原樣保留(不可改寫成本站路由)
     [InlineData("ftp://files.ibps-austin.org/a.pdf")]
-    [InlineData("HTTPS://WWW.FGS.ORG.TW/x.php")]       // 前綴比對不分大小寫
     // 解析不了的 href(UriFormatException):原樣保留,不得讓整頁抽取失敗
     [InlineData("http:[x")]
     [InlineData("ftp://[::1")]
     public void NonSiteOrMalformedHrefs_Untouched(string href) =>
+        Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
+
+    [Theory]
+    // 絕對 http(s) 連結一律原樣保留(只改寫相對連結),同站的也一樣;scheme 的大小寫不影響這個判斷。
+    // 測資必須是「同站」:別站的網址就算前綴比對改成分大小寫,也會在後面的 host 檢查被原樣傳回,守不住前綴這一關
+    [InlineData("https://www.ibps-austin.org/ch/news/a.php")]
+    [InlineData("HTTPS://WWW.IBPS-AUSTIN.ORG/ch/news/a.php")]   // 前綴分大小寫的話會被改寫成 /ch/news/a
+    public void AbsoluteHttpLinks_PassThrough_SchemeCaseInsensitive(string href) =>
         Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
 
     [Fact]
