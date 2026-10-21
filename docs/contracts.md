@@ -262,8 +262,11 @@ PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編
 目前回 **1**,stderr 以 `error:` 開頭並註明 `PolyMigrate did not run.` 與「這個 1 不是 warning」——
 這個 1 與上表的「1 = 只有 warning」撞號,要不要改成 2 待維護者裁定(既有情境的 exit code 改變屬 major)。
 
-第一次 Ctrl-C:每個指令都在下一個檢查點(下一頁、下一張圖、下一個請求)停下,stderr 印 `cancelled.`、回 130。
-已寫出的 `.md`、縮圖、`raw/` 頁與資產保留(只寫不刪;縮圖與孤兒頁是原子寫入,不會留半截檔);
+第一次 Ctrl-C:每個指令都在下一個檢查點停下,stderr 印 `cancelled.`、回 130。檢查點:`extract` 每一頁之前、
+`media_manifest.csv` 每個媒體檔算 sha1 之前、開始寫清單之前;`verify` 每一頁之前、寫報告之前;`thumbs` 每張圖之前;
+`probe-orphans` / `fetch-orphans` 隨時(等待中的延遲與進行中的請求都會被打斷);`slugs` 印出第一行之前。
+檢查點之間的單一步驟(一頁的抽取、一張圖的縮放、`extract` 的配對計算)會先做完。
+已寫出的 `.md`、縮圖、`raw/` 頁與資產保留(只寫不刪;縮圖與孤兒頁是原子寫入,不會留半截檔),已算好的媒體雜湊存進內部快取;
 `extract` 的清單檔、`verify_report.csv`、`orphan_slugs.txt` 被中斷時一份都不寫,`slugs` 的 stdout 一行都不印。
 第二次 Ctrl-C 不再攔截,由 runtime 直接終止行程(給單一步驟本身就很久時的逃生門),不經 PolyMigrate 收尾,
 結束碼由作業系統決定。(2.3.1 以前只有 `probe-orphans` / `fetch-orphans` 接取消訊號,其餘指令要第二次才停、

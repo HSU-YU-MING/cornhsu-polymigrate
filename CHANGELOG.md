@@ -88,7 +88,7 @@ exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不�
 - **修正(patch):`extract`、`thumbs`、`verify`、`slugs` 按 Ctrl-C 拿不到 130,第一次 Ctrl-C 也沒有作用。**
   2.2.0 說 `extract` / `thumbs` 會乾淨回 130,但只有 `probe-orphans` / `fetch-orphans` 真的看取消訊號:
   同步指令按一次 Ctrl-C 照常跑完、回 0/1/2,按第二次由 runtime 直接終止(Windows 結束碼 `0xC000013A`)。
-  現在第一次 Ctrl-C 就在下一頁/下一張圖停下,stderr 印 `cancelled.`、回 **130**;已寫出的 `.md` 與縮圖保留,
+  現在第一次 Ctrl-C 就在下一頁/下一張圖/下一個媒體檔的雜湊之前停下,stderr 印 `cancelled.`、回 **130**;已寫出的 `.md` 與縮圖保留,
   清單檔、`verify_report.csv` 不會只寫一半,`slugs` 不印半份清單。第二次 Ctrl-C 的行為不變。
   對逐指令的 exit code 表而言是 130 欄由「—」變成可達(增補,不改既有情境)。
 - **修正(patch):`probe-orphans` 要整批探完才發現 `--out` 寫不出去。** 目錄不存在或 `--out` 指到一個目錄時,

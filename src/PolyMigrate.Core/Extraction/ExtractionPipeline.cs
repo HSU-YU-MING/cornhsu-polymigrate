@@ -156,12 +156,16 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         var hreflang = HreflangIndex.Build(aggregator.HreflangLinks, aggregator.RouteToKey);
         var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang);
+        // media_manifest 的 sha1 是收尾階段最慢的一段(大媒體目錄可達數十秒):先逐檔算完(每檔一個檢查點),
+        // 再開始寫清單——中斷時清單仍是「一份都不寫」,而不是寫了一半
+        var manifest = dryRun ? null : BuildMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs, ct);
         Checkpoint("write", ct);
         if (!dryRun)
         {
             WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions);
             WriteHreflangMap(paths.OutDir, hreflang);
-            WriteMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs);
+            Csv.Write(Path.Combine(paths.OutDir, "media_manifest.csv"), manifest!.Rows);
+            manifest.Cache.Save();
             WriteRedirectMap(paths.OutDir, aggregator.Redirects);
             WriteRedirectExports(paths.OutDir, aggregator.Redirects);
             WriteMissingImages(paths.OutDir, aggregator.Missing);
@@ -321,8 +325,11 @@ public sealed class ExtractionPipeline(SiteConfig config)
         Csv.Write(Path.Combine(outDir, "content_inventory.csv"), rows);
     }
 
-    private static void WriteMediaManifest(
-        string outDir, string mediaDir, SortedDictionary<string, MediaEntry> mediaRefs)
+    /// <summary>算好的 media_manifest.csv 列與更新過的雜湊快取(寫檔留給呼叫端,見 Run)。</summary>
+    private sealed record MediaManifest(List<IReadOnlyList<string>> Rows, MediaHashCache Cache);
+
+    private MediaManifest BuildMediaManifest(
+        string outDir, string mediaDir, SortedDictionary<string, MediaEntry> mediaRefs, CancellationToken ct)
     {
         // 雜湊快取:沒動過的檔案免重讀(重跑數 GB 媒體從分鐘級降到秒級)
         var cache = MediaHashCache.Load(Path.Combine(outDir, ".polymigrate", "media_sha1_cache.csv"));
@@ -332,6 +339,16 @@ public sealed class ExtractionPipeline(SiteConfig config)
         };
         foreach (var (relative, entry) in mediaRefs)
         {
+            try
+            {
+                Checkpoint("media:" + relative, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // 已經算好的雜湊照樣存進快取(內部加速檔,不是交付物):中斷後重跑不必從頭重讀數 GB
+                cache.Save();
+                throw;
+            }
             var localAbs = MediaPaths.LocalPath(mediaDir, relative);
             var localPath = Path.GetRelativePath(outDir, localAbs).Replace('\\', '/');
             if (localPath.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(localPath))
@@ -343,8 +360,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             rows.Add(new[] { localPath, entry.OriginalUrl,
                 string.Join(" | ", entry.Refs), string.Join(" | ", entry.Alts), sha1, bytes });
         }
-        Csv.Write(Path.Combine(outDir, "media_manifest.csv"), rows);
-        cache.Save();
+        return new MediaManifest(rows, cache);
     }
 
     /// <summary>

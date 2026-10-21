@@ -73,6 +73,24 @@ public class CancellationTests : IDisposable
     }
 
     [Fact]
+    public void Extract_CancelledWhileHashingMedia_StopsBeforeTheNextFile_WritesNoInventories()
+    {
+        // 審查 minor 1:最後一頁之後還有 media_manifest 的 sha1 計算,大媒體目錄可能要 30 秒以上;
+        // 原本那段期間沒有檢查點,Ctrl-C 被吞掉、照常回 0/1。現在逐檔檢查,而且算完才開始寫清單
+        foreach (var name in (string[])["a", "b"])
+        {
+            WriteRaw($"ch/news/{name}.php.html", $"<p>內文</p><img src=\"images/{name}.jpg\">");
+            Directory.CreateDirectory(P("media/ch/news/images"));
+            File.WriteAllText(P($"media/ch/news/images/{name}.jpg"), name);
+        }
+
+        var seen = RunExtract("media:ch/news/images/a.jpg");
+
+        Assert.Equal("media:ch/news/images/a.jpg", seen[^1]);   // 沒有再去算 b.jpg
+        Assert.Empty(Directory.GetFiles(_root, "*.csv"));
+    }
+
+    [Fact]
     public void Extract_NoPages_AlreadyCancelled_WritesNoInventories()
     {
         Directory.CreateDirectory(P("raw"));
