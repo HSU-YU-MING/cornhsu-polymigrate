@@ -67,10 +67,12 @@ public class ProcessExitCodeTests : CliTestBase
     }
 
     [Fact]
-    public async Task BareConfigFileName_DefaultRootIsTheConfigDirectory()
+    public async Task BareConfigFileName_WithNoDirectoryPart_StillResolvesTheDefaultRoot()
     {
         // 最常見的用法是在站目錄裡打 `polymigrate extract site.yaml`:config 路徑沒有目錄部分。
-        // 預設 root 必須從完整路徑取目錄,否則拿到的是空字串——其餘測試都傳絕對路徑,測不到這一格。
+        // 預設 root 必須從完整路徑取目錄,否則 Path.GetDirectoryName 拿到的是空字串——
+        // 其餘測試都傳絕對路徑,測不到這一格。這裡目前目錄剛好就是 config 所在目錄,
+        // 所以分不出「config 的目錄」與「目前目錄」,那一半見下一條。
         // 目前目錄是行程級狀態,所以在子行程裡跑,不動測試行程的
         Write("site/site.yaml", Config());
         Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
@@ -81,6 +83,23 @@ public class ProcessExitCodeTests : CliTestBase
         Assert.Empty(stderr);
         Assert.Contains("  markdown files   : 1\n", stdout);
         Assert.True(File.Exists(PathOf("site/content/ch/index.md")));
+    }
+
+    [Fact]
+    public async Task RelativeConfigPath_FromAnotherDirectory_DefaultRootIsTheConfigDirectory()
+    {
+        // 從上一層打 `polymigrate extract site/site.yaml`:目前目錄 ≠ config 所在目錄。
+        // 預設 root 若誤用目前目錄,會去找 ./raw(不存在)而 exit 2,輸出也會落在錯的地方
+        Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+
+        var (exit, stdout, stderr) = await SpawnIn(Root, "extract", Path.Combine("site", "site.yaml"));
+
+        Assert.Equal(0, exit);
+        Assert.Empty(stderr);
+        Assert.Contains("  markdown files   : 1\n", stdout);
+        Assert.True(File.Exists(PathOf("site/content/ch/index.md")));
+        Assert.False(Directory.Exists(PathOf("content")));
     }
 
     [Fact]

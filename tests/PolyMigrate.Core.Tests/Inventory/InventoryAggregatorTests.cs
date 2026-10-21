@@ -80,14 +80,19 @@ public class InventoryAggregatorTests
     public void ImageCount_IsTheMaximumAcrossLocales()
     {
         // contracts.md:content_inventory 的 image_count「各語版取最大」。
-        // 後處理的語版圖比較多:先到先贏或後到蓋前都會算錯(golden 的那一組剛好是前面的多)
-        var agg = NewAggregator();
+        // 三個語版、最多圖的那個夾在中間(1 → 3 → 2):先到先贏會得 1、後到蓋前會得 2、
+        // 加總會得 6,只有取最大才是 3。兩語版的話「後到蓋前」剛好會對,測不出來
+        var config = TestConfigs.IbpsLike();
+        config.UrlPattern.LangMap["ja"] = "ja";
+        var agg = new InventoryAggregator(new LinkRewriter(config.Site, config.UrlPattern));
         var ch = Page("ch", "zh-Hant", "a");
         var en = Page("en", "en", "a");
+        var ja = Page("ja", "ja", "a");
         MediaUse Use(RawPage p, int i) => new($"news/a/{i}.jpg", $"https://www.ibps-austin.org/news/a/{i}.jpg", p.SourceUrl, "");
 
         agg.Add(ch, Extracted(ch, 10, [], [Use(ch, 1)]));
         agg.Add(en, Extracted(en, 10, [], [Use(en, 1), Use(en, 2), Use(en, 3)]));
+        agg.Add(ja, Extracted(ja, 10, [], [Use(ja, 1), Use(ja, 2)]));
 
         Assert.Equal(3, Assert.Single(agg.Inventory).Value.ImageCount);
     }

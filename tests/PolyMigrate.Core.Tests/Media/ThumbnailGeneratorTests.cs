@@ -180,12 +180,14 @@ public class ThumbnailGeneratorTests : IDisposable
 
     [Theory]
     [InlineData("logo.png", MagickFormat.Png)]
-    [InlineData("anim.gif", MagickFormat.Gif)]
+    [InlineData("still.gif", MagickFormat.Gif)]
     [InlineData("photo.webp", MagickFormat.WebP)]
     public void Thumbnail_KeepsTheSourceFormat(string name, MagickFormat format)
     {
         // 縮圖與原圖同檔名,內容就必須是同一種格式:重新編碼時不可把 PNG/GIF/WebP 統一轉成別種
-        // (JPEG 那一半見 LeftoverTmpFromAnInterruptedRun_DoesNotCountAsDone)
+        // (JPEG 那一半見 LeftoverTmpFromAnInterruptedRun_DoesNotCountAsDone)。
+        // 這裡的 GIF 只有一格。多格的 GIF 動畫目前會被縮成只剩第一格,那是待決的產品行為
+        // (保留動畫、原樣複製、或刻意只取第一格),決定之前不寫測試把現況釘成規格
         using (var image = new MagickImage(MagickColors.Red, 1200, 10))
         {
             image.Write(MediaPath(name), format);
