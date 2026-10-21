@@ -72,4 +72,13 @@ public class PathSafetyTests
         Assert.Null(PathSafety.CheckLength(@"C:\out\" + new string('a', 100)));
         Assert.Contains("260", PathSafety.CheckLength(@"C:\out\" + new string('a', 300)));
     }
+
+    [Fact]
+    public void OverlongPath_BoundaryIsTheClassic259CharacterMaximum()
+    {
+        // 傳統 Windows MAX_PATH 260 含結尾的 NUL,路徑本身最多 259 字元:259 照常、260 起才 warning。
+        // 這條 warning 會讓 extract 從 exit 0 變 1,差一個字元就是 exit code 契約上的差別
+        Assert.Null(PathSafety.CheckLength(new string('a', 259)));
+        Assert.Equal("path length 260 exceeds classic Windows limit (260)", PathSafety.CheckLength(new string('a', 260)));
+    }
 }

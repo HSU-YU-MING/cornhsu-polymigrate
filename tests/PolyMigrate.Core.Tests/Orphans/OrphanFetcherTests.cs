@@ -283,6 +283,32 @@ public class OrphanFetcherTests : IDisposable
         Assert.Empty(Directory.GetFiles(Path.Combine(RawDir, "ch", "news"), "*.tmp"));
     }
 
+    [Theory]
+    [InlineData(".php", "/ch/news/20210505.php", "20210505.php.html")]
+    [InlineData(null, "/ch/news/20210505", "20210505.html")]   // 沒有動態副檔名的乾淨網址站
+    public async Task SavedPage_FollowsTheMirrorNamingRule_SoExtractRecoversTheSameUrl(
+        string? extension, string requestPath, string fileName)
+    {
+        // contracts.md「鏡像目錄」:raw/ 檔名 = 原始 URL 路徑 + ".html"。fetch-orphans 寫、extract 讀,
+        // 兩邊對這條規則的理解一旦不同,source_url 與 redirect 的舊網址就會指到另一個網址
+        var config = FastConfig();
+        config.UrlPattern.LangMap = new Dictionary<string, string> { ["ch"] = "zh-Hant" };
+        config.UrlPattern.StripExtensions = extension is null ? [] : [extension];
+        var handler = new StubHandler(req => req.RequestUri!.AbsolutePath == requestPath
+            ? StubHandler.Html(MinimalPage)
+            : StubHandler.Status(HttpStatusCode.NotFound));
+
+        var report = await new OrphanFetcher(config, new HttpClient(handler))
+            .FetchAsync(["20210505"], "news", RawDir, MediaDir);
+
+        Assert.Equal(1, report.PagesFetched);
+        var saved = Path.Combine(RawDir, "ch", "news", fileName);
+        Assert.True(File.Exists(saved));
+        var page = new PolyMigrate.Core.Extraction.RawPageParser(config.Site, config.UrlPattern).Parse(RawDir, saved);
+        Assert.Equal("https://www.ibps-austin.org" + requestPath, page.SourceUrl);
+        Assert.Equal("20210505", page.Slug);
+    }
+
     [Fact]
     public async Task RawBytes_PreservedVerbatim()
     {

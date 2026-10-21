@@ -63,6 +63,16 @@ public class RawPageParserTests
         Assert.Equal("/news/x", page.TranslationKey);
     }
 
+    [Theory]
+    [InlineData("ch/news/.php.html")]
+    [InlineData("ch/news/.html")]
+    public void FileNameThatIsOnlyASuffix_SlugIsIndex(string relative)
+    {
+        // 目錄網址(/ch/news/)被鏡像成只剩尾綴的檔名時,slug 不可是空字串:
+        // 空 slug 會讓輸出檔名變成 content/ch/news/.md,而 verify 要求 slug 非空
+        Assert.Equal("index", Parse(relative).Slug);
+    }
+
     [Fact]
     public void RootLanguageChooser_DoesNotPairWithLocalizedIndex()
     {

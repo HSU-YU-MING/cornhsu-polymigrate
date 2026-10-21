@@ -81,6 +81,58 @@ public class OutputBytesTests : IDisposable
     }
 
     [Fact]
+    public void RedirectExports_AreUtf8WithoutBom_LfOnly_EndingInOneNewline()
+    {
+        // contracts.md:redirects.nginx.conf 與 _redirects 皆 UTF-8 無 BOM、\n 行尾、含結尾換行。
+        // 兩份都是直接部署的設定檔,開頭多一個 BOM 時第一條規則就變成「BOM + location ...」;
+        // golden 用 ReadAllText 讀(會吃掉 BOM)再刪 \r,所以這兩件事只能在這裡逐位元組看
+        RunFixture();
+
+        foreach (var name in (string[])["redirects.nginx.conf", "_redirects"])
+        {
+            var bytes = File.ReadAllBytes(Path.Combine(_out, name));
+
+            Assert.False(bytes.AsSpan().StartsWith(Utf8Bom), $"{name}:有 BOM");
+            Assert.DoesNotContain((byte)'\r', bytes);
+            Assert.True(bytes.AsSpan().EndsWith("\n"u8), $"{name}:沒有結尾換行");
+            Assert.False(bytes.AsSpan().EndsWith("\n\n"u8), $"{name}:結尾多了空行");
+        }
+    }
+
+    [Fact]
+    public void NeedFetchMedia_SortedAndDeduped_LfSeparated_NoTrailingNewline_NoBom()
+    {
+        // contracts.md:UTF-8 無 BOM、\n 分隔、沒有結尾換行;ordinal 排序、去重。
+        // 素材刻意讓每一條規則都有作用:同一份 PDF 被兩頁引用(去重)、發現順序與字典序相反(排序)
+        var raw = Path.Combine(_out, "src", "raw", "ch");
+        Directory.CreateDirectory(raw);
+        File.WriteAllText(Path.Combine(raw, "b.php.html"),
+            "<html><body><main><iframe src=\"/files/b.pdf\"></iframe><iframe src=\"/files/a.pdf\"></iframe></main></body></html>");
+        File.WriteAllText(Path.Combine(raw, "c.php.html"),
+            "<html><body><main><iframe src=\"/files/a.pdf\"></iframe><video><source src=\"/v/clip.mp4\"></video></main></body></html>");
+        var config = SiteConfigLoader.Load(
+            """
+            config_version: 1
+            site:
+              base_url: https://old.example.org
+            url_pattern:
+              lang_map: { ch: zh-Hant }
+              default_lang: zh-Hant
+            extract:
+              content: main
+            """);
+        var outDir = Path.Combine(_out, "site");
+
+        var report = new ExtractionPipeline(config).Run(new ExtractionPaths(
+            Path.Combine(_out, "src", "raw"), Path.Combine(_out, "src", "media"), outDir));
+
+        Assert.Equal(3, report.NeedFetchMedia);
+        Assert.Equal(
+            "https://old.example.org/files/a.pdf\nhttps://old.example.org/files/b.pdf\nhttps://old.example.org/v/clip.mp4"u8.ToArray(),
+            File.ReadAllBytes(Path.Combine(outDir, "need_fetch_media.txt")));
+    }
+
+    [Fact]
     public void Markdown_HasNoBom_FencedBody_AndSingleTrailingNewline()
     {
         RunFixture();

@@ -178,6 +178,27 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Empty(Directory.GetFiles(OutDir, "*.tmp", SearchOption.AllDirectories));
     }
 
+    [Theory]
+    [InlineData("logo.png", MagickFormat.Png)]
+    [InlineData("anim.gif", MagickFormat.Gif)]
+    [InlineData("photo.webp", MagickFormat.WebP)]
+    public void Thumbnail_KeepsTheSourceFormat(string name, MagickFormat format)
+    {
+        // 縮圖與原圖同檔名,內容就必須是同一種格式。原子寫入的暫存名(logo.png.tmp)沒有可辨識的
+        // 副檔名,格式要明確帶過去,不能交給 Magick 依檔名猜
+        using (var image = new MagickImage(MagickColors.Red, 1200, 10))
+        {
+            image.Write(MediaPath(name), format);
+        }
+
+        var report = Run();
+
+        Assert.Equal(1, report.Created);
+        using var thumb = new MagickImage(Path.Combine(OutDir, name));
+        Assert.Equal(format, thumb.Format);
+        Assert.Equal(1000u, thumb.Width);   // 有縮(重新編碼過),不是把原檔照抄過去
+    }
+
     [Fact]
     public void LeftoverTmpFromAnInterruptedRun_DoesNotCountAsDone()
     {

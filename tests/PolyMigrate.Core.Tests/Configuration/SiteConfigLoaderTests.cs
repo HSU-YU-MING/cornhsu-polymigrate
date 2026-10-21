@@ -38,6 +38,22 @@ public class SiteConfigLoaderTests
         Assert.Contains("extrat", ex.Message);
     }
 
+    [Theory]
+    // 未知欄位報錯不只在最上層:巢狀區段裡打錯一個字一樣要報錯並點名,
+    // 否則那一項設定靜靜地沒生效(例如 polite 的間隔退回預設、縮圖寬度退回 1000)
+    [InlineData("site:\n  base_url: https://www.example.org\n  polite:\n    delay: 0", "delay")]
+    [InlineData("site:\n  base_url: https://www.example.org\n  auth_workaround:\n    type: cookie\n    cookies: { a: b }", "cookies")]
+    [InlineData("url_pattern:\n  lang_map: { ch: zh-Hant }\n  default_lang: zh-Hant\n  strip_extension: [.asp]", "strip_extension")]
+    [InlineData("extract:\n  content: main\n  type_rules:\n    article:\n      title_selectr: h3", "title_selectr")]
+    [InlineData("media:\n  thumbnails:\n    width: 640", "width")]
+    public void UnknownNestedField_Throws_NamingTheField(string overrideBlock, string field)
+    {
+        var ex = Assert.Throws<ConfigException>(() => SiteConfigLoader.Load(WithBlock(overrideBlock), "site.yaml"));
+
+        Assert.StartsWith("site.yaml: invalid config — ", ex.Message);
+        Assert.Contains($"'{field}'", ex.Message);
+    }
+
     [Fact]
     public void UnsupportedConfigVersion_Throws()
     {

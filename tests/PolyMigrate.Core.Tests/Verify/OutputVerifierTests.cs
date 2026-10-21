@@ -193,6 +193,76 @@ public class OutputVerifierTests : IDisposable
         Assert.Equal(1, report.MediaChecked);
     }
 
+    [Theory]
+    [InlineData("/media/files/a.pdf#page=3")]       // PDF 直接跳頁
+    [InlineData("/media/files/a.pdf?dl=1#page=3")]
+    public void MediaRef_FragmentIsNotPartOfTheFileName(string reference)
+    {
+        AddMedia("files/a.pdf");
+        AddPage("ch/a.md", body: $"[講義]({reference})");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Empty(report.Issues);
+        Assert.Equal(1, report.MediaChecked);
+    }
+
+    [Fact]
+    public void KnownMissingImage_ReferencedWithAQueryString_IsStillAWarning()
+    {
+        // missing_images.csv 記的是不帶 query 的網路路徑;內文多了 ?v=2 的同一張原站壞圖仍是「已知」,
+        // 不可因為快取參數就從 warning 升成 error(exit 1 → 2)。回報的 detail 保留原寫法
+        Directory.CreateDirectory(Path.Combine(_root, "media"));
+        PolyMigrate.Core.Inventory.Csv.Write(Path.Combine(_root, "missing_images.csv"),
+        [
+            new[] { "source_page", "missing_image" },
+            new[] { "https://example.org/ch/a.php", "/media/known.jpg" },
+        ]);
+        AddPage("ch/a.md", body: "![](/media/known.jpg?v=2)");
+
+        var report = RunIgnoringUnlinked();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal((Severity.Warning, "known_missing_media", "/media/known.jpg?v=2"),
+            (issue.Severity, issue.Kind, issue.Detail));
+    }
+
+    [Fact]
+    public void CrlfLineEndings_VerifyTheSameAsLf()
+    {
+        // 輸出被 git(autocrlf)或 Windows 編輯器轉成 CRLF 很常見,而 Windows 上 extract 寫的
+        // frontmatter 本身就是 CRLF(contracts.md「通用規則」)。圍欄與欄位比對若不先正規化行尾,
+        // 這些頁會全部變成 invalid_frontmatter
+        AddMedia("ok.jpg");
+        var path = Path.Combine(_root, "content", "ch", "news", "a.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            "---\r\nsource_url: https://example.org/ch/news/a.php\r\nlang: zh-Hant\r\nslug: a\r\n"
+            + "translation_key: news/a\r\ntitle: 標題\r\npage_type: article\r\n"
+            + "images:\r\n- local: /media/ok.jpg\r\n  alt: ''\r\n---\r\n\r\n[b](/ch/news/b)\r\n");
+        _pages.Add("ch/news/a.md");
+        AddPage("ch/news/b.md");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Empty(report.Issues);
+        Assert.Equal(1, report.LinksChecked);
+        Assert.Equal(1, report.MediaChecked);   // frontmatter images[].local 一樣讀得到
+    }
+
+    [Fact]
+    public void NoContentDirectory_LeavesTheGivenDirectoryUntouched()
+    {
+        // 最常見的指錯是把 raw/(不可再生的鏡像)當成輸出根目錄:回報 no_content,
+        // 但不在那裡留下 verify_report.csv 或任何東西
+        File.WriteAllText(Path.Combine(_root, "index.php.html"), "<html></html>");
+
+        var report = new OutputVerifier().Run(_root, mediaDir: null);
+
+        Assert.Equal("no_content", Assert.Single(report.Issues).Kind);
+        Assert.Equal(["index.php.html"], Directory.GetFileSystemEntries(_root).Select(Path.GetFileName));
+    }
+
     [Fact]
     public void MalformedImageLocal_NonString_DoesNotCrash()
     {
@@ -456,6 +526,23 @@ public class OutputVerifierTests : IDisposable
         var report = RunWithOrphanCheck();
 
         Assert.Empty(report.Issues);
+    }
+
+    [Theory]
+    // extract 改寫內文連結時刻意保留 query 與 fragment(LinkRewriterTests.QueryAndFragment_Preserved),
+    // 所以 verify 一定會看到這種連結:它們連到的是那一頁,不是壞連結,那一頁也不是孤島
+    [InlineData("/ch/news/b#comments")]
+    [InlineData("/ch/news/b?page=2")]
+    [InlineData("/ch/news/b/?page=2#top")]
+    public void InternalLink_WithQueryOrFragment_ResolvesToThePage(string href)
+    {
+        AddPage("ch/index.md", body: $"[b]({href})", pageType: "page");
+        AddPage("ch/news/b.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+        Assert.Equal(1, report.LinksChecked);
     }
 
     [Fact]
