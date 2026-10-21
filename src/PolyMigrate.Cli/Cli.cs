@@ -552,7 +552,6 @@ public static class Cli
         }
     }
 
-    /// <summary>豁免清單:一行一頁(content 相對路徑或路由),空行與 # 開頭略過。</summary>
     /// <summary>
     /// 跑長工作之前先確認輸出檔寫得出去(寫不出擲 IO 例外 → exit 2)。probe 一年就是 730 個以上的請求,
     /// 預設延遲下約 36 分鐘——原本要整批探完、到最後寫檔時才知道目錄不存在或 --out 指到目錄。
@@ -575,6 +574,7 @@ public static class Cli
         }
     }
 
+    /// <summary>豁免清單:一行一頁(content 相對路徑或路由),空行與 # 開頭略過。</summary>
     private static IReadOnlyCollection<string>? ReadAllowUnlinked(string? path)
     {
         if (path is null)
