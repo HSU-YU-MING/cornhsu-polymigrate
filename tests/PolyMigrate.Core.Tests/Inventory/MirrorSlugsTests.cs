@@ -77,6 +77,20 @@ public class MirrorSlugsTests : IDisposable
     }
 
     [Fact]
+    public void FileNameThatIsOnlyASuffix_NeverBecomesABlankLine()
+    {
+        // 目錄網址(/ch/news/)被鏡像成只剩尾綴的 .php.html:取主檔名會得到空字串,
+        // 而 slugs 的 stdout 是直接導成檔案再餵給 fetch-orphans 的——空行就是一筆假 slug
+        AddMirrored("ch", "news", "20260101.php.html", ".php.html", ".html");
+
+        var slugs = PolyMigrator.MirrorSlugs(Raw, "news");
+
+        Assert.NotNull(slugs);
+        Assert.Contains("20260101", slugs);
+        Assert.DoesNotContain("", slugs);
+    }
+
+    [Fact]
     public void OsJunkFiles_AreNotSlugs()
     {
         // 鏡像目錄被 Finder / 檔案總管開過就會長出這些。逐檔取名的話

@@ -59,6 +59,24 @@ public class InventoryAggregatorTests
     }
 
     [Fact]
+    public void EmptyAlt_IsNotListedInTheManifestAlts()
+    {
+        // contracts.md:media_manifest 的 alt 欄只收「非空的」alt 文字。一語版有 alt、另一語版留空時,
+        // 不可寫出「 | 圖」這種前面帶一格空值的欄位
+        var agg = NewAggregator();
+        var ch = Page("ch", "zh-Hant", "a");
+        var en = Page("en", "en", "a");
+        const string Url = "https://www.ibps-austin.org/media/news/a/img.jpg";
+
+        agg.Add(ch, Extracted(ch, 10, [], [new MediaUse("news/a/img.jpg", Url, ch.SourceUrl, "圖")]));
+        agg.Add(en, Extracted(en, 10, [], [new MediaUse("news/a/img.jpg", Url, en.SourceUrl, "")]));
+
+        var entry = Assert.Single(agg.MediaRefs).Value;
+        Assert.Equal(["圖"], entry.Alts);
+        Assert.Equal([ch.SourceUrl, en.SourceUrl], entry.Refs);
+    }
+
+    [Fact]
     public void ImageCount_IsTheMaximumAcrossLocales()
     {
         // contracts.md:content_inventory 的 image_count「各語版取最大」。

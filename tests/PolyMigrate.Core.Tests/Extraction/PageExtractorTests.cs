@@ -99,6 +99,42 @@ public class PageExtractorTests : IDisposable
     }
 
     [Fact]
+    public void BodyTitle_StartingWithTheSiteName_IsKeptWhole()
+    {
+        // 站名雜訊只在退回 <title> 時剝:內文標題(title_selector 抓到的)可能合法地以站名開頭。
+        // TitleCleanerTests 證明清理器分得開兩種模式;這裡證明抽取時真的用對了模式
+        const string html =
+            """
+            <html><head><title>佛光山香雲寺 2026/07/12 新聞:別的標題</title></head><body>
+            <section id="personal"><h3>Fo Guang Shan Xiang Yun Temple Hosts Winter Retreat</h3><p>內文</p></section>
+            </body></html>
+            """;
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal("Fo Guang Shan Xiang Yun Temple Hosts Winter Retreat", result.Title);
+    }
+
+    [Fact]
+    public void EmptyAltInlineImage_SurvivesTheEmptyLinkCleanup()
+    {
+        // CleanupMarkdown 會刪掉無文字連結 [](x)(輪播控制鈕),但 alt 留空的圖 ![](x) 長得只差一個驚嘆號,
+        // 不可被一起刪掉——舊站的圖大半沒寫 alt
+        AddMediaFile("images/a.jpg");
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+        const string html =
+            """
+            <html><body><section id="intro"><p>這頁的文字夠長,不會被判成資訊鎖在圖裡的那一類頁面。</p>
+            <img src="/images/a.jpg" alt=""><a href="#carousel"></a></section></body></html>
+            """;
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Contains("![](/media/images/a.jpg)", result.BodyMarkdown);
+        Assert.DoesNotContain("[](#carousel)", result.BodyMarkdown);
+    }
+
+    [Fact]
     public void NoSelectorMatch_FallsBackToBody()
     {
         var page = ArticlePage with { Section = "", Slug = "index", TranslationKey = "index" };

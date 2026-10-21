@@ -258,6 +258,21 @@ public class PairingSuggesterTests
     }
 
     [Fact]
+    public void TitleSimilarity_ExactlyAtTheThreshold_StillCounts()
+    {
+        // contracts.md:bigram Dice「≥ 0.5」。abc / abd 各兩個 bigram、共用一個 → 2×1/(2+2) = 0.5 整
+        Assert.Equal(0.5, PairingSuggester.BigramDice("abc", "abd"));
+
+        var suggestions = Suggester.Suggest(
+        [
+            Group("events/a", "zh-Hant", "a", "abc", "events"),
+            Group("events/b", "en", "b", "abd", "events"),
+        ]);
+
+        Assert.StartsWith("title_similarity=", Assert.Single(suggestions).Evidence);
+    }
+
+    [Fact]
     public void TitleSimilarity_UsedAsLastResort()
     {
         var suggestions = Suggester.Suggest(

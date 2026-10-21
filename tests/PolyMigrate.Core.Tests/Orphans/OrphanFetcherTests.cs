@@ -310,6 +310,20 @@ public class OrphanFetcherTests : IDisposable
     }
 
     [Fact]
+    public async Task BaseUrlWithTrailingSlash_RequestsTheSingleSlashUrl()
+    {
+        // base_url 寫成 https://…/ 時,請求的網址不可以變成 //ch/news/…(多數站對它回 404 或別頁)
+        var config = FastConfig();
+        config.Site.BaseUrl = "https://www.ibps-austin.org/";
+        config.UrlPattern.LangMap = new Dictionary<string, string> { ["ch"] = "zh-Hant" };
+        var handler = new StubHandler(_ => StubHandler.Status(HttpStatusCode.NotFound));
+
+        await new OrphanFetcher(config, new HttpClient(handler)).FetchAsync(["20210505"], "news", RawDir, MediaDir);
+
+        Assert.Equal(["GET https://www.ibps-austin.org/ch/news/20210505.php"], handler.Requests);
+    }
+
+    [Fact]
     public async Task Big5Page_AssetPathsDecodedPerConfigEncoding()
     {
         // §3.1:頁面原樣存 bytes,但「找正文裡的圖」得先依 site.encoding 解碼。舊中文站的 Big5 頁上,

@@ -92,6 +92,20 @@ public class HreflangIndexTests
     }
 
     [Fact]
+    public void XDefault_IsRecognizedCaseInsensitively_EvenWhenItPointsAtARealPage()
+    {
+        // BCP-47 標記不分大小寫:X-Default 一樣是「都不符合時去哪」,不是某個語言版本。
+        // 它指到一篇真的文章時尤其不能放行——否則那篇文章會被當成本頁的翻譯
+        var index = HreflangIndex.Build(
+            [Link("/ch/news/a.php", "news/a", "X-Default", $"{Base}/en/news/b.php")],
+            Mirror(("/ch/news/a.php", "news/a"), ("/en/news/b.php", "news/b")));
+
+        var row = Assert.Single(index.Rows);
+        Assert.Equal((false, HreflangIndex.IsXDefault), (row.Usable, row.RejectReason));
+        Assert.Empty(index.AlternatesByKey);
+    }
+
+    [Fact]
     public void XDefaultAndSelfReference_AreRecordedButUnusable()
     {
         var index = HreflangIndex.Build(

@@ -63,6 +63,20 @@ public class RawPageParserTests
         Assert.Equal("/news/x", page.TranslationKey);
     }
 
+    [Fact]
+    public void BaseUrlWithTrailingSlash_DoesNotDoubleTheSlash()
+    {
+        // config 常寫成 https://www.example.org/(帶結尾斜線)。source_url 一旦變成 //ch/news/…,
+        // redirect_map 的舊網址與兩份 301 設定檔就全部對不上原站的實際網址
+        var config = TestConfigs.IbpsLike();
+        config.Site.BaseUrl = "https://www.ibps-austin.org/";
+
+        var page = new RawPageParser(config.Site, config.UrlPattern)
+            .Parse(@"C:\raw", Path.Combine(@"C:\raw", "ch", "news", "20260712.php.html"));
+
+        Assert.Equal("https://www.ibps-austin.org/ch/news/20260712.php", page.SourceUrl);
+    }
+
     [Theory]
     [InlineData("ch/news/.php.html")]
     [InlineData("ch/news/.html")]
