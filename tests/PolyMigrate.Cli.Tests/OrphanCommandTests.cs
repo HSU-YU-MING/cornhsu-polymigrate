@@ -1,0 +1,258 @@
+using System.Text;
+
+namespace PolyMigrate.Cli.Tests;
+
+/// <summary>
+/// <c>probe-orphans</c> / <c>fetch-orphans</c> 的完整 CLI 路徑(預設值、檔案格式、exit code 0/1/2/130)。
+/// CLI 自己建 HttpClient、沒有注入點,所以對著 <see cref="LoopbackHttpServer"/>(127.0.0.1、不經 DNS)跑。
+/// </summary>
+public class OrphanCommandTests : CliTestBase
+{
+    private string SiteConfig(string baseUrl, string langMap = "{ ch: zh-Hant, en: en }") =>
+        Write("site/site.yaml", Config(baseUrl: baseUrl, langMap: langMap));
+
+    // ── probe-orphans ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Probe_WritesSlugFile_LfSeparated_NoTrailingNewline_NoBom()
+    {
+        // orphan_slugs.txt 是 fetch-orphans --slugs 的輸入,也常被 diff / wc -l 處理:格式要釘死
+        await using var server = new LoopbackHttpServer((_, path) =>
+            path is "/ch/news/20200101.php" or "/ch/news/20200101A.php" or "/ch/news/12312020.php"
+                ? new LoopbackHttpServer.Response(200)
+                : LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl);
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+
+        Assert.Equal(0, r.Exit);
+        var slugFile = PathOf("site/orphan_slugs.txt");   // 預設 <root>/orphan_slugs.txt
+        Assert.Equal("20200101\n20200101A\n12312020"u8.ToArray(), File.ReadAllBytes(slugFile));
+        Assert.Contains($"Probing {server.BaseUrl}/ch/news/ for 2020-2020 (0 known slugs skipped, delay 0ms)...\n", r.Out);
+        Assert.Contains($"Probe done: 3 orphan slugs -> {slugFile}\n", r.Out);
+        Assert.Contains("hit 20200101A\n", r.Out);   // 進度回呼接到 stdout
+        // 2020 是閏年:366 天 × 2 種格式,再加命中後的 A(命中)、B(未命中)與 12312020 的 A(未命中)
+        Assert.Equal(366 * 2 + 3, server.Requests.Count);
+        Assert.All(server.Requests, q => Assert.StartsWith("HEAD /ch/news/", q));
+    }
+
+    [Fact]
+    public async Task Probe_DefaultLang_IsTheFirstLangMapKey()
+    {
+        // lang_map 的順序有意義:沒給 --lang 時探第一個 key(這裡是 en,不是字典序的 ch)
+        await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl, langMap: "{ en: en, ch: zh-Hant }");
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2021");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains($"Probing {server.BaseUrl}/en/news/", r.Out);
+        Assert.All(server.Requests, q => Assert.StartsWith("HEAD /en/news/", q));
+        Assert.Equal(""u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));   // 0 筆 = 空檔
+    }
+
+    [Fact]
+    public async Task Probe_LangRootAndOut_Overrides_AndKnownSlugsAreSkipped()
+    {
+        await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
+        var config = Write("cfg/site.yaml", Config(baseUrl: server.BaseUrl, langMap: "{ ch: zh-Hant, en: en }"));
+        // --root 決定「已抓過」從哪裡讀:<root>/raw/<lang>/<section>
+        Write("work/raw/en/news/01012021.php.html", "<html></html>");
+        Write("work/raw/en/news/20210101.php.html", "<html></html>");
+        var outFile = PathOf("lists/en.txt");
+        Directory.CreateDirectory(PathOf("lists"));
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2021-2021",
+            "--lang", "en", "--root", PathOf("work"), "--out", outFile);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("(2 known slugs skipped, delay 0ms)", r.Out);
+        Assert.DoesNotContain(server.Requests, q => q.Contains("01012021") || q.Contains("20210101"));
+        Assert.Equal(365 * 2 - 2, server.Requests.Count);
+        Assert.True(File.Exists(outFile));
+        Assert.False(File.Exists(PathOf("work/orphan_slugs.txt")));
+    }
+
+    [Fact]
+    public async Task Probe_CancelledMidway_Returns130_AndKeepsThePreviousSlugFile()
+    {
+        // Ctrl-C 要乾淨收尾(130),而且不可以把上一次辛苦探到的清單覆寫成半份或空的
+        using var cts = new CancellationTokenSource();
+        var seen = 0;
+        await using var server = new LoopbackHttpServer((_, _) =>
+        {
+            if (Interlocked.Increment(ref seen) == 10)
+            {
+                cts.Cancel();
+            }
+            return LoopbackHttpServer.Response.NotFound;
+        });
+        var config = SiteConfig(server.BaseUrl);
+        var slugFile = Write("site/orphan_slugs.txt", "20190101\n20190102");
+
+        var r = await RunWith(cts.Token, "probe-orphans", config, "--section", "news", "--years", "2020");
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+        Assert.Equal("20190101\n20190102", File.ReadAllText(slugFile));
+        Assert.InRange(server.Requests.Count, 10, 11);   // 取消後不再發新請求
+    }
+
+    [Fact]
+    public async Task Probe_YearZero_ExitsTwo_WithoutWritingTheSlugFile()
+    {
+        var config = SiteConfig("https://example.invalid");
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "0");
+
+        Assert.Equal(2, r.Exit);
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
+    }
+
+    [Fact]
+    public async Task Probe_MissingSection_ExitsTwo_WithUsage()
+    {
+        var r = await Run("probe-orphans", "site.yaml", "--years", "2020");
+
+        Assert.Equal(2, r.Exit);
+        Assert.StartsWith("Usage: polymigrate probe-orphans", r.Err);
+    }
+
+    [Fact]
+    public async Task Probe_InvalidConfig_ExitsTwo()
+    {
+        var config = Write("site/site.yaml", Config(baseUrl: "ftp://example.invalid"));
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("site.base_url must be an absolute http(s) URL", r.Err);
+    }
+
+    // ── fetch-orphans ───────────────────────────────────────────────────────
+
+    private const string OrphanPage =
+        "<html><body><main><p>孤兒頁</p><img src=\"images/a.jpg\"></main></body></html>";
+
+    [Fact]
+    public async Task Fetch_AllPagesFetched_ExitsZero_BlankSlugLinesSkipped()
+    {
+        await using var server = new LoopbackHttpServer((_, path) => path.EndsWith(".jpg")
+            ? new LoopbackHttpServer.Response(200, "image/jpeg", [1, 2, 3])
+            : LoopbackHttpServer.Response.Html(OrphanPage));
+        var config = SiteConfig(server.BaseUrl);
+        // 人工編過的清單:前後空白、空行、只有空白的行(CLI 逐行 Trim、略過空行)
+        Write("site/orphan_slugs.txt", "  20200101  \n\n   \n20200102\n");
+
+        var r = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("Fetching 2 orphan slugs × 2 langs...\n", r.Out);
+        Assert.Contains("  pages fetched : 4\n", r.Out);
+        Assert.Contains("  assets fetched: 2\n", r.Out);   // ch/en 各一張(路徑不同)
+        Assert.Equal(Encoding.UTF8.GetBytes(OrphanPage), File.ReadAllBytes(PathOf("site/raw/en/news/20200102.php.html")));
+        Assert.True(File.Exists(PathOf("site/media/ch/news/images/a.jpg")));
+        // 空行不得變成 /ch/news/.php 之類的請求
+        Assert.Equal(6, server.Requests.Count);
+        Assert.DoesNotContain(server.Requests, q => q.Contains("/news/.php"));
+    }
+
+    [Fact]
+    public async Task Fetch_SomePagesMissing_ExitsOne_ListingThem()
+    {
+        await using var server = new LoopbackHttpServer((_, path) => path == "/en/news/20200101.php"
+            ? LoopbackHttpServer.Response.NotFound
+            : LoopbackHttpServer.Response.Html("<html><body><main>x</main></body></html>"));
+        var config = SiteConfig(server.BaseUrl);
+        var slugs = Write("lists/news.txt", "20200101");
+
+        var r = await Run("fetch-orphans", config, "--section", "news", "--slugs", slugs);
+
+        Assert.Equal(1, r.Exit);
+        Assert.Contains("  pages fetched : 1\n", r.Out);
+        Assert.Contains("  [404] en/news/20200101\n", r.Out);
+    }
+
+    [Fact]
+    public async Task Fetch_AlreadyMirrored_IsSkipped_NotRefetched()
+    {
+        await using var server = new LoopbackHttpServer((_, _) =>
+            LoopbackHttpServer.Response.Html("<html><body><main>new</main></body></html>"));
+        var config = SiteConfig(server.BaseUrl);
+        var existing = Write("site/raw/ch/news/20200101.php.html", "mirrored earlier");
+        Write("site/orphan_slugs.txt", "20200101");
+
+        var r = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("  pages skipped : 1 (already mirrored)\n", r.Out);
+        Assert.Equal("mirrored earlier", File.ReadAllText(existing));   // raw/ 不可再生:只寫不覆寫
+        Assert.Equal(["GET /en/news/20200101.php"], server.Requests);
+    }
+
+    [Fact]
+    public async Task Fetch_CancelledMidway_Returns130()
+    {
+        using var cts = new CancellationTokenSource();
+        await using var server = new LoopbackHttpServer((_, _) =>
+        {
+            cts.Cancel();
+            return LoopbackHttpServer.Response.Html("<html><body><main>x</main></body></html>");
+        });
+        var config = SiteConfig(server.BaseUrl);
+        Write("site/orphan_slugs.txt", "20200101\n20200102");
+
+        var r = await RunWith(cts.Token, "fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+        Assert.False(Directory.Exists(PathOf("site/raw")));   // 第一個請求就被中斷:什麼都沒寫
+        Assert.Single(server.Requests);
+    }
+
+    [Fact]
+    public async Task Fetch_AlreadyCancelled_Returns130_WithoutAnyRequest()
+    {
+        var config = SiteConfig("https://example.invalid");
+        Write("site/orphan_slugs.txt", "20200101");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var r = await RunWith(cts.Token, "fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+    }
+
+    [Fact]
+    public async Task Fetch_SlugListMissing_ExitsTwo()
+    {
+        var config = SiteConfig("https://example.invalid");
+
+        var r = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal($"Slug list not found: {PathOf("site/orphan_slugs.txt")} (run probe-orphans first)\n", r.Err);
+    }
+
+    [Fact]
+    public async Task Fetch_MissingSection_ExitsTwo_WithUsage()
+    {
+        var r = await Run("fetch-orphans", "site.yaml");
+
+        Assert.Equal(2, r.Exit);
+        Assert.StartsWith("Usage: polymigrate fetch-orphans", r.Err);
+    }
+
+    [Theory]
+    [InlineData("--section")]
+    [InlineData("--slugs")]
+    [InlineData("--root")]
+    public async Task Fetch_OptionWithoutValue_ExitsTwo(string option)
+    {
+        var r = await Run("fetch-orphans", "site.yaml", option);
+
+        Assert.Equal(2, r.Exit);
+        Assert.StartsWith($"Option {option} requires a value.\nUsage: polymigrate fetch-orphans", r.Err);
+    }
+}
