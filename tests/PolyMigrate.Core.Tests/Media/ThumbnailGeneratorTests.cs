@@ -82,6 +82,120 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(1, rerun.Skipped);
     }
 
+    /// <summary>有細節的照片型影像:JPEG 品質對檔案大小與量化表的影響才看得出來。</summary>
+    private void WriteNoisy(string relative, MagickFormat format)
+    {
+        using var image = new MagickImage("plasma:", 400, 300);
+        image.Write(MediaPath(relative), format);
+    }
+
+    private ThumbnailReport RunWith(int? maxWidth = null, int? quality = null, Action<string>? progress = null)
+    {
+        var config = TestConfigs.IbpsLike();
+        if (maxWidth is not null || quality is not null)
+        {
+            config.Media.Thumbnails = new() { MaxWidth = maxWidth ?? 1000, Quality = quality ?? 82 };
+        }
+        return new ThumbnailGenerator(config).Run(MediaDir, OutDir, progress);
+    }
+
+    [Theory]
+    [InlineData(null, 82)]   // config 沒寫 thumbnails 區段 → 預設 82
+    [InlineData(10, 10)]
+    [InlineData(95, 95)]
+    public void JpegThumbnail_UsesConfiguredQuality(int? configured, int expected)
+    {
+        WriteNoisy("photo.jpg", MagickFormat.Jpeg);
+
+        RunWith(quality: configured);
+
+        // ImageMagick 讀 JPEG 時由量化表反推品質——寫進去的就是讀回來的
+        using var thumb = new MagickImage(Path.Combine(OutDir, "photo.jpg"));
+        Assert.Equal((uint)expected, thumb.Quality);
+    }
+
+    [Fact]
+    public void Quality_AppliesToJpegOnly_PngOutputUnchanged()
+    {
+        // media.thumbnails.quality 只套 JPEG(ThumbnailGenerator 刻意如此):對 PNG 而言
+        // Magick 的 Quality 是 zlib 壓縮等級 + 濾波器,套上去會讓同一張 PNG 隨 config 改變位元組
+        WriteNoisy("chart.png", MagickFormat.Png);
+        var thumbPath = Path.Combine(OutDir, "chart.png");
+
+        RunWith(quality: 10);
+        var low = new FileInfo(thumbPath).Length;
+        File.Delete(thumbPath);
+        RunWith(quality: 95);
+        var high = new FileInfo(thumbPath).Length;
+
+        Assert.Equal(low, high);
+    }
+
+    [Fact]
+    public void ConfiguredMaxWidth_IsTheCap()
+    {
+        WriteJpeg("wide.jpg", 800, 400);
+
+        RunWith(maxWidth: 200);
+
+        using var thumb = new MagickImage(Path.Combine(OutDir, "wide.jpg"));
+        Assert.Equal((200u, 100u), (thumb.Width, thumb.Height));
+    }
+
+    [Fact]
+    public void Progress_ReportedEvery200Created()
+    {
+        // 數千張圖的站,沒有進度就看不出是在跑還是卡住;但也不能每張都印(洗版)
+        for (var i = 0; i < 401; i++)
+        {
+            WriteJpeg($"p/{i:000}.jpg", 1, 1);
+        }
+        var messages = new List<string>();
+
+        var report = RunWith(progress: messages.Add);
+
+        Assert.Equal(401, report.Created);
+        Assert.Equal(["...200 done", "...400 done"], messages);
+    }
+
+    [Fact]
+    public void ExtensionsMatchedCaseInsensitively_AndOutputMirrorsLayout()
+    {
+        WriteJpeg("ch/news/UPPER.JPG", 10, 10);
+        WriteJpeg("ch/news/b.jpeg", 10, 10);
+        using (var png = new MagickImage(MagickColors.Red, 10, 10))
+        {
+            png.Write(MediaPath("logo.png"), MagickFormat.Png);
+        }
+
+        var report = Run();
+
+        Assert.Equal(3, report.Created);
+        Assert.True(File.Exists(Path.Combine(OutDir, "ch", "news", "UPPER.JPG")));
+        Assert.True(File.Exists(Path.Combine(OutDir, "ch", "news", "b.jpeg")));
+        Assert.True(File.Exists(Path.Combine(OutDir, "logo.png")));
+        // 原子寫入的暫存檔不得留在輸出裡
+        Assert.Empty(Directory.GetFiles(OutDir, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void LeftoverTmpFromAnInterruptedRun_DoesNotCountAsDone()
+    {
+        // 原子寫入的理由(CLAUDE.md「已知教訓」):中斷只會留下 .tmp,不會在最終路徑留半截圖,
+        // 所以重跑時這張圖仍要被產生,而不是因為「有東西在」被跳過
+        WriteJpeg("a.jpg", 10, 10);
+        Directory.CreateDirectory(OutDir);
+        File.WriteAllText(Path.Combine(OutDir, "a.jpg.tmp"), "half-written");
+
+        var report = Run();
+
+        Assert.Equal(1, report.Created);
+        Assert.Equal(0, report.Skipped);
+        using var thumb = new MagickImage(Path.Combine(OutDir, "a.jpg"));
+        Assert.Equal(MagickFormat.Jpeg, thumb.Format);
+        Assert.False(File.Exists(Path.Combine(OutDir, "a.jpg.tmp")));
+    }
+
     [Fact]
     public void NonImagesAndCorruptFiles_HandledWithoutBlocking()
     {
