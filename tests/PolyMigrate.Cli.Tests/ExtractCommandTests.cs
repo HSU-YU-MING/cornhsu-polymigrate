@@ -104,6 +104,24 @@ public class ExtractCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task Cancelled_Returns130_BeforeWritingAnyPage()
+    {
+        // 原本同步指令不看 token:第一次 Ctrl-C 沒作用、照常跑完回 0/1/2;第二次由 runtime 直接終止,
+        // 不經 Cli.Report(),Windows 上的結束碼是 0xC000013A 而不是契約的 130
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var r = await RunWith(cts.Token, "extract", config);
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+        Assert.Empty(r.Out);
+        Assert.False(Directory.Exists(PathOf("site/content")));
+    }
+
+    [Fact]
     public async Task DryRun_ReportsButWritesNothing()
     {
         var config = Write("site/site.yaml", Config());

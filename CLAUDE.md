@@ -109,7 +109,10 @@ CLI 指令與參數、**exit code**、Phase 輸出檔案格式（CSV 欄位、fr
 - **exit code 是最多人依賴的那份契約**（CI 與 shell 腳本直接吃）：0 乾淨 / 1 warning / 2 error /
   130 中斷。對應只在 `Cli.Report()` 定義一次，`CliTests` 末段有驗收測試釘著。**新增指令時
   catch 用共用的 `IsHandled()`，不要各自挑幾種例外**——2.2.0 之前五個指令各抄一份且抄得不一致，
-  `extract`/`thumbs` 漏接取消，Ctrl-C 時直接崩潰而非乾淨回 130。
+  `extract`/`thumbs` 漏接取消，Ctrl-C 時直接崩潰而非乾淨回 130。**catch 接得到還不夠，指令也要真的看 token**：
+  2.2.0 補齊 catch 之後，同步指令（extract/thumbs/verify/slugs）仍不看 token，第一次 Ctrl-C 沒作用、
+  照常跑完回 0/1/2，直到 `fix/product-bugs` 才把 token 穿進逐檔迴圈。新指令的長迴圈要逐項
+  `ct.ThrowIfCancellationRequested()`；Core 那一側用 internal overload 收 token，不改 public 簽章。
 - **「新增一種 warning」是破壞性的**，即使檔案格式沒變。2.2.0 加了 `unlinked_page` warning，
   於是既有使用者什麼都沒改就從 exit 0 變 1。同理 2.2.1 的殘檔回報**刻意不計入 warning**——
   那會在 patch 版動到 exit code。

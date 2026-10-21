@@ -79,6 +79,12 @@
   golden 比對原本把所有 `\r` 刪掉再比,所以三平台 CI 都沒抓到——Markdown 現在逐字比對,
   基準也重產過(只少了 `\r`)。**升級注意:Windows 上重跑 `extract` 後,每一個 `.md` 的位元組都會改變
   (只有行尾),第一次 commit 會是整片的行尾 diff。**
+- **修正(patch):`extract`、`thumbs`、`verify`、`slugs` 按 Ctrl-C 拿不到 130,第一次 Ctrl-C 也沒有作用。**
+  2.2.0 說 `extract` / `thumbs` 會乾淨回 130,但只有 `probe-orphans` / `fetch-orphans` 真的看取消訊號:
+  同步指令按一次 Ctrl-C 照常跑完、回 0/1/2,按第二次由 runtime 直接終止(Windows 結束碼 `0xC000013A`)。
+  現在第一次 Ctrl-C 就在下一頁/下一張圖停下,stderr 印 `cancelled.`、回 **130**;已寫出的 `.md` 與縮圖保留,
+  清單檔、`verify_report.csv` 不會只寫一半,`slugs` 不印半份清單。第二次 Ctrl-C 的行為不變。
+  對逐指令的 exit code 表而言是 130 欄由「—」變成可達(增補,不改既有情境)。
 
 ## 2.3.1
 

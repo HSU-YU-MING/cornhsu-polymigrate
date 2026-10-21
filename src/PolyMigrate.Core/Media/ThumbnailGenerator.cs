@@ -25,7 +25,15 @@ public sealed class ThumbnailGenerator(SiteConfig config)
 {
     private static readonly string[] Extensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 
-    public ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress = null)
+    public ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress = null) =>
+        Run(mediaDir, outDir, progress, CancellationToken.None);
+
+    /// <summary>
+    /// 同上,可取消(CLI 接 Ctrl-C 用;取消時擲 <see cref="OperationCanceledException"/>,CLI 回 130)。
+    /// 逐張檢查;每張縮圖本來就是原子寫入,中斷不會留下半截檔。不加進 public 簽章的理由同
+    /// <c>ExtractionPipeline.Run</c> 的可取消版。
+    /// </summary>
+    internal ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress, CancellationToken ct)
     {
         var thumbs = config.Media.Thumbnails ?? new ThumbnailSection();
         var report = new ThumbnailReport();
@@ -36,6 +44,7 @@ public sealed class ThumbnailGenerator(SiteConfig config)
 
         foreach (var file in files)
         {
+            ct.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(mediaDir, file);
             var target = Path.Combine(outDir, relative);
             if (File.Exists(target))

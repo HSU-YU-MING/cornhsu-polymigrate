@@ -26,6 +26,22 @@ public class VerifyCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task Cancelled_Returns130_WithoutWritingTheReport()
+    {
+        // 原本同步指令不看 token:第一次 Ctrl-C 沒作用、照常跑完回 0/1/2;第二次由 runtime 直接終止,
+        // 結束碼由作業系統決定(Windows 0xC000013A),不是契約的 130
+        var outDir = WriteSite("# 首頁");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var r = await RunWith(cts.Token, "verify", outDir);
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+        Assert.False(File.Exists(PathOf("out/verify_report.csv")));
+    }
+
+    [Fact]
     public async Task NoContentDirectory_ExitsTwo()
     {
         // 指錯目錄(例如把 raw/ 當成輸出根目錄)必須失敗,不能是「0 頁、全部通過」

@@ -32,6 +32,22 @@ public class ThumbsCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task Cancelled_Returns130_WithoutCreatingThumbnails()
+    {
+        // 原本同步指令不看 token:第一次 Ctrl-C 沒作用、照常跑完;CLAUDE.md 與 CHANGELOG 2.2.0 卻說會乾淨回 130
+        var config = Write("site/site.yaml", Config());
+        WriteJpeg("site/media/a.jpg");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var r = await RunWith(cts.Token, "thumbs", config);
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+        Assert.False(File.Exists(PathOf("site/media_thumb/a.jpg")));
+    }
+
+    [Fact]
     public async Task Rerun_SkipsExisting_ExitsZero()
     {
         var config = Write("site/site.yaml", Config());

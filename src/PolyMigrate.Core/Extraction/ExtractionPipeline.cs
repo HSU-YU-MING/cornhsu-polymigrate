@@ -86,8 +86,18 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
     /// <param name="paths">輸入/輸出位置。</param>
     /// <param name="dryRun">true = 完整跑抽取與統計但不寫任何檔案(§3.8)。</param>
-    public ExtractionReport Run(ExtractionPaths paths, bool dryRun = false)
+    public ExtractionReport Run(ExtractionPaths paths, bool dryRun = false) =>
+        Run(paths, dryRun, CancellationToken.None);
+
+    /// <summary>
+    /// 同上,可取消(CLI 接 Ctrl-C 用;取消時擲 <see cref="OperationCanceledException"/>,CLI 回 130)。
+    /// 逐頁檢查一次、寫清單之前再檢查一次:已寫出的 .md 保留(只寫不刪,重跑會覆寫),清單檔要嘛整組寫出、
+    /// 要嘛一份都不寫。刻意不加進 public 簽章:替既有方法加選用參數是二進位不相容(major),
+    /// 新增 public overload 則是 minor——這只是 CLI 需要的細節。
+    /// </summary>
+    internal ExtractionReport Run(ExtractionPaths paths, bool dryRun, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var parser = new RawPageParser(config.Site, config.UrlPattern);
         var extractor = new PageExtractor(config);
         var links = new LinkRewriter(config.Site, config.UrlPattern);
@@ -109,6 +119,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         foreach (var page in pages)
         {
+            ct.ThrowIfCancellationRequested();
             var extracted = extractor.Extract(page, File.ReadAllText(page.FilePath, encoding), paths.MediaDir);
 
             // §3.4:不安全路徑在「任何平台」都一致地拒寫並記錄——兩平台產出必須相同
@@ -139,6 +150,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         var hreflang = HreflangIndex.Build(aggregator.HreflangLinks, aggregator.RouteToKey);
         var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang);
+        ct.ThrowIfCancellationRequested();
         if (!dryRun)
         {
             WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions);

@@ -25,16 +25,16 @@ public static class Cli
                 return 0;
 
             case "extract":
-                return RunExtract(args[1..]);
+                return RunExtract(args[1..], ct);
 
             case "verify":
-                return RunVerify(args[1..]);
+                return RunVerify(args[1..], ct);
 
             case "slugs":
-                return RunSlugs(args[1..]);
+                return RunSlugs(args[1..], ct);
 
             case "thumbs":
-                return RunThumbs(args[1..]);
+                return RunThumbs(args[1..], ct);
 
             case "probe-orphans":
                 return await RunProbeOrphans(args[1..], ct);
@@ -84,7 +84,7 @@ public static class Cli
         }
     }
 
-    private static int RunExtract(string[] args)
+    private static int RunExtract(string[] args, CancellationToken ct)
     {
         string? configPath = null;
         var dryRun = false;
@@ -140,7 +140,7 @@ public static class Cli
                 return 2;
             }
 
-            var report = new ExtractionPipeline(config).Run(paths, dryRun);
+            var report = new ExtractionPipeline(config).Run(paths, dryRun, ct);
 
             Console.WriteLine(new string('=', 50));
             Console.WriteLine(dryRun ? "Phase 2 dry-run done (nothing written)." : "Phase 2 done.");
@@ -180,7 +180,7 @@ public static class Cli
         }
     }
 
-    private static int RunVerify(string[] args)
+    private static int RunVerify(string[] args, CancellationToken ct)
     {
         string? outDir = null;
         string? mediaDir = null;
@@ -222,7 +222,7 @@ public static class Cli
             var allowUnlinked = ReadAllowUnlinked(allowUnlinkedFile);
 
             var report = new PolyMigrate.Core.Verify.OutputVerifier()
-                .Run(outDir, mediaDir, mediaPrefix, allowUnlinked);
+                .Run(outDir, mediaDir, mediaPrefix, allowUnlinked, ct);
 
             Console.WriteLine(new string('=', 50));
             Console.WriteLine("Verify done.");
@@ -262,7 +262,7 @@ public static class Cli
         }
     }
 
-    private static int RunSlugs(string[] args)
+    private static int RunSlugs(string[] args, CancellationToken ct)
     {
         const string usage = "Usage: polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]";
         string? root = null;
@@ -308,6 +308,9 @@ public static class Cli
                     + (langPrefix is null ? "." : $" for lang '{langPrefix}'."));
                 return 2;
             }
+            // 列目錄完才檢查取消、而且在寫第一行之前:被中斷時 stdout 一行都不留——半份清單導成檔案後,
+            // 會被當成完整的已鏡像清單去求差集
+            ct.ThrowIfCancellationRequested();
             // stdout 是資料通道:導成檔案後要餵給 fetch-orphans --slugs,而它以 UTF-8 讀。
             // Windows 上 stdout 跟著 console 碼頁(zh-TW 為 cp950),cmd / Git Bash 導檔時中日韓 slug 會寫成 Big5,
             // 讀回成亂碼網址——所以導到檔案時改以無 BOM 的 UTF-8 寫出(管線與 console 維持原樣,理由見 StandardOutput)
@@ -331,7 +334,7 @@ public static class Cli
         }
     }
 
-    private static int RunThumbs(string[] args)
+    private static int RunThumbs(string[] args, CancellationToken ct)
     {
         if (ParseArgs(args, "Usage: polymigrate thumbs <config.yaml> [--root <dir>] [--media <dir>] [--out <dir>]",
                 "--root", "--media", "--out") is not var (configPath, options))
@@ -350,7 +353,7 @@ public static class Cli
                 return 2;
             }
 
-            var report = new PolyMigrate.Core.Media.ThumbnailGenerator(config).Run(mediaDir, outDir, Console.WriteLine);
+            var report = new PolyMigrate.Core.Media.ThumbnailGenerator(config).Run(mediaDir, outDir, Console.WriteLine, ct);
 
             Console.WriteLine(new string('=', 50));
             Console.WriteLine("Thumbs done.");

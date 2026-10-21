@@ -76,6 +76,21 @@ public class SlugsCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task Cancelled_Returns130_NothingOnStdout()
+    {
+        // 被中斷時 stdout 不可以留下半份清單:那會被導成檔案、當成完整的已鏡像清單去求差集
+        AddMirrored("raw/ch/news", "20260101.php.html");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var r = await RunWith(cts.Token, "slugs", Root, "--section", "news");
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+        Assert.Empty(r.Out);
+    }
+
+    [Fact]
     public async Task DottedSlug_MatchesTheSlugExtractWrites()
     {
         // 盤點 §1.3 的實測:raw/ch/news/v1.2-release.php.html → slugs 印 v1,extract 卻寫出 slug: v1.2-release。

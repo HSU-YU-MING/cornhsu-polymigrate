@@ -247,12 +247,12 @@ config 的 CSS selector(`extract.content`、`type_rules.*.title_selector` / `rem
 
 | 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
 |---|---|---|---|---|
-| `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | — |
-| `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | — |
+| `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | Ctrl-C |
+| `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | Ctrl-C |
 | `probe-orphans` | 跑完(不論命中幾筆;一個回答都沒拿到時也是 0,但不寫清單,見上) | — | `--years` 不合法 | Ctrl-C |
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在 | Ctrl-C |
-| `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | — |
-| `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | — |
+| `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | Ctrl-C |
+| `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | Ctrl-C |
 
 經 npm(`npx cornhsu-polymigrate`、全域安裝的 `polymigrate`)執行時,中間多一層啟動腳本 `bin/polymigrate.js`:
 PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編號(SIGINT → 130)。
@@ -260,5 +260,9 @@ PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編
 目前回 **1**,stderr 以 `error:` 開頭並註明 `PolyMigrate did not run.` 與「這個 1 不是 warning」——
 這個 1 與上表的「1 = 只有 warning」撞號,要不要改成 2 待維護者裁定(既有情境的 exit code 改變屬 major)。
 
-130 目前只有 `probe-orphans` / `fetch-orphans` 回得出來:其餘指令是同步執行、不接取消訊號,
-第一次 Ctrl-C 不會中斷它們,第二次由 runtime 直接終止行程,不經 PolyMigrate 收尾,結束碼由作業系統決定。
+第一次 Ctrl-C:每個指令都在下一個檢查點(下一頁、下一張圖、下一個請求)停下,stderr 印 `cancelled.`、回 130。
+已寫出的 `.md`、縮圖、`raw/` 頁與資產保留(只寫不刪;縮圖與孤兒頁是原子寫入,不會留半截檔);
+`extract` 的清單檔、`verify_report.csv`、`orphan_slugs.txt` 被中斷時一份都不寫,`slugs` 的 stdout 一行都不印。
+第二次 Ctrl-C 不再攔截,由 runtime 直接終止行程(給單一步驟本身就很久時的逃生門),不經 PolyMigrate 收尾,
+結束碼由作業系統決定。(2.3.1 以前只有 `probe-orphans` / `fetch-orphans` 接取消訊號,其餘指令要第二次才停、
+而且拿不到 130。)

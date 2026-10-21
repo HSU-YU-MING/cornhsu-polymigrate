@@ -44,8 +44,18 @@ public sealed partial class OutputVerifier
     /// verify 的「只讀輸出、不需 config」是它的設計前提,不為了一份清單破例。
     /// </param>
     public VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix = "/media/",
-        IReadOnlyCollection<string>? allowUnlinked = null)
+        IReadOnlyCollection<string>? allowUnlinked = null) =>
+        Run(outDir, mediaDir, mediaPrefix, allowUnlinked, CancellationToken.None);
+
+    /// <summary>
+    /// 同上,可取消(CLI 接 Ctrl-C 用;取消時擲 <see cref="OperationCanceledException"/>,CLI 回 130)。
+    /// 逐頁檢查、寫報告前再檢查一次:被中斷時不寫半份 verify_report.csv。不加進 public 簽章的理由同
+    /// <c>ExtractionPipeline.Run</c> 的可取消版(2.2.0 替這個方法加選用參數就已經是一次二進位破壞,見盤點 §7.6)。
+    /// </summary>
+    internal VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix,
+        IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var contentDir = Path.Combine(outDir, "content");
         if (!Directory.Exists(contentDir))
         {
@@ -71,6 +81,7 @@ public sealed partial class OutputVerifier
 
         foreach (var file in files)
         {
+            ct.ThrowIfCancellationRequested();
             var page = Path.GetRelativePath(contentDir, file).Replace('\\', '/');
             var text = File.ReadAllText(file).Replace("\r", "");
 
@@ -157,6 +168,7 @@ public sealed partial class OutputVerifier
 
         issues.AddRange(FindOrphans(pageRoutes, referenced, allowUnlinked));
 
+        ct.ThrowIfCancellationRequested();
         WriteReport(outDir, issues);
         return new VerifyReport
         {
