@@ -99,6 +99,41 @@ public class OrphanCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task Probe_RedirectIsNotAHit()
+    {
+        // 舊站常把不存在的網址一律轉址到首頁(soft 404)。probe 若跟著轉址,首頁的 200 會讓
+        // 每一個日期候選都「命中」——所以 probe 的 HttpClient 刻意不跟轉址(fetch 才跟,見下面)
+        await using var server = new LoopbackHttpServer((_, path) => path switch
+        {
+            "/ch/news/20200101.php" => LoopbackHttpServer.Response.Redirect("/ch/index.php"),
+            "/ch/news/20200102.php" or "/ch/index.php" => new LoopbackHttpServer.Response(200),
+            _ => LoopbackHttpServer.Response.NotFound,
+        });
+        var config = SiteConfig(server.BaseUrl);
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Equal("20200102"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
+        Assert.DoesNotContain("HEAD /ch/index.php", server.Requests);   // 沒有跟過去
+    }
+
+    [Fact]
+    public async Task Probe_SlugFileCannotBeWritten_ExitsTwo()
+    {
+        // 寫不出 orphan_slugs.txt(所在目錄不存在)是 IO 錯誤:exit 2 + 「error: 訊息」,不是崩潰也不是 0
+        await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl);
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020",
+            "--out", PathOf("missing/dir/slugs.txt"));
+
+        Assert.Equal(2, r.Exit);
+        Assert.StartsWith("error: ", r.Err);
+        Assert.False(Directory.Exists(PathOf("missing")));
+    }
+
+    [Fact]
     public async Task Probe_YearZero_ExitsTwo_WithoutWritingTheSlugFile()
     {
         var config = SiteConfig("https://example.invalid");
@@ -188,6 +223,46 @@ public class OrphanCommandTests : CliTestBase
         Assert.Contains("  pages skipped : 1 (already mirrored)\n", r.Out);
         Assert.Equal("mirrored earlier", File.ReadAllText(existing));   // raw/ 不可再生:只寫不覆寫
         Assert.Equal(["GET /en/news/20200101.php"], server.Requests);
+    }
+
+    [Fact]
+    public async Task Fetch_FollowsRedirects_SavingUnderTheRequestedSlug()
+    {
+        // 與 probe 相反:fetch 要跟轉址(頁面搬家後舊網址 301 過去),存檔名仍是要求的那個 slug
+        const string page = "<html><body><main>搬過家的頁</main></body></html>";
+        await using var server = new LoopbackHttpServer((_, path) => path switch
+        {
+            "/ch/news/20200101.php" => LoopbackHttpServer.Response.Redirect("/ch/news/moved.php", 301),
+            "/ch/news/moved.php" => LoopbackHttpServer.Response.Html(page),
+            _ => LoopbackHttpServer.Response.NotFound,
+        });
+        var config = SiteConfig(server.BaseUrl, langMap: "{ ch: zh-Hant }");
+        Write("site/orphan_slugs.txt", "20200101");
+
+        var r = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("  pages fetched : 1\n", r.Out);
+        Assert.Equal(Encoding.UTF8.GetBytes(page), File.ReadAllBytes(PathOf("site/raw/ch/news/20200101.php.html")));
+        Assert.Equal(["GET /ch/news/20200101.php", "GET /ch/news/moved.php"], server.Requests);
+    }
+
+    [Fact]
+    public async Task Fetch_RootOverride_ReadsTheSlugListAndWritesUnderThatRoot()
+    {
+        // --root 決定三件事:預設的 slug 清單、raw/ 與 media/ 寫到哪——config 所在目錄一樣都不碰
+        await using var server = new LoopbackHttpServer((_, path) => path.EndsWith(".jpg")
+            ? new LoopbackHttpServer.Response(200, "image/jpeg", [1, 2, 3])
+            : LoopbackHttpServer.Response.Html(OrphanPage));
+        var config = Write("cfg/site.yaml", Config(baseUrl: server.BaseUrl));
+        Write("work/orphan_slugs.txt", "20200101");
+
+        var r = await Run("fetch-orphans", config, "--section", "news", "--root", PathOf("work"));
+
+        Assert.Equal(0, r.Exit);
+        Assert.True(File.Exists(PathOf("work/raw/ch/news/20200101.php.html")));
+        Assert.True(File.Exists(PathOf("work/media/ch/news/images/a.jpg")));
+        Assert.Equal(["site.yaml"], Directory.GetFileSystemEntries(PathOf("cfg")).Select(Path.GetFileName));
     }
 
     [Fact]

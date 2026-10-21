@@ -21,13 +21,17 @@ public class ProcessExitCodeTests : CliTestBase
         return File.Exists(host) ? host : "dotnet";
     }
 
-    private static async Task<(int Exit, string Out, string Err)> Spawn(params string[] args)
+    private static Task<(int Exit, string Out, string Err)> Spawn(params string[] args) => SpawnIn(null, args);
+
+    /// <param name="workingDirectory">行程的目前目錄;null = 沿用測試行程的。</param>
+    private static async Task<(int Exit, string Out, string Err)> SpawnIn(string? workingDirectory, params string[] args)
     {
         var psi = new ProcessStartInfo(DotnetHost())
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
+            WorkingDirectory = workingDirectory ?? "",
         };
         psi.ArgumentList.Add(CliDll);
         foreach (var arg in args)
@@ -60,6 +64,23 @@ public class ProcessExitCodeTests : CliTestBase
 
         Assert.Equal(1, exit);
         Assert.Contains("Phase 2 dry-run done (nothing written).", stdout);
+    }
+
+    [Fact]
+    public async Task BareConfigFileName_DefaultRootIsTheConfigDirectory()
+    {
+        // 最常見的用法是在站目錄裡打 `polymigrate extract site.yaml`:config 路徑沒有目錄部分。
+        // 預設 root 必須從完整路徑取目錄,否則拿到的是空字串——其餘測試都傳絕對路徑,測不到這一格。
+        // 目前目錄是行程級狀態,所以在子行程裡跑,不動測試行程的
+        Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+
+        var (exit, stdout, stderr) = await SpawnIn(PathOf("site"), "extract", "site.yaml");
+
+        Assert.Equal(0, exit);
+        Assert.Empty(stderr);
+        Assert.Contains("  markdown files   : 1\n", stdout);
+        Assert.True(File.Exists(PathOf("site/content/ch/index.md")));
     }
 
     [Fact]

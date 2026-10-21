@@ -44,6 +44,25 @@ public class ExtractCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task HreflangNotInFallback_SummarySaysItWasNotUsed()
+    {
+        // CLAUDE.md「地雷」:hreflang 預設不啟用。查證照做、數字照印,但摘要必須講明這次沒拿它配對——
+        // 只印「N passed validation」的話,看到數字的人會以為它有作用
+        var config = Write("site/site.yaml", Config(langMap: "{ ch: zh-Hant, en: en }"));
+        Write("site/raw/ch/news/a.php.html",
+            "<html><head><link rel=\"alternate\" hreflang=\"en\" href=\"/en/news/b.php\"></head><body><main>中文</main></body></html>");
+        Write("site/raw/en/news/b.php.html", Page("English"));
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains(
+            "  hreflang links   : 1 declared, 1 passed validation (NOT used — add 'hreflang' to pairing.fallback; why not: hreflang_map.csv)\n",
+            r.Out);
+        Assert.Contains("  suggested pairs  : 0 (heuristic, review in content_inventory.csv)\n", r.Out);
+    }
+
+    [Fact]
     public async Task OsJunkFilesInTheMirror_AreNotPages()
     {
         // 鏡像目錄被 Finder / 檔案總管開過會長出 .DS_Store、Thumbs.db;一個鏡像頁的定義是 *.html

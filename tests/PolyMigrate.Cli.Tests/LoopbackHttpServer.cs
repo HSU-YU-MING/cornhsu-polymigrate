@@ -12,12 +12,15 @@ namespace PolyMigrate.Cli.Tests;
 /// </summary>
 public sealed class LoopbackHttpServer : IAsyncDisposable
 {
-    /// <summary>一個回應:狀態碼、Content-Type(null = 不送)、內容。</summary>
-    public sealed record Response(int Status, string? ContentType = null, byte[]? Body = null)
+    /// <summary>一個回應:狀態碼、Content-Type(null = 不送)、內容、Location(null = 不送)。</summary>
+    public sealed record Response(int Status, string? ContentType = null, byte[]? Body = null, string? Location = null)
     {
         public static Response Html(string html) => new(200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
 
         public static Response NotFound { get; } = new(404);
+
+        /// <summary>轉址到 <paramref name="location"/>(站內路徑即可,用戶端以請求網址解析)。</summary>
+        public static Response Redirect(string location, int status = 302) => new(status, Location: location);
     }
 
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
@@ -91,6 +94,10 @@ public sealed class LoopbackHttpServer : IAsyncDisposable
                     if (response.ContentType is { } type)
                     {
                         head.Append($"Content-Type: {type}\r\n");
+                    }
+                    if (response.Location is { } location)
+                    {
+                        head.Append($"Location: {location}\r\n");
                     }
                     head.Append("\r\n");
                     await stream.WriteAsync(Encoding.ASCII.GetBytes(head.ToString()), _stop.Token);
