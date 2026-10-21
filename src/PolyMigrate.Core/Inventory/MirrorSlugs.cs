@@ -18,23 +18,29 @@ internal static class MirrorSlugs
     /// (輸出第一行就是空行),Thumbs.db 會變成一個叫「Thumbs」的假文章——
     /// 而這個指令的賣點就是 stdout 乾淨到可以直接導成檔案再餵給 fetch-orphans。
     /// </summary>
-    private static IEnumerable<string> InDirectory(string dir) =>
+    /// <param name="stripExtensions">config 的 <c>url_pattern.strip_extensions</c>;null = 沒有 config,改用 <see cref="SlugOf"/> 的啟發式。</param>
+    private static IEnumerable<string> InDirectory(string dir, IReadOnlyList<string>? stripExtensions = null) =>
         Directory.Exists(dir)
             ? Directory.EnumerateFiles(dir, "*.html")
-                .Select(f => SlugOf(Path.GetFileName(f)))
+                .Select(f => stripExtensions is null
+                    ? SlugOf(Path.GetFileName(f))
+                    : Extraction.RawPageParser.SlugOfFileName(Path.GetFileName(f), stripExtensions))
                 .Where(slug => slug.Length > 0)
             : [];
 
     /// <summary>
-    /// 鏡像檔名 → slug,與 extract(<see cref="Extraction.RawPageParser"/>:只剝 <c>strip_extensions</c>
-    /// + <c>.html</c>)同一把尺:先去掉結尾的 <c>.html</c>,再去掉一個動態副檔名。
+    /// 沒有 config 時的鏡像檔名 → slug:先去掉結尾的 <c>.html</c>,再去掉一個動態副檔名。
     ///
     /// <para>原本取「第一個點之前」,含點的 slug 會被截斷(<c>v1.2-release.php.html</c> → <c>v1</c>、
     /// <c>2019.05.01.php.html</c> → <c>2019</c>),餵給 <c>fetch-orphans --slugs</c> 就去抓不存在的網址。</para>
     ///
     /// <para><c>slugs</c> 與函式庫的 <c>MirrorSlugs</c> 不帶 config、不知道 <c>strip_extensions</c>,
     /// 所以「動態副檔名」只認全是 ASCII 字母的那一段(<c>.php</c>、<c>.asp</c>、<c>.aspx</c>、<c>.jsp</c>…):
-    /// 沒有動態副檔名的乾淨網址站(<c>2019.05.01.html</c>、<c>v1.2-release.html</c>)不會被多剝一段。</para>
+    /// 沒有動態副檔名的乾淨網址站(<c>2019.05.01.html</c>、<c>v1.2-release.html</c>)不會被多剝一段。
+    /// <b>它仍是啟發式</b>,有兩種情況與 extract(<see cref="Extraction.RawPageParser"/>)不一致:
+    /// 乾淨網址站的 <c>jane.doe.html</c>(會被剝成 <c>jane</c>)、<c>strip_extensions: []</c> 的站上的
+    /// <c>foo.php.html</c>(extract 的 slug 是 <c>foo.php</c>)。手上有 config 的呼叫端改傳
+    /// <c>stripExtensions</c>,走與 extract 完全相同的規則。</para>
     /// </summary>
     internal static string SlugOf(string fileName)
     {
@@ -67,8 +73,10 @@ internal static class MirrorSlugs
     }
 
     /// <summary>單一語言的 slug 集(探測時用來跳過已抓過的)。</summary>
-    public static HashSet<string> ForLanguage(string rawDir, string langPrefix, string section) =>
-        [.. InDirectory(Path.Combine(rawDir, langPrefix, section))];
+    /// <param name="stripExtensions">有 config 時傳 <c>url_pattern.strip_extensions</c>,與 extract 用同一條規則;null = 啟發式。</param>
+    public static HashSet<string> ForLanguage(string rawDir, string langPrefix, string section,
+        IReadOnlyList<string>? stripExtensions = null) =>
+        [.. InDirectory(Path.Combine(rawDir, langPrefix, section), stripExtensions)];
 
     /// <summary>
     /// 列出 section 底下的 slug,字典序、跨語言去重。

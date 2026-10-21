@@ -463,7 +463,8 @@ public static class Cli
             var root = ResolveRoot(configPath, options);
             var outFile = Path.GetFullPath(options.GetValueOrDefault("--out", Path.Combine(root, "orphan_slugs.txt")));
             EnsureWritable(outFile);
-            var known = PolyMigrate.Core.Orphans.OrphanProber.KnownSlugs(Path.Combine(root, "raw"), langPrefix, section);
+            var known = PolyMigrate.Core.Orphans.OrphanProber.KnownSlugs(
+                Path.Combine(root, "raw"), langPrefix, section, config.UrlPattern.StripExtensions);   // 與 extract 同一條 slug 規則
             // 與實際請求同一套組法:無語言前綴的站(lang_map 的 key 是 "")不可印出 //news/
             var probedPath = PolyMigrate.Core.Orphans.SitePaths.Join(langPrefix, section);
             Console.WriteLine($"Probing {config.Site.BaseUrl.TrimEnd('/')}/{probedPath}/ for {yearFrom}-{yearTo} "

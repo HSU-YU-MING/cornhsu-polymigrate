@@ -51,6 +51,13 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
     public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section) =>
         Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section);
 
+    /// <summary>
+    /// 同上,但依 config 的 <c>strip_extensions</c> 剝檔名尾綴——與 extract 完全相同的 slug 規則
+    /// (上面那個不帶 config,只能用啟發式;public 簽章不動)。CLI 的 probe-orphans 用這個。
+    /// </summary>
+    internal static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section, IReadOnlyList<string> stripExtensions) =>
+        Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section, stripExtensions);
+
     public async Task<List<string>> ProbeAsync(
         string langPrefix, string section, int yearFrom, int yearTo,
         IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default) =>

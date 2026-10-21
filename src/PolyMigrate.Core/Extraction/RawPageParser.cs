@@ -34,8 +34,19 @@ internal sealed class RawPageParser
     {
         _urlPattern = urlPattern;
         _baseUrl = site.BaseUrl.TrimEnd('/');
-        _suffixes = [.. urlPattern.StripExtensions.Select(e => e + ".html"), ".html"];
+        _suffixes = MirrorSuffixes(urlPattern.StripExtensions);
     }
+
+    /// <summary>鏡像檔名要剝的尾綴,長的先比:<c>.php.html</c> 再 <c>.html</c>。</summary>
+    private static string[] MirrorSuffixes(IEnumerable<string> stripExtensions) =>
+        [.. stripExtensions.Select(e => e + ".html"), ".html"];
+
+    /// <summary>
+    /// 鏡像檔名 → slug 的唯一規則(extract 用的就是這一條;空字串由呼叫端決定怎麼處理)。
+    /// 給手上有 config、要與 extract 一致的呼叫端(例如 probe-orphans 的已知 slug 集)。
+    /// </summary>
+    internal static string SlugOfFileName(string fileName, IEnumerable<string> stripExtensions) =>
+        StripSuffix(fileName, MirrorSuffixes(stripExtensions));
 
     public RawPage Parse(string rawRoot, string filePath)
     {
@@ -69,9 +80,11 @@ internal sealed class RawPageParser
         return new RawPage(filePath, langPrefix, locale, section, slug, sourceUrl, translationKey);
     }
 
-    private string StripSuffix(string name)
+    private string StripSuffix(string name) => StripSuffix(name, _suffixes);
+
+    private static string StripSuffix(string name, string[] suffixes)
     {
-        foreach (var suffix in _suffixes)
+        foreach (var suffix in suffixes)
         {
             if (name.EndsWith(suffix, StringComparison.Ordinal))
             {

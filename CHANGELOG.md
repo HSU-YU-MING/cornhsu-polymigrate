@@ -66,8 +66,11 @@ exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不�
 - **修正(patch):`slugs`(與 `probe-orphans` 的已知 slug 集、函式庫的 `PolyMigrator.MirrorSlugs`)
   在檔名第一個點就截斷,和 `extract` 寫出的 slug 不一致。** `raw/ch/news/v1.2-release.php.html` 原本印 `v1`
   (`extract` 寫的是 `slug: v1.2-release`),餵給 `fetch-orphans --slugs` 就去抓不存在的網址。
-  現在去掉結尾的 `.html` 再去掉一個動態副檔名——`slugs` 不帶 config、不知道 `strip_extensions`,
-  所以只認全是 ASCII 字母的那一段(`.php`、`.asp`、`.aspx`…),`2019.05.01.html` 這類乾淨網址不會被多剝。
+  `probe-orphans` 手上有 config,已知 slug 集改用 `url_pattern.strip_extensions`,與 `extract` 完全相同的規則。
+  `slugs` 與 `PolyMigrator.MirrorSlugs` 不帶 config、不知道 `strip_extensions`,改成去掉結尾的 `.html`
+  再去掉一個全是 ASCII 字母的副檔名(`.php`、`.asp`、`.aspx`…),`2019.05.01.html` 這類乾淨網址不會被多剝——
+  **這仍是啟發式,大多數站與 `extract` 一致,但不是全部**:乾淨網址站的 `jane.doe.html` 會印成 `jane`,
+  `strip_extensions: []` 的站上 `foo.php.html` 會印成 `foo`(`extract` 的 slug 分別是 `jane.doe`、`foo.php`)。
   **升級注意:含點的 slug 輸出會改變**(原本的截斷值本來就無法回餵 `fetch-orphans`)。列表頁 `index` 照舊列出。
 - **修正(patch):Windows 上 `slugs` 導成檔案時跟著 console 碼頁,回餵 `fetch-orphans` 變成亂碼網址。**
   2.2.0 與 `docs/搬完之後你還要做的事.md` 教的就是 `slugs … > local.txt` 這條管線;在 zh-TW Windows(cp950)

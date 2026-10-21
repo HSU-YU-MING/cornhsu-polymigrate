@@ -66,6 +66,30 @@ public class MirrorSlugsTests : IDisposable
     }
 
     [Theory]
+    // 審查 minor 5:不帶 config 的啟發式(去 .html 再去一段全字母的副檔名)在這兩種站會與 extract 不一致——
+    // 手上有 config 的呼叫端(probe-orphans)改用與 RawPageParser 完全相同的規則
+    [InlineData("jane.doe.html", new[] { ".php" }, "jane.doe")]   // 乾淨網址站的 /people/jane.doe:啟發式會剝成 jane
+    [InlineData("foo.php.html", new string[0], "foo.php")]        // strip_extensions: [] 時 .php 是 slug 的一部分
+    [InlineData("a.php.html", new[] { ".php" }, "a")]
+    [InlineData("a.asp.html", new[] { ".php" }, "a.asp")]          // 不在 strip_extensions 裡的副檔名不剝
+    [InlineData("a.asp.html", new[] { ".php", ".asp" }, "a")]
+    public void WithStripExtensions_UsesExactlyTheExtractRule(string fileName, string[] stripExtensions, string slug)
+    {
+        AddMirrored("ch", "news", fileName);
+
+        Assert.Equal(new HashSet<string> { slug },
+            PolyMigrate.Core.Inventory.MirrorSlugs.ForLanguage(Raw, "ch", "news", stripExtensions));
+        var config = new PolyMigrate.Core.Configuration.SiteConfig
+        {
+            Site = new() { BaseUrl = "https://x.example" },
+            UrlPattern = new() { LangMap = new() { ["ch"] = "zh-Hant" }, DefaultLang = "zh-Hant", StripExtensions = [.. stripExtensions] },
+        };
+        var page = new PolyMigrate.Core.Extraction.RawPageParser(config.Site, config.UrlPattern)
+            .Parse(Raw, Path.Combine(Raw, "ch", "news", fileName));
+        Assert.Equal(slug, page.Slug);   // 防呆:與 extract 實際算出的 slug 相同
+    }
+
+    [Theory]
     [InlineData("C:\\Windows")]     // Path.Combine 遇到絕對路徑會丟掉前面的 rawDir
     [InlineData("/etc")]
     [InlineData("../../elsewhere")]

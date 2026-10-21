@@ -52,6 +52,23 @@ public class OrphanCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task Probe_KnownSlugs_FollowTheConfigsStripExtensions()
+    {
+        // strip_extensions: [] 的站網址沒有副檔名:鏡像裡的 20210105.php.html 是另一個網址(/news/20210105.php),
+        // /news/20210105 本身並沒有鏡像,所以要探。不帶 config 的啟發式會把它剝成 20210105、當成已知而跳過
+        await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
+        var config = Write("site/site.yaml", Config(baseUrl: server.BaseUrl)
+            .Replace("default_lang: zh-Hant", "default_lang: zh-Hant\n  strip_extensions: []"));
+        Write("site/raw/ch/news/20210105.php.html", "<html></html>");
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2021");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("(1 known slugs skipped, delay 0ms)", r.Out);   // 已知的是 20210105.php,不是任何日期候選
+        Assert.Contains("HEAD /ch/news/20210105", server.Requests);
+    }
+
+    [Fact]
     public async Task Probe_LangRootAndOut_Overrides_AndKnownSlugsAreSkipped()
     {
         await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
