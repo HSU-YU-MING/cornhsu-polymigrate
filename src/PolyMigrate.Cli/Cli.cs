@@ -401,6 +401,7 @@ public static class Cli
             var langPrefix = options.GetValueOrDefault("--lang", config.UrlPattern.LangMap.Keys.First());
             var root = ResolveRoot(configPath, options);
             var outFile = Path.GetFullPath(options.GetValueOrDefault("--out", Path.Combine(root, "orphan_slugs.txt")));
+            EnsureWritable(outFile);
             var known = PolyMigrate.Core.Orphans.OrphanProber.KnownSlugs(Path.Combine(root, "raw"), langPrefix, section);
             // 與實際請求同一套組法:無語言前綴的站(lang_map 的 key 是 "")不可印出 //news/
             var probedPath = PolyMigrate.Core.Orphans.SitePaths.Join(langPrefix, section);
@@ -491,6 +492,28 @@ public static class Cli
     }
 
     /// <summary>豁免清單:一行一頁(content 相對路徑或路由),空行與 # 開頭略過。</summary>
+    /// <summary>
+    /// 跑長工作之前先確認輸出檔寫得出去(寫不出擲 IO 例外 → exit 2)。probe 一年就是 730 個以上的請求,
+    /// 預設延遲下約 36 分鐘——原本要整批探完、到最後寫檔時才知道目錄不存在或 --out 指到目錄。
+    /// <para>不留痕跡:既有檔以 Append 開啟、不寫任何位元組(內容與修改時間都不變);原本不存在的檔
+    /// 檢查完就刪掉——否則探測被中斷或一個回答都沒拿到時,會留下一個空檔,被讀成「沒有孤兒頁」。</para>
+    /// </summary>
+    private static void EnsureWritable(string file)
+    {
+        if (Directory.Exists(file))
+        {
+            throw new IOException($"Output path is a directory, not a file: {file}");
+        }
+        var existed = File.Exists(file);
+        using (new FileStream(file, FileMode.Append, FileAccess.Write))
+        {
+        }
+        if (!existed)
+        {
+            File.Delete(file);
+        }
+    }
+
     private static IReadOnlyCollection<string>? ReadAllowUnlinked(string? path)
     {
         if (path is null)

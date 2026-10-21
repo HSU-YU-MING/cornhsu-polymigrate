@@ -242,6 +242,42 @@ public class OrphanCommandTests : CliTestBase
         Assert.Equal(2, r.Exit);
         Assert.StartsWith("error: ", r.Err);
         Assert.Empty(Directory.GetFileSystemEntries(blocker));
+        // 而且在探測之前就知道:原本要先發完 732 個請求(預設延遲下一年約 36 分鐘)才在寫檔時失敗
+        Assert.Empty(server.Requests);
+    }
+
+    [Fact]
+    public async Task Probe_OutDirectoryMissing_ExitsTwo_BeforeAnyRequest()
+    {
+        await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl);
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020",
+            "--out", PathOf("no-such-dir/slugs.txt"));
+
+        Assert.Equal(2, r.Exit);
+        Assert.StartsWith("error: ", r.Err);
+        Assert.Empty(server.Requests);
+        Assert.False(Directory.Exists(PathOf("no-such-dir")));
+    }
+
+    [Fact]
+    public async Task Probe_WritabilityCheck_LeavesNoTraceWhenNothingIsWritten()
+    {
+        // 探測前的可寫檢查不可以留下空檔(那正是「沒有孤兒頁」的假象),也不可以動到既有檔
+        await using var server = new LoopbackHttpServer((_, _) => new LoopbackHttpServer.Response(503));
+        var config = SiteConfig(server.BaseUrl);
+        var existing = Write("site/existing.txt", "20190101");
+        var before = File.GetLastWriteTimeUtc(existing);
+
+        var fresh = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+        var kept = await Run("probe-orphans", config, "--section", "news", "--years", "2020", "--out", existing);
+
+        Assert.Equal(0, fresh.Exit);
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
+        Assert.Equal(0, kept.Exit);
+        Assert.Equal("20190101", File.ReadAllText(existing));
+        Assert.Equal(before, File.GetLastWriteTimeUtc(existing));
     }
 
     [Fact]
