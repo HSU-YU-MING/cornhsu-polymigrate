@@ -599,7 +599,10 @@ public static class Cli
     /// 否則新增指令時漏抄一種(例如忘了 OperationCanceledException → 130)不會被任何測試發現。
     /// <para>AngleSharp 的 <c>DomException</c> 直接繼承 Exception,不屬於上面任何一類。config 的 selector
     /// 已在用到之前驗過(壞了是 ConfigException),這裡是最後一道網:漏網的也是 exit 2,
-    /// 不會以未處理例外結束(Windows 上是 0xE0434352,不在 0/1/2/130 契約內)。</para>
+    /// 不會以未處理例外結束(Windows 上是 0xE0434352,不在 0/1/2/130 契約內)。
+    /// <b>這一項刻意沒有測試</b>:目前沒有任何路徑會讓 DomException 走到這裡(selector 一律經 CssSelectors
+    /// 轉成 ConfigException,其餘 DOM 呼叫的引數都是寫死的合法值),所以拿掉它測試照樣全綠。它防的是日後新增的
+    /// DOM 呼叫漏接——那時應該補的是那一處的轉換與測試,而不是依賴這一行。</para>
     /// </summary>
     private static bool IsHandled(Exception ex) =>
         ex is OperationCanceledException or ConfigException or AngleSharp.Dom.DomException || IsIoError(ex);
