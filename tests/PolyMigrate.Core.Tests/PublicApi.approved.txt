@@ -1,0 +1,197 @@
+## sealed class PolyMigrate.Core.Configuration.AuthWorkaroundSection
+   public ctor()
+   public Dictionary<string, string> Set { get; set; }
+   public string Type { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.ConfigException : Exception
+   public ctor(string message, Exception? inner = null)
+
+## sealed class PolyMigrate.Core.Configuration.ExtractSection
+   public ctor()
+   public string Content { get; set; }
+   public Dictionary<string, string> SectionFlags { get; set; }
+   public Dictionary<string, string> SectionTypes { get; set; }
+   public List<string> StripTitlePrefix { get; set; }
+   public int TextInImageMaxLength { get; set; }
+   public List<string> TitleMarkers { get; set; }
+   public List<string> TitleNoise { get; set; }
+   public Dictionary<string, PolyMigrate.Core.Configuration.PageTypeRules> TypeRules { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.MediaSection
+   public ctor()
+   public Dictionary<string, string> PdfLabels { get; set; }
+   public PolyMigrate.Core.Configuration.ThumbnailSection? Thumbnails { get; set; }
+   public string WebPrefix { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.PageTypeRules
+   public ctor()
+   public bool ImagesToGallery { get; set; }
+   public List<string> RemoveSelectors { get; set; }
+   public string? TitleSelector { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.PairingSection
+   public ctor()
+   public List<string> Fallback { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.PoliteSection
+   public ctor()
+   public int DelayMs { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.SiteConfig
+   public ctor()
+   public int ConfigVersion { get; set; }
+   public PolyMigrate.Core.Configuration.ExtractSection Extract { get; set; }
+   public PolyMigrate.Core.Configuration.MediaSection Media { get; set; }
+   public PolyMigrate.Core.Configuration.PairingSection Pairing { get; set; }
+   public PolyMigrate.Core.Configuration.SiteSection Site { get; set; }
+   public PolyMigrate.Core.Configuration.UrlPatternSection UrlPattern { get; set; }
+
+## static class PolyMigrate.Core.Configuration.SiteConfigLoader
+   public static PolyMigrate.Core.Configuration.SiteConfig Load(string yaml, string sourceName = "<string>")
+   public static PolyMigrate.Core.Configuration.SiteConfig LoadFile(string path)
+
+## sealed class PolyMigrate.Core.Configuration.SiteSection
+   public ctor()
+   public PolyMigrate.Core.Configuration.AuthWorkaroundSection? AuthWorkaround { get; set; }
+   public string BaseUrl { get; set; }
+   public string? Encoding { get; set; }
+   public PolyMigrate.Core.Configuration.PoliteSection Polite { get; set; }
+   public string UserAgent { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.ThumbnailSection
+   public ctor()
+   public int MaxWidth { get; set; }
+   public int Quality { get; set; }
+
+## sealed class PolyMigrate.Core.Configuration.UrlPatternSection
+   public ctor()
+   public string DefaultLang { get; set; }
+   public Dictionary<string, string> LangMap { get; set; }
+   public List<string> StripExtensions { get; set; }
+
+## sealed record PolyMigrate.Core.Diagnostics.PathIssue : IEquatable<PolyMigrate.Core.Diagnostics.PathIssue>
+   public ctor(PolyMigrate.Core.Diagnostics.Severity Severity, string Page, string Issue)
+   public string Issue { get; init; }
+   public string Page { get; init; }
+   public PolyMigrate.Core.Diagnostics.Severity Severity { get; init; }
+   public PolyMigrate.Core.Diagnostics.PathIssue <Clone>$()
+   public void Deconstruct(out PolyMigrate.Core.Diagnostics.Severity Severity, out string Page, out string Issue)
+   public bool Equals(PolyMigrate.Core.Diagnostics.PathIssue? other)
+   public override bool Equals(object? obj)
+   public override int GetHashCode()
+   public override string ToString()
+   public static bool op_Equality(PolyMigrate.Core.Diagnostics.PathIssue? left, PolyMigrate.Core.Diagnostics.PathIssue? right)
+   public static bool op_Inequality(PolyMigrate.Core.Diagnostics.PathIssue? left, PolyMigrate.Core.Diagnostics.PathIssue? right)
+
+## enum PolyMigrate.Core.Diagnostics.Severity
+   Warning = 0
+   Error = 1
+
+## static class PolyMigrate.Core.Diagnostics.SeverityWire
+   public static string Wire(this PolyMigrate.Core.Diagnostics.Severity severity)
+
+## sealed record PolyMigrate.Core.Extraction.ExtractionPaths : IEquatable<PolyMigrate.Core.Extraction.ExtractionPaths>
+   public ctor(string RawDir, string MediaDir, string OutDir)
+   public string MediaDir { get; init; }
+   public string OutDir { get; init; }
+   public string RawDir { get; init; }
+   public PolyMigrate.Core.Extraction.ExtractionPaths <Clone>$()
+   public void Deconstruct(out string RawDir, out string MediaDir, out string OutDir)
+   public bool Equals(PolyMigrate.Core.Extraction.ExtractionPaths? other)
+   public override bool Equals(object? obj)
+   public static PolyMigrate.Core.Extraction.ExtractionPaths ForRoot(string root)
+   public override int GetHashCode()
+   public override string ToString()
+   public static bool op_Equality(PolyMigrate.Core.Extraction.ExtractionPaths? left, PolyMigrate.Core.Extraction.ExtractionPaths? right)
+   public static bool op_Inequality(PolyMigrate.Core.Extraction.ExtractionPaths? left, PolyMigrate.Core.Extraction.ExtractionPaths? right)
+
+## sealed class PolyMigrate.Core.Extraction.ExtractionPipeline
+   public ctor(PolyMigrate.Core.Configuration.SiteConfig config)
+   public PolyMigrate.Core.Extraction.ExtractionReport Run(PolyMigrate.Core.Extraction.ExtractionPaths paths, bool dryRun = false)
+
+## sealed class PolyMigrate.Core.Extraction.ExtractionReport
+   public ctor()
+   public required SortedDictionary<string, int> FlagCounts { get; init; }
+   public bool HasErrors { get; }
+   public bool HasWarnings { get; }
+   public int HreflangDeclared { get; init; }
+   public bool HreflangInFallback { get; init; }
+   public int HreflangUsable { get; init; }
+   public int MediaReferenced { get; init; }
+   public int MissingImages { get; init; }
+   public int NeedFetchMedia { get; init; }
+   public required SortedDictionary<string, int> OnlyInLocale { get; init; }
+   public int PagesSkippedUnsafe { get; }
+   public int PagesWritten { get; init; }
+   public required List<PolyMigrate.Core.Diagnostics.PathIssue> PathIssues { get; init; }
+   public List<string> StaleOutputs { get; init; }
+   public int SuggestedPairs { get; init; }
+   public int TranslationKeys { get; init; }
+   public required SortedDictionary<string, int> TypeCounts { get; init; }
+
+## sealed class PolyMigrate.Core.Media.ThumbnailGenerator
+   public ctor(PolyMigrate.Core.Configuration.SiteConfig config)
+   public PolyMigrate.Core.Media.ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress = null)
+
+## sealed class PolyMigrate.Core.Media.ThumbnailReport
+   public ctor()
+   public int Created { get; set; }
+   public int Failed { get; set; }
+   public List<(string Path, string Error)> Failures { get; }
+   public int Skipped { get; set; }
+
+## sealed class PolyMigrate.Core.Orphans.FetchReport
+   public ctor()
+   public int AssetsFetched { get; set; }
+   public List<string> Errors { get; }
+   public int PagesFetched { get; set; }
+   public int PagesSkipped { get; set; }
+
+## sealed class PolyMigrate.Core.Orphans.OrphanFetcher
+   public ctor(PolyMigrate.Core.Configuration.SiteConfig config, HttpClient http)
+   public Task<PolyMigrate.Core.Orphans.FetchReport> FetchAsync(IReadOnlyList<string> slugs, string section, string rawDir, string mediaDir, Action<string>? progress = null, CancellationToken ct = default)
+
+## sealed class PolyMigrate.Core.Orphans.OrphanProber
+   public ctor(PolyMigrate.Core.Configuration.SiteConfig config, HttpClient http)
+   public static HttpClient CreateHttpClient(PolyMigrate.Core.Configuration.SiteConfig config, bool allowRedirects = false)
+   public static IEnumerable<string> DateCandidates(int yearFrom, int yearTo)
+   public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section)
+   public Task<List<string>> ProbeAsync(string langPrefix, string section, int yearFrom, int yearTo, IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default)
+
+## sealed class PolyMigrate.Core.PolyMigrator
+   public ctor(PolyMigrate.Core.Configuration.SiteConfig config)
+   public PolyMigrate.Core.Extraction.ExtractionReport Extract(PolyMigrate.Core.Extraction.ExtractionPaths paths, bool dryRun = false)
+   public PolyMigrate.Core.Extraction.ExtractionReport Extract(string root, bool dryRun = false)
+   public static PolyMigrate.Core.PolyMigrator FromConfigFile(string configPath)
+   public PolyMigrate.Core.Media.ThumbnailReport GenerateThumbnails(string mediaDir, string thumbnailDir)
+   public static IReadOnlyList<string>? MirrorSlugs(string rawDir, string section, string? langPrefix = null)
+   public static PolyMigrate.Core.Verify.VerifyReport Verify(string outputDir, string? mediaDir = null, string mediaPrefix = "/media/", IReadOnlyCollection<string>? allowUnlinked = null)
+
+## sealed class PolyMigrate.Core.Verify.OutputVerifier
+   public ctor()
+   public PolyMigrate.Core.Verify.VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix = "/media/", IReadOnlyCollection<string>? allowUnlinked = null)
+
+## sealed record PolyMigrate.Core.Verify.VerifyIssue : IEquatable<PolyMigrate.Core.Verify.VerifyIssue>
+   public ctor(PolyMigrate.Core.Diagnostics.Severity Severity, string Page, string Kind, string Detail)
+   public string Detail { get; init; }
+   public string Kind { get; init; }
+   public string Page { get; init; }
+   public PolyMigrate.Core.Diagnostics.Severity Severity { get; init; }
+   public PolyMigrate.Core.Verify.VerifyIssue <Clone>$()
+   public void Deconstruct(out PolyMigrate.Core.Diagnostics.Severity Severity, out string Page, out string Kind, out string Detail)
+   public bool Equals(PolyMigrate.Core.Verify.VerifyIssue? other)
+   public override bool Equals(object? obj)
+   public override int GetHashCode()
+   public override string ToString()
+   public static bool op_Equality(PolyMigrate.Core.Verify.VerifyIssue? left, PolyMigrate.Core.Verify.VerifyIssue? right)
+   public static bool op_Inequality(PolyMigrate.Core.Verify.VerifyIssue? left, PolyMigrate.Core.Verify.VerifyIssue? right)
+
+## sealed class PolyMigrate.Core.Verify.VerifyReport
+   public ctor()
+   public int Errors { get; }
+   public required List<PolyMigrate.Core.Verify.VerifyIssue> Issues { get; init; }
+   public int LinksChecked { get; init; }
+   public int MediaChecked { get; init; }
+   public bool MediaChecksSkipped { get; init; }
+   public int PagesChecked { get; init; }
+   public int Warnings { get; }
