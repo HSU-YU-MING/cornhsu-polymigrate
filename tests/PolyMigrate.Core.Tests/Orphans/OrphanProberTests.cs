@@ -134,6 +134,60 @@ public class OrphanProberTests
     }
 
     [Fact]
+    public async Task Detailed_SeparatesDefiniteAnswersFromNoAnswer()
+    {
+        // 「拿到 404」與「沒拿到有效回應」原本一律當成「不存在」,全部失敗時分不出來
+        var handler = new StubHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            return path switch
+            {
+                "/ch/news/01012021.php" => StubHandler.Status(HttpStatusCode.OK),          // 命中 → 接著探 A
+                "/ch/news/01012021A.php" => StubHandler.Status(HttpStatusCode.Gone),       // 確定沒有
+                "/ch/news/20210101.php" => StubHandler.Status(HttpStatusCode.Forbidden),   // 沒回答
+                "/ch/news/01022021.php" => StubHandler.Status(HttpStatusCode.Conflict),    // 重試後仍 409 → 沒回答
+                "/ch/news/20210102.php" => throw new HttpRequestException("reset"),         // 重試後仍連線錯誤
+                "/ch/news/01032021.php" => throw new TaskCanceledException("timeout"),      // 重試後仍逾時
+                "/ch/news/20210103.php" => StubHandler.Status(HttpStatusCode.ServiceUnavailable),
+                "/ch/news/01042021.php" => StubHandler.Status(HttpStatusCode.MovedPermanently),   // 轉址 = 確定沒有
+                _ => StubHandler.Status(HttpStatusCode.NotFound),
+            };
+        });
+        var known = OrphanProber.DateCandidates(2021, 2021).Skip(8).ToHashSet();   // 只探 1/1～1/4 的 8 個
+
+        var result = await Prober(handler).ProbeDetailedAsync("ch", "news", 2021, 2021, known);
+
+        Assert.Equal(["01012021"], result.Found);
+        Assert.Equal(9, result.Checks);   // 8 個日期 + 命中後的 A
+        Assert.Equal(new SortedDictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["HTTP 403"] = 1,
+            ["HTTP 409"] = 1,
+            ["HTTP 503"] = 1,
+            ["connection error"] = 1,
+            ["timeout"] = 1,
+        }, result.Unanswered);
+        Assert.Equal(5, result.UnansweredCount);
+    }
+
+    [Fact]
+    public async Task Detailed_RetrySucceeding_CountsAsAnswered()
+    {
+        // 第一次 409、重試拿到 404:有回答,不算進 Unanswered
+        var attempts = 0;
+        var handler = new StubHandler(req =>
+            req.RequestUri!.AbsolutePath.EndsWith("/01012021.php") && ++attempts == 1
+                ? StubHandler.Status(HttpStatusCode.Conflict)
+                : StubHandler.Status(HttpStatusCode.NotFound));
+        var known = OrphanProber.DateCandidates(2021, 2021).Skip(1).ToHashSet();
+
+        var result = await Prober(handler).ProbeDetailedAsync("ch", "news", 2021, 2021, known);
+
+        Assert.Equal(1, result.Checks);
+        Assert.Equal(0, result.UnansweredCount);
+    }
+
+    [Fact]
     public async Task UserCancellation_MidProbe_Propagates_AndStopsRequesting()
     {
         // Ctrl-C 必須中止(CLI 回 130),不能被當成上面那種逾時吞掉後繼續探幾百個候選

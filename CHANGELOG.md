@@ -18,6 +18,13 @@
   **載入 config 時仍刻意不驗 selector**:寫壞但這次沒有頁用到的規則照舊不擋——在載入時擋,
   原本能跑的 config 會開始失敗。函式庫:`PolyMigrator.Extract`、`ExtractionPipeline.Run`、
   `OrphanFetcher.FetchAsync` 在這個情況改擲 `ConfigException`(原本是 AngleSharp 的 `DomException`)。
+- **修正(patch):`probe-orphans` 一個回答都沒拿到時,把既有的 `orphan_slugs.txt` 覆寫成空檔。**
+  連線錯誤、逾時、403/429/5xx 原本一律當成「不存在」,全部失敗時照樣「跑完、0 筆」——先前探好的清單
+  (預設延遲下一年約 36 分鐘的請求量)被清空,而空清單會被排程讀成「沒有孤兒頁」。現在分開統計
+  「確定沒有」(404、410、3xx)與「沒拿到回答」:**一個回答都沒拿到時不寫 `--out`**(既有檔原樣保留,
+  沒有檔也不建空檔),stderr 印 `warning:` 並列出原因(例如 `HTTP 503 ×732`);部分沒拿到回答時照寫,
+  另警告清單可能不完整。**exit code 不變(仍是 0)**——要不要改成非零屬既有情境的 exit code 改變,
+  留給維護者裁定。
 
 ## 2.3.1
 

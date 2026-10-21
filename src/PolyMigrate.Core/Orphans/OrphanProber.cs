@@ -3,6 +3,21 @@ using PolyMigrate.Core.Configuration;
 
 namespace PolyMigrate.Core.Orphans;
 
+/// <summary><see cref="OrphanProber.ProbeDetailedAsync"/> 的結果。</summary>
+internal sealed class ProbeResult
+{
+    /// <summary>命中的 slug,依探測順序(= <see cref="OrphanProber.ProbeAsync"/> 的回傳值)。</summary>
+    public List<string> Found { get; } = [];
+
+    /// <summary>探過的候選數(含後綴變體;每個候選最多兩次 HTTP 請求,這裡只算一次)。</summary>
+    public int Checks { get; set; }
+
+    /// <summary>沒拿到回答的候選,依原因計數(<c>HTTP 503</c>、<c>connection error</c>、<c>timeout</c>)。</summary>
+    public SortedDictionary<string, int> Unanswered { get; } = new(StringComparer.Ordinal);
+
+    public int UnansweredCount => Unanswered.Values.Sum();
+}
+
 /// <summary>
 /// 孤兒頁探測(規格 probe_orphans.py;§2.6:索引移除但頁面還在)。
 /// 逐日期產生候選 slug(YYYYMMDD 與 MMDDYYYY 兩種格式都探,§2.6 日期混用坑),
@@ -38,10 +53,33 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
 
     public async Task<List<string>> ProbeAsync(
         string langPrefix, string section, int yearFrom, int yearTo,
+        IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default) =>
+        (await ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known, progress, ct)).Found;
+
+    /// <summary>
+    /// 同 <see cref="ProbeAsync"/>,另外分開統計「確定沒有」與「沒拿到回答」。
+    /// 兩者原本一律當成「不存在」:伺服器掛了、被 WAF 擋、base_url 打錯時,探測照樣「跑完、0 筆」,
+    /// 而空清單會被讀成「沒有孤兒頁」。CLI 靠這份統計決定清單能不能信、要不要寫。
+    /// </summary>
+    internal async Task<ProbeResult> ProbeDetailedAsync(
+        string langPrefix, string section, int yearFrom, int yearTo,
         IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default)
     {
-        var found = new List<string>();
+        var result = new ProbeResult();
+        var found = result.Found;
         var probed = 0;
+
+        async Task<bool> Exists(string slug)
+        {
+            var (answer, reason) = await ProbeOneAsync(langPrefix, section, slug, ct);
+            result.Checks++;
+            if (answer == Answer.None)
+            {
+                result.Unanswered[reason!] = result.Unanswered.GetValueOrDefault(reason!) + 1;
+            }
+            return answer == Answer.Exists;
+        }
+
         foreach (var candidate in DateCandidates(yearFrom, yearTo))
         {
             if (known.Contains(candidate))
@@ -49,13 +87,13 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
                 continue;
             }
             probed++;
-            if (await ExistsAsync(langPrefix, section, candidate, ct))
+            if (await Exists(candidate))
             {
                 found.Add(candidate);
                 progress?.Invoke($"hit {candidate}");
                 foreach (var suffix in Suffixes)
                 {
-                    if (await ExistsAsync(langPrefix, section, candidate + suffix, ct))
+                    if (await Exists(candidate + suffix))
                     {
                         found.Add(candidate + suffix);
                         progress?.Invoke($"hit {candidate}{suffix}");
@@ -71,12 +109,27 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
                 progress?.Invoke($"probed {probed}, hits {found.Count}");
             }
         }
-        return found;
+        return result;
     }
 
-    private async Task<bool> ExistsAsync(string langPrefix, string section, string slug, CancellationToken ct)
+    private enum Answer
+    {
+        /// <summary>200。</summary>
+        Exists,
+
+        /// <summary>確定沒有:404、410、其他 2xx,以及 3xx(不跟轉址,轉址頁不算命中,見 <see cref="CreateHttpClient"/>)。</summary>
+        Absent,
+
+        /// <summary>沒拿到「有沒有」的回答:連線錯誤、逾時、重試後仍 409,以及 401/403/429/5xx 等其餘狀態。</summary>
+        None,
+    }
+
+    /// <returns>回答;<see cref="Answer.None"/> 時附上原因(<c>HTTP 503</c>、<c>connection error</c>、<c>timeout</c>)。</returns>
+    private async Task<(Answer Answer, string? Reason)> ProbeOneAsync(
+        string langPrefix, string section, string slug, CancellationToken ct)
     {
         var url = $"{_baseUrl}/{langPrefix}/{section}/{slug}{_extension}";
+        var reason = "";   // 走到迴圈外 = 最後一次是例外,原因一定已經填上
         for (var attempt = 0; attempt < 2; attempt++)
         {
             await Task.Delay(config.Site.Polite.DelayMs * (attempt + 1), ct);
@@ -84,19 +137,26 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
             {
                 using var request = new HttpRequestMessage(HttpMethod.Head, url);
                 using var response = await http.SendAsync(request, ct);
-                if (response.StatusCode == System.Net.HttpStatusCode.Conflict && attempt == 0)
+                var status = (int)response.StatusCode;
+                if (status == 409 && attempt == 0)
                 {
                     continue;   // 409 = bot 防護,退避加倍再試一次
                 }
-                return response.StatusCode == System.Net.HttpStatusCode.OK;
+                return status switch
+                {
+                    200 => (Answer.Exists, null),
+                    404 or 410 or (>= 200 and < 400) => (Answer.Absent, null),
+                    _ => (Answer.None, $"HTTP {status}"),
+                };
             }
             catch (Exception ex) when (ex is HttpRequestException
                 || (ex is OperationCanceledException && !ct.IsCancellationRequested))
             {
                 // 連線層錯誤或請求逾時(非使用者取消):重試一次後放棄該候選,不掀掉整批探測
+                reason = ex is HttpRequestException ? "connection error" : "timeout";
             }
         }
-        return false;
+        return (Answer.None, reason);
     }
 
     /// <summary>

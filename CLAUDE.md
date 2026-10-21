@@ -206,7 +206,9 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
 - **註解與設計說明用繁體中文；公開 API 名稱、README、CLI `--help` 用英文。** 原始碼裡的
   `§X.Y` 指向 [docs/搬遷工具_評估與規劃書.md](docs/搬遷工具_評估與規劃書.md)。
 - 函式庫公開面是 semver 契約：新 helper 一律 `internal`，`PolyMigrator` facade 是唯一有文件的
-  進入點。測試靠 `InternalsVisibleTo`（`PolyMigrate.Core.Tests`）看得到內部型別。
+  進入點。測試靠 `InternalsVisibleTo`（`PolyMigrate.Core.Tests`）看得到內部型別；CLI（組件名 `polymigrate`）
+  也在 `InternalsVisibleTo` 裡——CLI 需要、但不該成為函式庫契約的細節（例如 `OrphanProber.ProbeDetailedAsync`）
+  走 internal，不要為了 CLI 擴大 public 面。
 - 站別知識放 YAML config，不要進程式碼。
 - 收尾：CHANGELOG 補上本版段落（**tag 推出去就發佈了，沒有反悔的機會**），
   改過輸出格式就更新 `docs/contracts.md`，改過相依就更新 `THIRD-PARTY-NOTICES.md`，

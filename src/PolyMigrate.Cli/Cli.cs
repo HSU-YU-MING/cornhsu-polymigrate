@@ -394,11 +394,32 @@ public static class Cli
                 + $"({known.Count} known slugs skipped, delay {config.Site.Polite.DelayMs}ms)...");
 
             using var http = PolyMigrate.Core.Orphans.OrphanProber.CreateHttpClient(config);
-            var found = await new PolyMigrate.Core.Orphans.OrphanProber(config, http)
-                .ProbeAsync(langPrefix, section, yearFrom, yearTo, known, Console.WriteLine, ct);
+            var result = await new PolyMigrate.Core.Orphans.OrphanProber(config, http)
+                .ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known, Console.WriteLine, ct);
+            var found = result.Found;
+            var unanswered = string.Join(", ", result.Unanswered.Select(kv => $"{kv.Key} ×{kv.Value}"));
+
+            // 一個回答都沒拿到(伺服器掛了、被 WAF 擋、base_url 打錯):空清單會被讀成「沒有孤兒頁」,
+            // 還會蓋掉先前探好的清單——所以不寫,既有檔原樣保留。exit code 刻意不動:
+            // 既有情境的 exit code 改變屬 major,要不要非零結束留給維護者裁定
+            if (result.Checks > 0 && result.UnansweredCount == result.Checks)
+            {
+                Console.Error.WriteLine(
+                    $"warning: none of the {result.Checks} probes got a usable answer ({unanswered}), so {outFile} was not written"
+                    + " — an empty list would read as \"no orphan pages\". Check site.base_url, site.auth_workaround"
+                    + " and site.polite.delay_ms, then rerun.");
+                Console.WriteLine($"Probe done: 0 orphan slugs (no usable answers; {outFile} left as it was)");
+                return 0;
+            }
 
             File.WriteAllText(outFile, string.Join('\n', found));
             Console.WriteLine($"Probe done: {found.Count} orphan slugs -> {outFile}");
+            if (result.UnansweredCount > 0)
+            {
+                Console.Error.WriteLine(
+                    $"warning: {result.UnansweredCount} of {result.Checks} probes got no usable answer ({unanswered});"
+                    + " the list may be incomplete. Rerun later to fill the gaps.");
+            }
             return 0;
         }
         catch (Exception ex) when (IsHandled(ex))
