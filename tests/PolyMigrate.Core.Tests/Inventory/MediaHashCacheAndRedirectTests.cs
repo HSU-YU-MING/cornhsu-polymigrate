@@ -121,6 +121,49 @@ public class MediaHashCacheAndRedirectTests : IDisposable
     }
 
     [Fact]
+    public void RedirectExports_SortedByOldPath_SelfRedirectsDropped()
+    {
+        // contracts.md:兩份 301 設定檔「old==new 略過防迴圈,依 old path 排序」。
+        // 素材刻意讓檔案巡覽順序與 old path 順序不同:鏡像檔名是解碼的(禪修 排在 zz 之後),
+        // 舊網址是編碼的(%E7… 排在 zz 之前)。沒有動態副檔名的頁(ch/about.html)舊網址就等於
+        // 新路由,寫成 301 就是自己轉到自己的無限迴圈
+        AddRaw("ch/news/zz.php.html", "a");
+        AddRaw("ch/news/禪修.php.html", "b");
+        AddRaw("ch/about.html", "c");
+
+        Run();
+
+        var netlify = File.ReadAllLines(Path.Combine(_root, "_redirects")).Select(l => l.Split(' ')[0]).ToList();
+        var nginx = File.ReadAllLines(Path.Combine(_root, "redirects.nginx.conf")).Select(l => l.Split(' ')[2]).ToList();
+        foreach (var olds in (List<string>[])[netlify, nginx])
+        {
+            Assert.Equal(2, olds.Count);
+            Assert.DoesNotContain("/ch/about", olds);
+            Assert.Equal(olds.Order(StringComparer.Ordinal), olds);
+        }
+        // redirect_map.csv 照列:它是人工覆核用的完整對照,不是部署檔
+        Assert.Contains("https://example.org/ch/about,/ch/about,zh-Hant,about\r\n",
+            File.ReadAllText(Path.Combine(_root, "redirect_map.csv")));
+    }
+
+    [Fact]
+    public void Manifest_MediaDirOutsideTheOutputDir_LocalPathIsNeutral()
+    {
+        // contracts.md:媒體目錄不在輸出目錄底下時,local_path 一律寫成 media/<相對路徑>——
+        // 否則會寫出 ../assets/... 這種隨執行位置而變的路徑,同一份輸出換台機器就不一樣
+        AddRaw("ch/news/a.php.html", "<img src=\"/img/x.jpg\">");
+        var assets = Path.Combine(_root, "assets");
+        Directory.CreateDirectory(Path.Combine(assets, "img"));
+        File.WriteAllText(Path.Combine(assets, "img", "x.jpg"), "v1");
+        var outDir = Path.Combine(_root, "out");
+
+        new ExtractionPipeline(Config()).Run(new ExtractionPaths(RawDir, assets, outDir));
+
+        var rows = File.ReadAllText(Path.Combine(outDir, "media_manifest.csv")).Split("\r\n");
+        Assert.StartsWith("media/img/x.jpg,https://example.org/img/x.jpg,", rows[1]);
+    }
+
+    [Fact]
     public void UnsafePage_NotEmittedToRedirects()
     {
         // a.php.html 與 a.asp.html 都收斂成 content/ch/news/a.md → 第二個(a.php,ordinal 較後)

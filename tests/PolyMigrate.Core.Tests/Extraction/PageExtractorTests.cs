@@ -149,6 +149,49 @@ public class PageExtractorTests : IDisposable
     }
 
     [Theory]
+    [InlineData("/files/schedule.PDF", "/media/files/schedule.PDF")]            // 副檔名大寫
+    [InlineData("/files/schedule.pdf?dl=1", "/media/files/schedule.pdf")]      // 帶 query:網路路徑不含 query
+    public void PdfIframe_RecognizedRegardlessOfCaseOrQuery(string src, string web)
+    {
+        var html = $"<html><body><section id=\"personal\"><iframe src=\"{src}\"></iframe></section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal(web, Assert.Single(result.Documents)["src"]);
+        Assert.Equal("https://www.ibps-austin.org" + src, Assert.Single(result.NeedFetch));   // 待補清單保留原網址
+        Assert.Contains($"<iframe src=\"{web}\"", result.BodyMarkdown);
+    }
+
+    [Theory]
+    [InlineData("https://youtu.be/abc123")]
+    [InlineData("https://www.YouTube.com/embed/abc123?start=30")]
+    public void YoutubeIframe_ShortLinkAndMixedCase_AreVideos(string src)
+    {
+        var html = $"<html><body><section id=\"personal\"><p>開場</p><iframe src=\"{src}\"></iframe></section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal(new Dictionary<string, string> { ["type"] = "youtube", ["url"] = src }, Assert.Single(result.Videos));
+        Assert.Contains($"<iframe src=\"{src}\" title=\"video\"", result.BodyMarkdown);
+    }
+
+    [Theory]
+    [InlineData(79, true)]    // 「少於」門檻才標
+    [InlineData(80, false)]   // 剛好等於門檻(預設 80)不標
+    public void TextInImage_ThresholdIsStrictlyLessThan(int textLength, bool flagged)
+    {
+        AddMediaFile("img/poster.jpg");
+        var page = ArticlePage with { Section = "events", Slug = "x", TranslationKey = "events/x" };
+        var html = $"<html><body><section id=\"event\"><p>{new string('字', textLength)}</p>"
+            + "<img src=\"/img/poster.jpg\" alt=\"\"></section></body></html>";
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Equal(textLength, result.TextLength);
+        Assert.Equal(flagged, result.Flags.Contains("text_in_image"));
+    }
+
+    [Theory]
     [InlineData("<video controls></video>")]                         // 沒有 source
     [InlineData("<video><source src=\"http://[broken\"></video>")]   // src 解析不了
     [InlineData("<video><source src=\"/\"></video>")]                // 指到站根,不是檔案

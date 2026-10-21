@@ -22,6 +22,20 @@ public class PathSafetyTests
         Assert.Contains("invalid character", PathSafety.Check(path));
 
     [Theory]
+    // 其餘 Windows 禁用字元與控制字元(contracts.md「非法字元或控制字元」):Linux 寫得出來、
+    // Windows 寫不出來的檔名,必須在每個平台都一樣地拒寫
+    [InlineData("content/ch/a<b.md")]
+    [InlineData("content/ch/a>b.md")]
+    [InlineData("content/ch/a\"b.md")]
+    [InlineData("content/ch/a\\b.md")]
+    [InlineData("content/ch/a*b.md")]
+    [InlineData("content/ch/tab\there.md")]
+    [InlineData("content/ch/nul\0byte.md")]
+    [InlineData("content/ch/del\u007f.md")]
+    public void OtherWindowsInvalidAndControlCharacters_Rejected(string path) =>
+        Assert.StartsWith("invalid character in ", PathSafety.Check(path));
+
+    [Theory]
     [InlineData("content/ch./x.md", "ch.")]           // 目錄段尾點:Windows 會默默剝掉 → 路徑不一致
     [InlineData("content/ch /x.md", "ch ")]
     public void TrailingDotOrSpace_Rejected(string path, string segment)

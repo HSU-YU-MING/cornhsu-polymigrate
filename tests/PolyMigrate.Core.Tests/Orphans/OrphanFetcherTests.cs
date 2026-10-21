@@ -310,6 +310,34 @@ public class OrphanFetcherTests : IDisposable
     }
 
     [Fact]
+    public async Task Big5Page_AssetPathsDecodedPerConfigEncoding()
+    {
+        // §3.1:頁面原樣存 bytes,但「找正文裡的圖」得先依 site.encoding 解碼。舊中文站的 Big5 頁上,
+        // 中文檔名的圖若被當成 UTF-8 解,會變成亂碼網址 → 404 → 安靜地少抓一張圖
+        var config = FastConfig();
+        config.Site.Encoding = "big5";
+        config.UrlPattern.LangMap = new Dictionary<string, string> { ["ch"] = "zh-Hant" };
+        var big5 = TextEncodings.Resolve("big5").GetBytes(
+            "<html><body><section id=\"main\"><img src=\"images/法會.jpg\"></section></body></html>");
+        var handler = new StubHandler(req => req.RequestUri!.AbsolutePath switch
+        {
+            "/ch/news/20210505.php" => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(big5) { Headers = { ContentType = new("text/html") } },
+            },
+            "/ch/news/images/%E6%B3%95%E6%9C%83.jpg" => StubHandler.Bytes([7]),
+            _ => StubHandler.Status(HttpStatusCode.NotFound),
+        });
+
+        var report = await new OrphanFetcher(config, new HttpClient(handler))
+            .FetchAsync(["20210505"], "news", RawDir, MediaDir);
+
+        Assert.Equal(1, report.AssetsFetched);
+        Assert.Equal([7], File.ReadAllBytes(Path.Combine(MediaDir, "ch", "news", "images", "法會.jpg")));
+        Assert.Equal(big5, File.ReadAllBytes(Path.Combine(RawDir, "ch", "news", "20210505.php.html")));   // 頁面不轉碼
+    }
+
+    [Fact]
     public async Task RawBytes_PreservedVerbatim()
     {
         // 與 Python 版的刻意差異:存原始 bytes,編碼交給 config(§3.1)

@@ -184,8 +184,8 @@ public class ThumbnailGeneratorTests : IDisposable
     [InlineData("photo.webp", MagickFormat.WebP)]
     public void Thumbnail_KeepsTheSourceFormat(string name, MagickFormat format)
     {
-        // 縮圖與原圖同檔名,內容就必須是同一種格式。原子寫入的暫存名(logo.png.tmp)沒有可辨識的
-        // 副檔名,格式要明確帶過去,不能交給 Magick 依檔名猜
+        // 縮圖與原圖同檔名,內容就必須是同一種格式:重新編碼時不可把 PNG/GIF/WebP 統一轉成別種
+        // (JPEG 那一半見 LeftoverTmpFromAnInterruptedRun_DoesNotCountAsDone)
         using (var image = new MagickImage(MagickColors.Red, 1200, 10))
         {
             image.Write(MediaPath(name), format);

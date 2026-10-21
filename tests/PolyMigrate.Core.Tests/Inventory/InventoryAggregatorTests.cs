@@ -59,6 +59,22 @@ public class InventoryAggregatorTests
     }
 
     [Fact]
+    public void ImageCount_IsTheMaximumAcrossLocales()
+    {
+        // contracts.md:content_inventory 的 image_count「各語版取最大」。
+        // 後處理的語版圖比較多:先到先贏或後到蓋前都會算錯(golden 的那一組剛好是前面的多)
+        var agg = NewAggregator();
+        var ch = Page("ch", "zh-Hant", "a");
+        var en = Page("en", "en", "a");
+        MediaUse Use(RawPage p, int i) => new($"news/a/{i}.jpg", $"https://www.ibps-austin.org/news/a/{i}.jpg", p.SourceUrl, "");
+
+        agg.Add(ch, Extracted(ch, 10, [], [Use(ch, 1)]));
+        agg.Add(en, Extracted(en, 10, [], [Use(en, 1), Use(en, 2), Use(en, 3)]));
+
+        Assert.Equal(3, Assert.Single(agg.Inventory).Value.ImageCount);
+    }
+
+    [Fact]
     public void Redirect_NewPathDerivedFromSourceUrlRoute()
     {
         var agg = NewAggregator();

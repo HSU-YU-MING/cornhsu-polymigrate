@@ -71,6 +71,29 @@ public class PathIssuesOutputTests : IDisposable
     }
 
     [Fact]
+    public void CaseOnlyCollision_LoserIsDecidedByOrdinalOrder_NotByTheFileSystem()
+    {
+        // contracts.md §3.4:同一份 config 在任何平台產出必須相同。page.asp 與 Page.php 收斂成
+        // 只差大小寫的 page.md / Page.md(不分大小寫的檔案系統上會互相覆蓋)→ 後處理的那頁拒寫。
+        // 「後」由 ordinal 決定(大寫在前,Page.php 先),而不是檔案系統的列舉順序:
+        // NTFS 不分大小寫排序會先給 page.asp,ext4 依雜湊——那樣同一個站在不同機器上留下的是不同的頁
+        AddRaw("ch/news/page.asp.html");
+        AddRaw("ch/news/Page.php.html");
+
+        var report = new ExtractionPipeline(Config()).Run(
+            new ExtractionPaths(RawDir, Path.Combine(_root, "media"), OutDir));
+
+        var issue = Assert.Single(report.PathIssues);
+        Assert.Equal(
+            "error,content/ch/news/page.md,case-insensitive collision with 'content/ch/news/Page.md'",
+            File.ReadAllText(Path.Combine(OutDir, "path_issues.csv")).Split("\r\n")[1]);
+        Assert.Equal("content/ch/news/page.md", issue.Page);
+        var redirects = File.ReadAllText(Path.Combine(OutDir, "redirect_map.csv"));
+        Assert.Contains("https://example.org/ch/news/Page.php,", redirects);
+        Assert.DoesNotContain("page.asp", redirects);
+    }
+
+    [Fact]
     public void SkippedPage_ContributesToNoInventory()
     {
         // CLAUDE.md「已知教訓」:被拒寫的頁原本仍被聚合進清單——redirect 打到不存在的頁(→404)。
