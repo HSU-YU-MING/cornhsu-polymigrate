@@ -326,6 +326,28 @@ public class OrphanFetcherTests : IDisposable
     }
 
     [Fact]
+    public async Task NoLangPrefix_RequestsSingleSlashUrls_AndMessagesHaveNoLeadingSlash()
+    {
+        // lang_map 的 key 是 "" 的站:原本請求 https://…//news/…,錯誤訊息也是「/news/…」
+        var config = FastConfig();
+        config.UrlPattern.LangMap = new Dictionary<string, string> { [""] = "zh-Hant" };
+        var handler = new StubHandler(req => req.RequestUri!.AbsolutePath == "/news/a.php"
+            ? StubHandler.Html(MinimalPage)
+            : StubHandler.Status(HttpStatusCode.NotFound));
+        var messages = new List<string>();
+
+        var report = await new OrphanFetcher(config, new HttpClient(handler))
+            .FetchAsync(["a", "b"], "news", RawDir, MediaDir, messages.Add);
+
+        Assert.Equal(
+            ["GET https://www.ibps-austin.org/news/a.php", "GET https://www.ibps-austin.org/news/b.php"],
+            handler.Requests);
+        Assert.Equal(["fetched news/a"], messages);
+        Assert.Equal(["[404] news/b"], report.Errors);
+        Assert.True(File.Exists(Path.Combine(RawDir, "news", "a.php.html")));
+    }
+
+    [Fact]
     public async Task Big5Page_AssetPathsDecodedPerConfigEncoding()
     {
         // §3.1:頁面原樣存 bytes,但「找正文裡的圖」得先依 site.encoding 解碼。舊中文站的 Big5 頁上,

@@ -301,6 +301,19 @@ public class OrphanProberTests
     }
 
     [Fact]
+    public async Task NoLangPrefix_ProbesSingleSlashUrls()
+    {
+        // lang_map 的 key 是 "" 的站:原本組出 https://…//news/…
+        var handler = new StubHandler(_ => StubHandler.Status(HttpStatusCode.NotFound));
+        var config = FastConfig();
+        config.UrlPattern.LangMap = new Dictionary<string, string> { [""] = "zh-Hant" };
+
+        await new OrphanProber(config, new HttpClient(handler)).ProbeAsync("", "news", 2021, 2021, KnownExceptFirst(1));
+
+        Assert.Equal(["HEAD https://www.ibps-austin.org/news/01012021.php"], handler.Requests);
+    }
+
+    [Fact]
     public async Task NoStripExtensions_ProbesExtensionlessUrls()
     {
         // 沒有動態副檔名的站(/news/20210101 這種乾淨網址):strip_extensions: [] 時 URL 不加任何尾綴

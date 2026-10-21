@@ -140,7 +140,7 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
     private async Task<(Answer Answer, string? Reason)> ProbeOneAsync(
         string langPrefix, string section, string slug, CancellationToken ct)
     {
-        var url = $"{_baseUrl}/{langPrefix}/{section}/{slug}{_extension}";
+        var url = $"{_baseUrl}/{SitePaths.Join(langPrefix, section, slug)}{_extension}";   // 無語言前綴的站不可組出 //news/…
         var reason = "";   // 走到迴圈外 = 最後一次是例外,原因一定已經填上
         for (var attempt = 0; attempt < 2; attempt++)
         {

@@ -39,7 +39,8 @@ public sealed class OrphanFetcher(SiteConfig config, HttpClient http)
         {
             foreach (var langPrefix in config.UrlPattern.LangMap.Keys)
             {
-                var url = $"{_baseUrl}/{langPrefix}/{section}/{slug}{_extension}";
+                var page = SitePaths.Join(langPrefix, section, slug);   // 無語言前綴的站不可組出 //news/…
+                var url = $"{_baseUrl}/{page}{_extension}";
                 var rawPath = Path.Combine(rawDir, langPrefix, section, $"{slug}{_extension}.html");
                 if (File.Exists(rawPath))
                 {
@@ -54,7 +55,7 @@ public sealed class OrphanFetcher(SiteConfig config, HttpClient http)
                     if (response.StatusCode != System.Net.HttpStatusCode.OK
                         || response.Content.Headers.ContentType?.MediaType?.Contains("html") != true)
                     {
-                        report.Errors.Add($"[{(int)response.StatusCode}] {langPrefix}/{section}/{slug}");
+                        report.Errors.Add($"[{(int)response.StatusCode}] {page}");
                         continue;
                     }
                     bytes = await response.Content.ReadAsByteArrayAsync(ct);
@@ -72,7 +73,7 @@ public sealed class OrphanFetcher(SiteConfig config, HttpClient http)
                 Directory.CreateDirectory(Path.GetDirectoryName(rawPath)!);
                 await WriteAtomicAsync(rawPath, bytes, ct);
                 report.PagesFetched++;
-                progress?.Invoke($"fetched {langPrefix}/{section}/{slug}");
+                progress?.Invoke($"fetched {page}");
 
                 await FetchAssetsAsync(url, assets, mediaDir, report, ct);
             }

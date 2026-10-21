@@ -102,6 +102,33 @@ public class OrphanCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task NoLangPrefixSite_ProbeAndFetch_RequestSingleSlashUrls()
+    {
+        // lang_map 的 key 是 "" = 沒有語言前綴的站(合法設定,見 MirrorSlugs 與 CHANGELOG 2.2.0)。
+        // 原本 $"{base}/{lang}/{section}/…" 組出 //news/…:不合併斜線的伺服器或框架路由會讓 probe
+        // 全部落空、fetch 全部 404(nginx 預設合併斜線,所以不是每個站都中)
+        await using var server = new LoopbackHttpServer((_, path) => path switch
+        {
+            "/news/20200101.php" => LoopbackHttpServer.Response.Html(OrphanPage),
+            "/news/images/a.jpg" => new LoopbackHttpServer.Response(200, "image/jpeg", [1, 2, 3]),
+            _ => LoopbackHttpServer.Response.NotFound,
+        });
+        var config = SiteConfig(server.BaseUrl, langMap: "{ \"\": zh-Hant }");
+
+        var probe = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+        var fetch = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(0, probe.Exit);
+        Assert.Contains($"Probing {server.BaseUrl}/news/ for 2020-2020", probe.Out);
+        Assert.Equal("20200101"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
+        Assert.Equal(0, fetch.Exit);
+        Assert.Contains("GET /news/20200101.php", server.Requests);
+        Assert.DoesNotContain(server.Requests, q => q.Contains("//"));
+        Assert.True(File.Exists(PathOf("site/raw/news/20200101.php.html")));
+        Assert.True(File.Exists(PathOf("site/media/news/images/a.jpg")));
+    }
+
+    [Fact]
     public async Task Probe_MirroredDate_ItsSuffixOrphanIsFound_AndMirroredSuffixesAreNotRelisted()
     {
         // 盤點 §1.3 的實測:raw 只有 20210105 時,20210105A 原本找不到;已鏡像的 20210107A 原本照樣列出

@@ -390,7 +390,9 @@ public static class Cli
             var root = ResolveRoot(configPath, options);
             var outFile = Path.GetFullPath(options.GetValueOrDefault("--out", Path.Combine(root, "orphan_slugs.txt")));
             var known = PolyMigrate.Core.Orphans.OrphanProber.KnownSlugs(Path.Combine(root, "raw"), langPrefix, section);
-            Console.WriteLine($"Probing {config.Site.BaseUrl}/{langPrefix}/{section}/ for {yearFrom}-{yearTo} "
+            // 與實際請求同一套組法:無語言前綴的站(lang_map 的 key 是 "")不可印出 //news/
+            var probedPath = PolyMigrate.Core.Orphans.SitePaths.Join(langPrefix, section);
+            Console.WriteLine($"Probing {config.Site.BaseUrl.TrimEnd('/')}/{probedPath}/ for {yearFrom}-{yearTo} "
                 + $"({known.Count} known slugs skipped, delay {config.Site.Polite.DelayMs}ms)...");
 
             using var http = PolyMigrate.Core.Orphans.OrphanProber.CreateHttpClient(config);
