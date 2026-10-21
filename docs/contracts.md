@@ -10,7 +10,9 @@
   純文字清單 `need_fetch_media.txt`、`orphan_slugs.txt` 不是 CSV,格式見各自段落。
 - **CSV 公式注入防護**(1.1.2 起):交付用 CSV 的欄位若以 `=` `+` `-` `@`、tab 或 CR 開頭,寫出時會前置一個單引號 `'`
   (Excel 才不會把它當公式執行),所以這類欄位讀回來比原始資料多一個前綴字元。內部快取 `.polymigrate/media_sha1_cache.csv` 不加。
-- Markdown(`content/**/*.md`)UTF-8 **無 BOM**;`---` 圍欄與內文以 `\n` 換行,檔尾單一 `\n`。
+- Markdown(`content/**/*.md`)UTF-8 **無 BOM**;結構為 `---\n` + frontmatter + `---\n\n` + 內文 + `\n`,
+  `---` 圍欄與內文以 `\n` 換行。內文非空時檔尾是單一 `\n`;內文為空時(正文節點是空的,或 `images_to_gallery: true`
+  把只有照片的正文清空)檔尾即為 `---\n\n\n`。
   frontmatter 內部各行的換行目前隨執行平台(Windows 為 `\r\n`、Linux/macOS 為 `\n`);YAML 解析器兩者都吃,
   但跨平台逐位元組比對前要先正規化行尾。
 - 路徑一律用 `/` 分隔、相對於各自根目錄。
@@ -214,6 +216,15 @@ exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_p
 `probe-orphans` 的輸出、`fetch-orphans --slugs` 的預設輸入(皆預設 `<root>/orphan_slugs.txt`)。
 一行一個 slug,依探測順序;UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**;每次探測跑完整份覆寫。
 `fetch-orphans` 讀取時逐行去頭尾空白、略過空行,所以 `slugs` 的輸出或手寫清單也能直接餵。
+清單以 UTF-8 讀取(有 BOM 時依 BOM 判斷 UTF-8 / UTF-16 / UTF-32)。
+
+但書:`slugs` 寫的是 stdout,編碼跟著 console 的輸出編碼、行尾為 `Environment.NewLine`(Windows 為 `\r\n`),
+不是上面 `orphan_slugs.txt` 的固定格式。行尾不影響 `fetch-orphans`(逐行讀取);編碼會:
+在 console 碼頁不是 UTF-8 的 Windows 上(例如 zh-TW 的 cp950)用 cmd 或 Git Bash 把 `slugs` 導成檔案,
+非 ASCII slug(中日韓檔名)會以該碼頁寫出,`fetch-orphans` 用 UTF-8 讀回就成了亂碼網址。
+先把碼頁切成 UTF-8 再導檔(cmd 用 `chcp 65001`,Git Bash 用 `chcp.com 65001`),或在 PowerShell 裡導檔(PowerShell 先依 console 編碼解讀輸出、再用自己的編碼寫檔,
+例如 Windows PowerShell 5.1 預設存成含 BOM 的 UTF-16,`fetch-orphans` 讀得回來)。
+Linux / macOS 的 console 編碼取自 locale,一般就是 UTF-8,沒有這個問題。
 
 ## exit code
 

@@ -64,6 +64,8 @@ A declaration is only used for pairing if it:
 - resolves to a page actually in your mirror — **same host included**, since plenty of sites put
   the English version on `en.example.org`, where a path-only comparison would make a page its
   own translation,
+- has a content page at both ends — neither end is a site-level page (a language picker and the
+  like, which isn't anyone's translation),
 - and **isn't one of many same-language pages claiming the same target**. This is the classic
   failure: one `<link>` pasted into the site-wide template, so every Chinese page declares the
   English homepage as its English version. One page cannot be the translation of three others,
