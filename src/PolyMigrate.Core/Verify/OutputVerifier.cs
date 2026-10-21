@@ -39,6 +39,12 @@ public sealed partial class OutputVerifier
 
     private static readonly IDeserializer Yaml = new DeserializerBuilder().Build();
 
+    /// <summary>
+    /// 測試用:每個取消檢查點之前呼叫一次,參數是檢查點標籤(<c>page:&lt;content 相對路徑&gt;</c>、<c>write</c>)。
+    /// 讓測試能在「半途」取消——只用預先取消的 token,測不出逐頁的檢查到底有沒有作用。
+    /// </summary>
+    internal Action<string>? OnCheckpoint { get; init; }
+
     /// <param name="allowUnlinked">
     /// 豁免孤島偵測的頁(content 相對路徑或路由皆可)。刻意不從 config 讀:
     /// verify 的「只讀輸出、不需 config」是它的設計前提,不為了一份清單破例。
@@ -51,11 +57,11 @@ public sealed partial class OutputVerifier
     /// 同上,可取消(CLI 接 Ctrl-C 用;取消時擲 <see cref="OperationCanceledException"/>,CLI 回 130)。
     /// 逐頁檢查、寫報告前再檢查一次:被中斷時不寫半份 verify_report.csv。不加進 public 簽章的理由同
     /// <c>ExtractionPipeline.Run</c> 的可取消版(2.2.0 替這個方法加選用參數就已經是一次二進位破壞,見盤點 §7.6)。
+    /// <para>方法開頭刻意不另外檢查:第一頁之前就是一個檢查點(<c>content/</c> 不存在時什麼都不做、立刻結束)。</para>
     /// </summary>
     internal VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix,
         IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct)
     {
-        ct.ThrowIfCancellationRequested();
         var contentDir = Path.Combine(outDir, "content");
         if (!Directory.Exists(contentDir))
         {
@@ -81,8 +87,8 @@ public sealed partial class OutputVerifier
 
         foreach (var file in files)
         {
-            ct.ThrowIfCancellationRequested();
             var page = Path.GetRelativePath(contentDir, file).Replace('\\', '/');
+            Checkpoint("page:" + page, ct);
             var text = File.ReadAllText(file).Replace("\r", "");
 
             if (SplitFrontmatter(text) is not var (yaml, body))
@@ -168,7 +174,7 @@ public sealed partial class OutputVerifier
 
         issues.AddRange(FindOrphans(pageRoutes, referenced, allowUnlinked));
 
-        ct.ThrowIfCancellationRequested();
+        Checkpoint("write", ct);
         WriteReport(outDir, issues);
         return new VerifyReport
         {
@@ -178,6 +184,12 @@ public sealed partial class OutputVerifier
             MediaChecked = mediaChecked,
             MediaChecksSkipped = !checkMedia,
         };
+    }
+
+    private void Checkpoint(string label, CancellationToken ct)
+    {
+        OnCheckpoint?.Invoke(label);
+        ct.ThrowIfCancellationRequested();
     }
 
     private static (string Yaml, string Body)? SplitFrontmatter(string text)
