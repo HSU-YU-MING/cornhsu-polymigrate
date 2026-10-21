@@ -202,7 +202,8 @@ public class PageExtractorTests : IDisposable
     [InlineData("https://calendar.google.com/calendar/embed?src=x", "<iframe src=\"https://calendar.google.com/calendar/embed?src=x\"></iframe>")]
     [InlineData("https://www.google.com/maps/embed?pb=1&amp;hl=zh-TW", "<iframe src=\"https://www.google.com/maps/embed?pb=1&amp;hl=zh-TW\" width=\"600\"></iframe>")]
     [InlineData("https://player.vimeo.com/video/123", "<iframe src=\"https://player.vimeo.com/video/123\" allowfullscreen=\"\"></iframe>")]
-    [InlineData("/forms/signup.php", "<iframe src=\"/forms/signup.php\"></iframe>")]
+    // 站內的 src 與 <a href> 走同一套路由改寫(見下一條)
+    [InlineData("/forms/signup.php", "<iframe src=\"/forms/signup\"></iframe>")]
     public void OtherIframes_KeptInPlace_AsTheOriginalHtml(string src, string expected)
     {
         // 原本:迴圈只處理 YouTube 與 PDF,其他 iframe 原樣留在 DOM,而 ReverseMarkdown(Unknown = Bypass)
@@ -218,6 +219,23 @@ public class PageExtractorTests : IDisposable
         Assert.Empty(result.Videos);          // 不認得的嵌入不猜型別,frontmatter 不變
         Assert.Empty(result.Documents);
         Assert.Empty(result.NeedFetch);
+    }
+
+    [Theory]
+    [InlineData("/ch/news/20260101.php", "/ch/news/20260101")]                                 // 站內絕對路徑
+    [InlineData("x.php?a=1#t", "/ch/news/x?a=1#t")]                                           // query 與 fragment 保留
+    [InlineData("https://www.ibps-austin.org/ch/news/x.php", "https://www.ibps-austin.org/ch/news/x.php")]   // 完整網址與 <a href> 一樣不動
+    [InlineData("map.php", "/ch/news/map")]                                                    // 相對路徑:以頁面網址解析
+    [InlineData("https://calendar.google.com/x.php", "https://calendar.google.com/x.php")]     // 外站不動
+    public void KeptIframe_SameSiteSrc_IsRewrittenLikeLinks(string src, string rewritten)
+    {
+        // 原樣保留的 iframe 若留著舊站網址,同一頁的 <a href> 已改成新路由、iframe 卻還是 .php,
+        // verify 就把它報成 broken_link(exit 2)——明明連到的是一個有搬過來的頁
+        var html = $"<html><body><section id=\"personal\"><iframe src=\"{src}\"></iframe></section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Contains($"<iframe src=\"{rewritten.Replace("&", "&amp;")}\"></iframe>", result.BodyMarkdown);
     }
 
     [Theory]

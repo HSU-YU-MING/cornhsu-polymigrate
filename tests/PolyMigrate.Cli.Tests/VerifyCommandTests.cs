@@ -26,6 +26,41 @@ public class VerifyCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task KeptIframe_ToAMigratedPage_IsNotABrokenLink()
+    {
+        // 審查實測:同一頁同時有 <a href="/ch/news/b.php"> 與同址的 <iframe src>,a 被改寫成 /ch/news/b,
+        // 原樣保留的 iframe 卻還是 .php → verify 報假的 broken_link,exit 由 0 變 2
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Write("site/raw/ch/news/a.php.html",
+            Page("<p>表單如下</p><a href=\"/ch/news/b.php\">b</a><iframe src=\"/ch/news/b.php\"></iframe>"));
+        Write("site/raw/ch/news/b.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("<iframe src=\"/ch/news/b\"></iframe>", File.ReadAllText(PathOf("site/content/ch/news/a.md")));
+    }
+
+    [Fact]
+    public async Task KeptIframe_ToASameSitePageNotInTheMirror_IsABrokenLink()
+    {
+        // 剩下真的會多報的情境:iframe 指向沒搬過來的站內舊網址(例如表單頁)。修 H3 之前這個 iframe
+        // 整個從 Markdown 消失,verify 看不到它;現在保留下來,新站上它確實是壞的嵌入 → broken_link、exit 2。
+        // 這是既有情境的 exit code 改變(0/1 → 2),已寫進 CHANGELOG 的升級注意並列入待裁定;
+        // 這條測試讓那個決定看得見——改判的話這裡要一起改
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<p>報名</p><iframe src=\"/forms/signup.php\"></iframe>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("  [error] ch/index.md: broken_link /forms/signup\n", r.Out);
+    }
+
+    [Fact]
     public async Task Cancelled_Returns130_WithoutWritingTheReport()
     {
         // 原本同步指令不看 token:第一次 Ctrl-C 沒作用、照常跑完回 0/1/2;第二次由 runtime 直接終止,

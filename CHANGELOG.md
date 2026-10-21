@@ -27,13 +27,17 @@ exit code 的那一半(例如 `probe-orphans` 一個回答都沒拿到時要不�
   沒有檔也不建空檔),stderr 印 `warning:` 並列出原因(例如 `HTTP 503 ×732`);部分沒拿到回答時照寫,
   另警告清單可能不完整。**exit code 不變(仍是 0)**——要不要改成非零屬既有情境的 exit code 改變,
   留給維護者裁定。
-- **修正(patch):YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說
+- **修正(patch;verify 的 exit code 變動待裁定,見下):YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說
   其他 iframe「保留原樣」,實際上它們留在 DOM 裡交給 ReverseMarkdown,而未知標籤的處理是只輸出子節點——
   iframe 沒有子節點,於是 Google 地圖、行事曆、表單、Vimeo 等嵌入靜默消失,沒有任何清單或 warning 記得。
-  現在以原始 HTML 保留在內文原位置(不進 `videos` / `documents`,不猜型別)。另外
+  現在以原始 HTML 保留在內文原位置(不進 `videos` / `documents`,不猜型別),站內的 `src` 與 `<a href>`
+  走同一套路由改寫(外站與完整網址不動、相對路徑以頁面網址解析)。另外
   `youtube-nocookie.com/embed`(YouTube 的隱私強化模式)現在也認成 YouTube 影片。
-  **升級注意:重跑 `extract` 後,含這類 iframe 的頁 `.md` 內文會多出 `<iframe …>`;
-  用 `youtube-nocookie.com` 嵌入的頁,frontmatter `videos` 會多一筆 `{type: youtube, url}`。**
+  **升級注意:** 重跑 `extract` 後,含這類 iframe 的頁 `.md` 內文會多出 `<iframe …>`;
+  用 `youtube-nocookie.com` 嵌入的頁,frontmatter `videos` 會多一筆 `{type: youtube, url}`。
+  **`verify` 也會看到這些 iframe**:指向「沒有搬過來的站內頁」(例如舊站的表單頁)的 iframe 會報
+  `broken_link`,**`verify` 因此可能由 exit 0/1 變成 2**——原本那個嵌入在 Markdown 裡根本不存在,
+  現在它在新站上確實是壞的。這是既有情境的 exit code 改變,semver 判讀(patch 或留到 major)待維護者裁定。
 - **修正(patch):npm 啟動腳本自己失敗時,訊息改英文並明講 PolyMigrate 沒有執行。**
   平台不在支援表、平台包沒裝(`--no-optional` / `--omit=optional` 或安裝中斷)、執行檔起不來這三種情況,
   原本印繁體中文(CLI 其他輸出都是英文),也沒說工具根本沒跑。現在 stderr 以 `error:` 開頭、

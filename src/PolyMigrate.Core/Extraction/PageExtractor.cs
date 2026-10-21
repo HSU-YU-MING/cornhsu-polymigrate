@@ -184,6 +184,12 @@ internal sealed partial class PageExtractor
                     // 其他 iframe(Google 地圖/行事曆/表單、Vimeo…)原樣保留 HTML。不能留在 DOM 裡等
                     // ReverseMarkdown 處理:Unknown = Bypass 只輸出子節點,iframe 沒有子節點,整個會消失,
                     // 而且沒有任何清單或 warning 記得它。不猜型別,所以不進 videos/documents。
+                    // 站內的 src 與 <a href> 走同一套路由改寫(外站不動、相對路徑以頁面網址解析):
+                    // 留著舊網址的話,同一頁的連結已改成新路由、iframe 卻還指著 .php,verify 會報 broken_link
+                    if (iframe.GetAttribute("src") is { Length: > 0 } original)
+                    {
+                        iframe.SetAttribute("src", _links.Rewrite(original, page.SourceUrl));
+                    }
                     embeds.Add(iframe.OuterHtml);
                     ReplaceWithPlaceholder(iframe, embeds.Count - 1);
                 }
