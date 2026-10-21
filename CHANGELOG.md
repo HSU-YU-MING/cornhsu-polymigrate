@@ -32,6 +32,12 @@
   `youtube-nocookie.com/embed`(YouTube 的隱私強化模式)現在也認成 YouTube 影片。
   **升級注意:重跑 `extract` 後,含這類 iframe 的頁 `.md` 內文會多出 `<iframe …>`;
   用 `youtube-nocookie.com` 嵌入的頁,frontmatter `videos` 會多一筆 `{type: youtube, url}`。**
+- **修正(patch):npm 啟動腳本自己失敗時,訊息改英文並明講 PolyMigrate 沒有執行。**
+  平台不在支援表、平台包沒裝(`--no-optional` / `--omit=optional` 或安裝中斷)、執行檔起不來這三種情況,
+  原本印繁體中文(CLI 其他輸出都是英文),也沒說工具根本沒跑。現在 stderr 以 `error:` 開頭、
+  註明 `PolyMigrate did not run.`,並說明這個 exit code 1 來自啟動腳本、不是 PolyMigrate 的 warning。
+  **exit code 仍是 1**——它和契約的「1 = 只有 warning」撞號,依「0/1 放行」的 CI 會把「工具沒跑」
+  當成通過;改成 2 屬既有情境的 exit code 改變,留給維護者裁定。
 
 ## 2.3.1
 

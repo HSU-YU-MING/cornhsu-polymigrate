@@ -34,13 +34,28 @@ const TARGETS = {
 const key = `${process.platform} ${process.arch}`;
 const target = TARGETS[key];
 
-if (!target) {
+// 啟動腳本自己失敗 = PolyMigrate 根本沒有執行。exit code 目前是 1,和 CLI 契約的「1 = 只有 warning」
+// 撞號(依「0/1 放行」的 CI 會把它當成通過);改成 2 屬既有情境的 exit code 改變,待維護者裁定。
+// 在那之前至少把話講清楚:訊息用英文(與 CLI 其他輸出一致),明講工具沒有執行、這個 1 不是 warning。
+const LAUNCHER_FAILURE_EXIT = 1;
+
+function fail(...lines) {
   console.error(
-    `Cornhsu.PolyMigrate 沒有 ${key} 的預先建置版本。\n` +
-      `目前支援:${Object.keys(TARGETS).join("、")}\n` +
-      `其他平台請改用 .NET 版本:dotnet tool install -g Cornhsu.PolyMigrate`
+    [
+      `error: ${lines[0]} PolyMigrate did not run.`,
+      ...lines.slice(1),
+      "(This exit code 1 comes from the npm launcher, not a PolyMigrate warning.)",
+    ].join("\n")
   );
-  process.exit(1);
+  process.exit(LAUNCHER_FAILURE_EXIT);
+}
+
+if (!target) {
+  fail(
+    `no prebuilt binary for ${key}.`,
+    `Supported platforms: ${Object.keys(TARGETS).join(", ")}.`,
+    "On other platforms, use the .NET tool instead: dotnet tool install -g Cornhsu.PolyMigrate"
+  );
 }
 
 let binary;
@@ -50,19 +65,17 @@ try {
   const manifest = require.resolve(`${target.pkg}/package.json`);
   binary = path.join(path.dirname(manifest), "bin", target.bin);
 } catch {
-  console.error(
-    `找不到平台套件 ${target.pkg}。\n` +
-      `可能是安裝時加了 --no-optional,或安裝過程中斷。\n` +
-      `請重新安裝:npm install cornhsu-polymigrate`
+  fail(
+    `the platform package ${target.pkg} is not installed.`,
+    "It is an optional dependency: --no-optional / --omit=optional skips it, or the install was interrupted.",
+    "Reinstall: npm install cornhsu-polymigrate"
   );
-  process.exit(1);
 }
 
 const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
 
 if (result.error) {
-  console.error(`無法執行 ${binary}:${result.error.message}`);
-  process.exit(1);
+  fail(`could not start ${binary}: ${result.error.message}.`);
 }
 
 // 被訊號中斷時 status 會是 null;轉成慣例的 128+signal,別讓 CI 誤判為成功

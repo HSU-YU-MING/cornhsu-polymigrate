@@ -249,5 +249,11 @@ config 的 CSS selector(`extract.content`、`type_rules.*.title_selector` / `rem
 | `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | — |
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | — |
 
+經 npm(`npx cornhsu-polymigrate`、全域安裝的 `polymigrate`)執行時,中間多一層啟動腳本 `bin/polymigrate.js`:
+PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編號(SIGINT → 130)。
+**啟動腳本自己失敗**(平台不在支援表、平台包沒裝、執行檔起不來)時 PolyMigrate 根本沒有執行,
+目前回 **1**,stderr 以 `error:` 開頭並註明 `PolyMigrate did not run.` 與「這個 1 不是 warning」——
+這個 1 與上表的「1 = 只有 warning」撞號,要不要改成 2 待維護者裁定(既有情境的 exit code 改變屬 major)。
+
 130 目前只有 `probe-orphans` / `fetch-orphans` 回得出來:其餘指令是同步執行、不接取消訊號,
 第一次 Ctrl-C 不會中斷它們,第二次由 runtime 直接終止行程,不經 PolyMigrate 收尾,結束碼由作業系統決定。
