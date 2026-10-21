@@ -146,11 +146,12 @@ internal sealed partial class PageExtractor
             }
 
             // 影片/PDF:轉 Markdown 會丟 iframe/video,改佔位符保留在原位置(含標題順序)
-            foreach (var iframe in node.QuerySelectorAll("iframe[src]").ToArray())
+            foreach (var iframe in node.QuerySelectorAll("iframe").ToArray())
             {
-                var src = iframe.GetAttribute("src")!;
+                var src = iframe.GetAttribute("src") ?? "";
                 var low = src.ToLowerInvariant().Split('?')[0];
                 if (low.Contains("youtube.com/embed", StringComparison.Ordinal)
+                    || low.Contains("youtube-nocookie.com/embed", StringComparison.Ordinal)   // 隱私強化模式
                     || low.Contains("youtu.be", StringComparison.Ordinal))
                 {
                     var inner =
@@ -178,7 +179,14 @@ internal sealed partial class PageExtractor
                     needFetch.Add(absPdf);
                     ReplaceWithPlaceholder(iframe, embeds.Count - 1);
                 }
-                // 其他 iframe(如 Google 行事曆)保留原樣
+                else
+                {
+                    // 其他 iframe(Google 地圖/行事曆/表單、Vimeo…)原樣保留 HTML。不能留在 DOM 裡等
+                    // ReverseMarkdown 處理:Unknown = Bypass 只輸出子節點,iframe 沒有子節點,整個會消失,
+                    // 而且沒有任何清單或 warning 記得它。不猜型別,所以不進 videos/documents。
+                    embeds.Add(iframe.OuterHtml);
+                    ReplaceWithPlaceholder(iframe, embeds.Count - 1);
+                }
             }
 
             foreach (var video in node.QuerySelectorAll("video").ToArray())

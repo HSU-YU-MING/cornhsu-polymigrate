@@ -25,6 +25,13 @@
   沒有檔也不建空檔),stderr 印 `warning:` 並列出原因(例如 `HTTP 503 ×732`);部分沒拿到回答時照寫,
   另警告清單可能不完整。**exit code 不變(仍是 0)**——要不要改成非零屬既有情境的 exit code 改變,
   留給維護者裁定。
+- **修正(patch):YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說
+  其他 iframe「保留原樣」,實際上它們留在 DOM 裡交給 ReverseMarkdown,而未知標籤的處理是只輸出子節點——
+  iframe 沒有子節點,於是 Google 地圖、行事曆、表單、Vimeo 等嵌入靜默消失,沒有任何清單或 warning 記得。
+  現在以原始 HTML 保留在內文原位置(不進 `videos` / `documents`,不猜型別)。另外
+  `youtube-nocookie.com/embed`(YouTube 的隱私強化模式)現在也認成 YouTube 影片。
+  **升級注意:重跑 `extract` 後,含這類 iframe 的頁 `.md` 內文會多出 `<iframe …>`;
+  用 `youtube-nocookie.com` 嵌入的頁,frontmatter `videos` 會多一筆 `{type: youtube, url}`。**
 
 ## 2.3.1
 

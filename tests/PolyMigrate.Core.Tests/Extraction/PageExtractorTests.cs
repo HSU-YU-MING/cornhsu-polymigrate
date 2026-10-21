@@ -199,8 +199,31 @@ public class PageExtractorTests : IDisposable
     }
 
     [Theory]
+    [InlineData("https://calendar.google.com/calendar/embed?src=x", "<iframe src=\"https://calendar.google.com/calendar/embed?src=x\"></iframe>")]
+    [InlineData("https://www.google.com/maps/embed?pb=1&amp;hl=zh-TW", "<iframe src=\"https://www.google.com/maps/embed?pb=1&amp;hl=zh-TW\" width=\"600\"></iframe>")]
+    [InlineData("https://player.vimeo.com/video/123", "<iframe src=\"https://player.vimeo.com/video/123\" allowfullscreen=\"\"></iframe>")]
+    [InlineData("/forms/signup.php", "<iframe src=\"/forms/signup.php\"></iframe>")]
+    public void OtherIframes_KeptInPlace_AsTheOriginalHtml(string src, string expected)
+    {
+        // 原本:迴圈只處理 YouTube 與 PDF,其他 iframe 原樣留在 DOM,而 ReverseMarkdown(Unknown = Bypass)
+        // 只輸出子節點——iframe 沒有子節點,於是整個消失,沒有任何清單或 warning 記得它。
+        // 遷移後的頁面靜默缺內容(地圖、行事曆、表單、非 YouTube 影片),README 卻說 embeds 會保留
+        var attributes = src.Contains("maps") ? " width=\"600\"" : src.Contains("vimeo") ? " allowfullscreen" : "";
+        var html = "<html><body><section id=\"personal\"><p>行事曆如下</p>"
+            + $"<iframe src=\"{src}\"{attributes}></iframe><p>以上</p></section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal($"行事曆如下\n\n{expected}\n\n以上", result.BodyMarkdown);
+        Assert.Empty(result.Videos);          // 不認得的嵌入不猜型別,frontmatter 不變
+        Assert.Empty(result.Documents);
+        Assert.Empty(result.NeedFetch);
+    }
+
+    [Theory]
     [InlineData("https://youtu.be/abc123")]
     [InlineData("https://www.YouTube.com/embed/abc123?start=30")]
+    [InlineData("https://www.youtube-nocookie.com/embed/abc123")]   // 隱私強化模式:不含 youtube.com/embed 子字串
     public void YoutubeIframe_ShortLinkAndMixedCase_AreVideos(string src)
     {
         var html = $"<html><body><section id=\"personal\"><p>開場</p><iframe src=\"{src}\"></iframe></section></body></html>";

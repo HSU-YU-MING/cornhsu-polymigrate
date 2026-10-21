@@ -72,6 +72,9 @@ documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,o
 ```
 
 - YAML 一律由 YamlDotNet 序列化(§2.6:冒號、數字 slug、以及 YAML 1.1 會誤判成日期/數字的字串,一律強制引號)。
+- 正文的 `<iframe>`:YouTube(`youtube.com/embed`、`youtube-nocookie.com/embed`、`youtu.be`)與 PDF 換成內嵌 HTML
+  並記進 `videos` / `documents`;其他 iframe(地圖、行事曆、表單、Vimeo…)以原始 HTML 保留在內文原位置,
+  不進 `videos` / `documents`(不猜型別)。
 
 **`content_inventory.csv`**(含雙語缺漏表,§1.4;0.1 已定案,欄序如下):
 
