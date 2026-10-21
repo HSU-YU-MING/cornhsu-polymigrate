@@ -67,8 +67,11 @@ public class OrphanCommandTests : CliTestBase
 
         Assert.Equal(0, r.Exit);
         Assert.Contains("(2 known slugs skipped, delay 0ms)", r.Out);
-        Assert.DoesNotContain(server.Requests, q => q.Contains("01012021") || q.Contains("20210101"));
-        Assert.Equal(365 * 2 - 2, server.Requests.Count);
+        // 已鏡像的日期本身不探,但它的 A 後綴照探(後綴是不是孤兒與原頁有沒有鏡像無關)
+        Assert.DoesNotContain("HEAD /en/news/01012021.php", server.Requests);
+        Assert.DoesNotContain("HEAD /en/news/20210101.php", server.Requests);
+        Assert.Contains("HEAD /en/news/01012021A.php", server.Requests);
+        Assert.Equal(365 * 2, server.Requests.Count);
         Assert.True(File.Exists(outFile));
         Assert.False(File.Exists(PathOf("work/orphan_slugs.txt")));
     }
@@ -96,6 +99,25 @@ public class OrphanCommandTests : CliTestBase
         Assert.Equal("cancelled.\n", r.Err);
         Assert.Equal("20190101\n20190102", File.ReadAllText(slugFile));
         Assert.InRange(server.Requests.Count, 10, 11);   // 取消後不再發新請求
+    }
+
+    [Fact]
+    public async Task Probe_MirroredDate_ItsSuffixOrphanIsFound_AndMirroredSuffixesAreNotRelisted()
+    {
+        // 盤點 §1.3 的實測:raw 只有 20210105 時,20210105A 原本找不到;已鏡像的 20210107A 原本照樣列出
+        await using var server = new LoopbackHttpServer((_, path) =>
+            path is "/ch/news/20210105.php" or "/ch/news/20210105A.php"
+                or "/ch/news/20210107.php" or "/ch/news/20210107A.php"
+                ? new LoopbackHttpServer.Response(200)
+                : LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl);
+        Write("site/raw/ch/news/20210105.php.html", "<html></html>");
+        Write("site/raw/ch/news/20210107A.php.html", "<html></html>");
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2021");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Equal("20210105A\n20210107"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
     }
 
     [Fact]

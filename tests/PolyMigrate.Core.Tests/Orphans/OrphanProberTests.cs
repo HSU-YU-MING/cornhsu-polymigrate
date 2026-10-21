@@ -16,6 +16,16 @@ public class OrphanProberTests
     private static OrphanProber Prober(StubHandler handler) =>
         new(FastConfig(), new HttpClient(handler) { BaseAddress = null });
 
+    /// <summary>
+    /// 2021 年除了前 <paramref name="probe"/> 個候選以外全部「已鏡像」,連 A～D 後綴一起——
+    /// 只有日期本身已知的話,它的後綴仍會被探(後綴是不是孤兒與原頁有沒有鏡像無關)。
+    /// </summary>
+    private static HashSet<string> KnownExceptFirst(int probe) =>
+    [
+        .. OrphanProber.DateCandidates(2021, 2021).Skip(probe)
+            .SelectMany(c => new[] { c, c + "A", c + "B", c + "C", c + "D" }),
+    ];
+
     [Fact]
     public void DateCandidates_BothFormatsPerDay()
     {
@@ -67,14 +77,58 @@ public class OrphanProberTests
     }
 
     [Fact]
-    public async Task KnownSlugs_NotProbed()
+    public async Task KnownSlugs_NotProbed_ButTheirSuffixesAre()
     {
+        // 已鏡像的日期本身不探;但它「存在」,所以 A～D 後綴照探(後綴是不是孤兒與原頁有沒有鏡像無關)
         var handler = new StubHandler(_ => StubHandler.Status(HttpStatusCode.NotFound));
 
         await Prober(handler).ProbeAsync("ch", "news", 2021, 2021,
             new HashSet<string> { "01012021", "20210101" });
 
-        Assert.DoesNotContain(handler.Requests, r => r.Contains("01012021") || r.Contains("20210101"));
+        Assert.DoesNotContain(handler.Requests, r => r.EndsWith("/01012021.php") || r.EndsWith("/20210101.php"));
+        Assert.Contains(handler.Requests, r => r.EndsWith("/01012021A.php"));
+        Assert.Contains(handler.Requests, r => r.EndsWith("/20210101A.php"));
+        Assert.Equal(365 * 2, handler.Requests.Count);   // 少探 2 個日期、多探 2 個 A
+    }
+
+    [Fact]
+    public async Task KnownDate_SuffixOrphan_IsFound()
+    {
+        // 原本 known.Contains(candidate) 在後綴迴圈之前就 continue:「原頁已鏡像、A 版是孤兒」永遠找不到,
+        // 而那正是 probe 要找的東西
+        string[] existing = ["20210105", "20210105A"];
+        var handler = new StubHandler(req =>
+            StubHandler.Status(existing.Any(s => req.RequestUri!.AbsolutePath.EndsWith($"/{s}.php"))
+                ? HttpStatusCode.OK : HttpStatusCode.NotFound));
+
+        var found = await Prober(handler).ProbeAsync("ch", "news", 2021, 2021, new HashSet<string> { "20210105" });
+
+        Assert.Equal(["20210105A"], found);
+        Assert.Contains(handler.Requests, r => r.EndsWith("/20210105B.php"));   // A 存在 → 接著探 B
+    }
+
+    [Theory]
+    [InlineData(false)]   // 原頁是新命中的孤兒
+    [InlineData(true)]    // 原頁也已鏡像
+    public async Task KnownSuffixVariant_NotRelisted_ButTheChainContinues(bool baseKnown)
+    {
+        // 原本後綴迴圈不查已知集:已鏡像的 A 版照樣列進 orphan_slugs.txt。
+        // 已鏡像 = 確定存在,不探、不列,但「A 有才會有 B」的鏈要繼續往下
+        string[] existing = ["20210105", "20210105A", "20210105B"];
+        var handler = new StubHandler(req =>
+            StubHandler.Status(existing.Any(s => req.RequestUri!.AbsolutePath.EndsWith($"/{s}.php"))
+                ? HttpStatusCode.OK : HttpStatusCode.NotFound));
+        var known = new HashSet<string> { "20210105A" };
+        if (baseKnown)
+        {
+            known.Add("20210105");
+        }
+
+        var found = await Prober(handler).ProbeAsync("ch", "news", 2021, 2021, known);
+
+        Assert.Equal(baseKnown ? ["20210105B"] : ["20210105", "20210105B"], found);
+        Assert.DoesNotContain(handler.Requests, r => r.EndsWith("/20210105A.php"));
+        Assert.Contains(handler.Requests, r => r.EndsWith("/20210105C.php"));
     }
 
     [Fact]
@@ -153,7 +207,7 @@ public class OrphanProberTests
                 _ => StubHandler.Status(HttpStatusCode.NotFound),
             };
         });
-        var known = OrphanProber.DateCandidates(2021, 2021).Skip(8).ToHashSet();   // 只探 1/1～1/4 的 8 個
+        var known = KnownExceptFirst(8);   // 只探 1/1～1/4 的 8 個
 
         var result = await Prober(handler).ProbeDetailedAsync("ch", "news", 2021, 2021, known);
 
@@ -179,7 +233,7 @@ public class OrphanProberTests
             req.RequestUri!.AbsolutePath.EndsWith("/01012021.php") && ++attempts == 1
                 ? StubHandler.Status(HttpStatusCode.Conflict)
                 : StubHandler.Status(HttpStatusCode.NotFound));
-        var known = OrphanProber.DateCandidates(2021, 2021).Skip(1).ToHashSet();
+        var known = KnownExceptFirst(1);
 
         var result = await Prober(handler).ProbeDetailedAsync("ch", "news", 2021, 2021, known);
 
@@ -239,7 +293,7 @@ public class OrphanProberTests
         config.Site.BaseUrl = "https://old.example.org/";
         config.UrlPattern.StripExtensions = [".asp", ".php"];
 
-        var known = OrphanProber.DateCandidates(2021, 2021).Skip(1).ToHashSet();
+        var known = KnownExceptFirst(1);
         await new OrphanProber(config, new HttpClient(handler))
             .ProbeAsync("en", "news", 2021, 2021, known);
 
@@ -254,7 +308,7 @@ public class OrphanProberTests
         var config = FastConfig();
         config.UrlPattern.StripExtensions = [];
 
-        var known = OrphanProber.DateCandidates(2021, 2021).Skip(1).ToHashSet();
+        var known = KnownExceptFirst(1);
         await new OrphanProber(config, new HttpClient(handler)).ProbeAsync("ch", "news", 2021, 2021, known);
 
         Assert.Equal(["HEAD https://www.ibps-austin.org/ch/news/01012021"], handler.Requests);

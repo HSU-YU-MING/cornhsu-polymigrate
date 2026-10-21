@@ -82,21 +82,33 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
 
         foreach (var candidate in DateCandidates(yearFrom, yearTo))
         {
-            if (known.Contains(candidate))
+            // 已鏡像 = 確定存在:本身不探,但後綴照探——後綴版是不是孤兒,與原頁有沒有鏡像無關
+            // (原本在這裡直接 continue,「原頁已鏡像、A 版是孤兒」永遠找不到,而那正是 probe 要找的)
+            var isKnown = known.Contains(candidate);
+            var exists = isKnown;
+            if (!isKnown)
             {
-                continue;
+                probed++;
+                exists = await Exists(candidate);
+                if (exists)
+                {
+                    found.Add(candidate);
+                    progress?.Invoke($"hit {candidate}");
+                }
             }
-            probed++;
-            if (await Exists(candidate))
+            if (exists)
             {
-                found.Add(candidate);
-                progress?.Invoke($"hit {candidate}");
                 foreach (var suffix in Suffixes)
                 {
-                    if (await Exists(candidate + suffix))
+                    var variant = candidate + suffix;
+                    if (known.Contains(variant))
                     {
-                        found.Add(candidate + suffix);
-                        progress?.Invoke($"hit {candidate}{suffix}");
+                        continue;   // 已鏡像:存在,不探、不列,「A 有才會有 B」的鏈繼續往下
+                    }
+                    if (await Exists(variant))
+                    {
+                        found.Add(variant);
+                        progress?.Invoke($"hit {variant}");
                     }
                     else
                     {
@@ -104,7 +116,7 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
                     }
                 }
             }
-            if (probed % 100 == 0)
+            if (!isKnown && probed % 100 == 0)
             {
                 progress?.Invoke($"probed {probed}, hits {found.Count}");
             }
