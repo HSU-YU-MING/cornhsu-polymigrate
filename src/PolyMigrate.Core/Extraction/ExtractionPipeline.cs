@@ -94,9 +94,12 @@ public sealed class ExtractionPipeline(SiteConfig config)
         var encoding = TextEncodings.Resolve(config.Site.Encoding);
         var locales = config.UrlPattern.LangMap.Values.Distinct().ToList();
 
-        var files = Directory.EnumerateFiles(paths.RawDir, "*.html", SearchOption.AllDirectories)
+        var pages = Directory.EnumerateFiles(paths.RawDir, "*.html", SearchOption.AllDirectories)
             .OrderBy(f => Path.GetRelativePath(paths.RawDir, f).Replace('\\', '/'), StringComparer.Ordinal)
+            .Select(f => parser.Parse(paths.RawDir, f))
             .ToList();
+        // config selector 寫壞的話在寫任何檔之前就停(ConfigException),不要半途崩潰留下半套輸出
+        extractor.EnsureSelectorsValid(pages);
 
         var aggregator = new InventoryAggregator(links);
         var pathIssues = new List<PathIssue>();
@@ -104,10 +107,9 @@ public sealed class ExtractionPipeline(SiteConfig config)
         var writtenPaths = new HashSet<string>(StringComparer.Ordinal);
         var pagesWritten = 0;
 
-        foreach (var file in files)
+        foreach (var page in pages)
         {
-            var page = parser.Parse(paths.RawDir, file);
-            var extracted = extractor.Extract(page, File.ReadAllText(file, encoding), paths.MediaDir);
+            var extracted = extractor.Extract(page, File.ReadAllText(page.FilePath, encoding), paths.MediaDir);
 
             // §3.4:不安全路徑在「任何平台」都一致地拒寫並記錄——兩平台產出必須相同
             var relPath = MarkdownRelativePath(page);

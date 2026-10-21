@@ -229,6 +229,9 @@ Linux / macOS 的 console 編碼取自 locale,一般就是 UTF-8,沒有這個問
 ## exit code
 
 0 乾淨 / 1 warning / 2 error / 130 中斷。所有指令的用法錯誤、config 錯誤、IO 錯誤一律 2;未知指令 2。
+config 的 CSS selector(`extract.content`、`type_rules.*.title_selector` / `remove_selectors`)載入時不檢查語法,
+改在用到之前才檢查:`extract` 在處理任何頁之前、`fetch-orphans` 在寫入抓到的頁之前;寫壞 → 2,而且什麼都還沒寫。
+寫壞但這次沒有頁用到的 selector 不擋(例如沒有任何頁屬於那個頁型)。
 
 | 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
 |---|---|---|---|---|

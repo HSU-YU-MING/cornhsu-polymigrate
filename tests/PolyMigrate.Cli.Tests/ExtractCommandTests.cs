@@ -224,6 +224,56 @@ public class ExtractCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task InvalidContentSelector_ExitsTwo_NamingTheField_WritingNothing()
+    {
+        // config 載入時不驗 selector 語法;寫壞的 selector 原本讓 AngleSharp 的 DomException 直接穿出去,
+        // 以未處理例外結束(Windows 為 0xE0434352),不在 0/1/2/130 契約內
+        var config = Write("site/site.yaml", Config().Replace("content: \"main\"", "content: \"section[id\""));
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal("extract.content: 'section[id' is not a valid CSS selector.\n", r.Err);
+        Assert.Empty(r.Out);
+        Assert.False(Directory.Exists(PathOf("site/content")));
+        Assert.False(File.Exists(PathOf("site/content_inventory.csv")));
+    }
+
+    [Theory]
+    [InlineData("title_selector: \"h3[[\"", "extract.type_rules.article.title_selector: 'h3[['")]
+    [InlineData("remove_selectors: [\"h5\", \"h5[[\"]", "extract.type_rules.article.remove_selectors: 'h5[['")]
+    public async Task InvalidTypeRuleSelector_ExitsTwo_BeforeAnyPageIsWritten(string rule, string message)
+    {
+        // type_rules 的 selector 只在碰到該頁型時才用到:原本 ch/index(page 型,字典序在前)
+        // 已經寫進 content/,清單檔卻一份都沒寫,就崩潰了
+        var config = Write("site/site.yaml", Config(extraExtract:
+            $"  section_types: {{ news: article }}\n  type_rules:\n    article:\n      {rule}"));
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+        Write("site/raw/ch/news/a.php.html", Page("<h3>標題</h3><p>內文</p>"));
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal($"{message} is not a valid CSS selector.\n", r.Err);
+        Assert.False(Directory.Exists(PathOf("site/content")));
+    }
+
+    [Fact]
+    public async Task InvalidSelectorOfAnUnusedPageType_StillExitsZero()
+    {
+        // 載入時不驗是刻意的:寫壞但這次沒有任何頁用到的規則,1.0 起一直能跑,不能在 patch 版開始擋
+        var config = Write("site/site.yaml", Config(extraExtract:
+            "  section_types: { events: event }\n  type_rules:\n    event:\n      title_selector: \"h3[[\""));
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("  markdown files   : 1\n", r.Out);
+    }
+
+    [Fact]
     public async Task InvalidConfig_ExitsTwo_PrintingTheLoaderMessageVerbatim()
     {
         // ConfigException 的訊息本身就是給使用者看的,不加「error:」前綴

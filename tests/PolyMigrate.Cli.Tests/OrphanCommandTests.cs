@@ -268,6 +268,32 @@ public class OrphanCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task Fetch_InvalidContentSelector_ExitsTwo_LeavingThePageForTheRerun()
+    {
+        // 原本:頁面先寫進 raw/,掃資產時 DomException 崩潰(exit code 不在契約內);修好 config 重跑,
+        // 這頁因「已存在」被跳過,資產永遠補不回來。現在 exit 2,而且這頁沒寫,重跑會連資產一起抓
+        await using var server = new LoopbackHttpServer((_, path) => path.EndsWith(".jpg")
+            ? new LoopbackHttpServer.Response(200, "image/jpeg", [1, 2, 3])
+            : LoopbackHttpServer.Response.Html(OrphanPage));
+        var good = Config(baseUrl: server.BaseUrl, langMap: "{ ch: zh-Hant }");
+        var config = Write("site/site.yaml", good.Replace("content: \"main\"", "content: \"main[\""));
+        Write("site/orphan_slugs.txt", "20200101");
+
+        var r = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal("extract.content: 'main[' is not a valid CSS selector.\n", r.Err);
+        Assert.False(File.Exists(PathOf("site/raw/ch/news/20200101.php.html")));
+
+        Write("site/site.yaml", good);
+        var rerun = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(0, rerun.Exit);
+        Assert.True(File.Exists(PathOf("site/raw/ch/news/20200101.php.html")));
+        Assert.True(File.Exists(PathOf("site/media/ch/news/images/a.jpg")));
+    }
+
+    [Fact]
     public async Task Fetch_CancelledMidway_Returns130()
     {
         using var cts = new CancellationTokenSource();

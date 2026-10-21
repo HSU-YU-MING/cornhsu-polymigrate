@@ -65,33 +65,40 @@ public sealed class OrphanFetcher(SiteConfig config, HttpClient http)
                     report.Errors.Add($"[err] {url} {ex.Message}");
                     continue;
                 }
+                // 先掃出正文資產、再寫頁:extract.content 寫壞時在這裡就擲 ConfigException,
+                // raw/ 還沒有這一頁。順序反過來的話,修好 config 重跑時這頁會因「已存在」被跳過,
+                // 它的資產就永遠補不回來
+                var assets = AssetSources(bytes);
                 Directory.CreateDirectory(Path.GetDirectoryName(rawPath)!);
                 await WriteAtomicAsync(rawPath, bytes, ct);
                 report.PagesFetched++;
                 progress?.Invoke($"fetched {langPrefix}/{section}/{slug}");
 
-                await FetchAssetsAsync(url, bytes, mediaDir, report, ct);
+                await FetchAssetsAsync(url, assets, mediaDir, report, ct);
             }
         }
         return report;
     }
 
-    private async Task FetchAssetsAsync(string pageUrl, byte[] pageBytes, string mediaDir,
-        FetchReport report, CancellationToken ct)
+    /// <summary>正文(<c>extract.content</c> 命中的節點)裡 img/source 的 src,字典序去重。</summary>
+    private SortedSet<string> AssetSources(byte[] pageBytes)
     {
         var html = TextEncodings.Resolve(config.Site.Encoding).GetString(pageBytes);
         var doc = _parser.ParseDocument(html);
-        var nodes = doc.QuerySelectorAll(config.Extract.Content);
-
         var sources = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var node in nodes)
+        foreach (var node in CssSelectors.QueryAll(doc, config.Extract.Content, "extract.content"))
         {
             foreach (var el in node.QuerySelectorAll("img[src], source[src]"))
             {
                 sources.Add(el.GetAttribute("src")!);
             }
         }
+        return sources;
+    }
 
+    private async Task FetchAssetsAsync(string pageUrl, SortedSet<string> sources, string mediaDir,
+        FetchReport report, CancellationToken ct)
+    {
         var host = new Uri(config.Site.BaseUrl).Host;
         foreach (var src in sources)
         {

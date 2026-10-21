@@ -39,6 +39,42 @@ internal sealed partial class PageExtractor
         _mediaPaths = new MediaPaths(config.Media);
     }
 
+    /// <summary>
+    /// 這一批頁會用到的 config selector,先各檢查一次語法(壞了擲 <see cref="ConfigException"/>)。
+    ///
+    /// <para>放在寫任何檔之前:<c>type_rules</c> 的 selector 只在碰到該頁型時才用到,
+    /// 原本會在半途崩潰——前面的頁已經寫進 content/,清單檔卻一份都沒寫。
+    /// 只檢查「這次真的會用到的」(<c>extract.content</c> 每頁都用;<c>type_rules</c> 只看這批頁
+    /// 出現過的頁型),沒用到的照舊不擋,見 <see cref="CssSelectors"/>。頁型只靠路徑判定,
+    /// 不必先解析 HTML。</para>
+    /// </summary>
+    public void EnsureSelectorsValid(IReadOnlyCollection<RawPage> pages)
+    {
+        if (pages.Count == 0)
+        {
+            return;
+        }
+        CssSelectors.Ensure(_config.Extract.Content, "extract.content");
+        var types = pages.Select(p => _classifier.Classify(p.Section, p.Slug))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal);
+        foreach (var type in types)
+        {
+            if (_config.Extract.TypeRules.GetValueOrDefault(type) is not { } rules)
+            {
+                continue;
+            }
+            if (rules.TitleSelector is { } titleSelector)
+            {
+                CssSelectors.Ensure(titleSelector, $"extract.type_rules.{type}.title_selector");
+            }
+            foreach (var selector in rules.RemoveSelectors)
+            {
+                CssSelectors.Ensure(selector, $"extract.type_rules.{type}.remove_selectors");
+            }
+        }
+    }
+
     public ExtractedPage Extract(RawPage page, string html, string mediaRoot)
     {
         var doc = _parser.ParseDocument(html);

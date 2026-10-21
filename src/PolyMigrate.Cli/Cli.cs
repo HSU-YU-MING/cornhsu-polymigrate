@@ -478,9 +478,12 @@ public static class Cli
     /// <summary>
     /// 指令主體共同攔截的例外。每個指令的 catch 一律是這一組——不是各自挑幾種,
     /// 否則新增指令時漏抄一種(例如忘了 OperationCanceledException → 130)不會被任何測試發現。
+    /// <para>AngleSharp 的 <c>DomException</c> 直接繼承 Exception,不屬於上面任何一類。config 的 selector
+    /// 已在用到之前驗過(壞了是 ConfigException),這裡是最後一道網:漏網的也是 exit 2,
+    /// 不會以未處理例外結束(Windows 上是 0xE0434352,不在 0/1/2/130 契約內)。</para>
     /// </summary>
     private static bool IsHandled(Exception ex) =>
-        ex is OperationCanceledException or ConfigException || IsIoError(ex);
+        ex is OperationCanceledException or ConfigException or AngleSharp.Dom.DomException || IsIoError(ex);
 
     /// <summary>
     /// 共同錯誤 → 訊息 + exit code(§3.8)。exit code 契約只在這裡定義一次;

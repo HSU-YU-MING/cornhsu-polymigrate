@@ -2,6 +2,23 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 未發佈
+
+**產品 bug 修正累積中。** 以下每一條都標了 semver;CLI 參數、輸出檔欄位、YAML 欄位都沒有動,
+也沒有讓既有情境的 exit code 改變。會動到 exit code 的那一半(例如 `probe-orphans` 全部請求失敗時
+要不要非零結束)留給維護者裁定,沒有做。
+
+- **修正(patch):config 的 CSS selector 寫壞時,`extract` 與 `fetch-orphans` 以未處理例外崩潰。**
+  `extract.content`、`type_rules.*.title_selector`、`type_rules.*.remove_selectors` 不合語法時,
+  AngleSharp 的 `DomException` 直接穿出去,行程以未處理例外結束(Windows 為 `0xE0434352`),
+  不在 0/1/2/130 契約內。`extract` 還會先把前面的頁寫進 `content/`、清單檔一份都沒寫;
+  `fetch-orphans` 則是頁面先寫進 `raw/` 才掃資產,修好 config 重跑時那一頁被當成已抓過,
+  它的資產永遠補不回來。現在是 **exit 2**,訊息點名欄位
+  (`extract.content: 'section[id' is not a valid CSS selector.`),而且在寫任何檔之前就停。
+  **載入 config 時仍刻意不驗 selector**:寫壞但這次沒有頁用到的規則照舊不擋——在載入時擋,
+  原本能跑的 config 會開始失敗。函式庫:`PolyMigrator.Extract`、`ExtractionPipeline.Run`、
+  `OrphanFetcher.FetchAsync` 在這個情況改擲 `ConfigException`(原本是 AngleSharp 的 `DomException`)。
+
 ## 2.3.1
 
 **兩件已經壞了三個版本、但沒有人回報的事。** 對外契約與 exit code 不變。

@@ -358,6 +358,39 @@ public class OrphanFetcherTests : IDisposable
     }
 
     [Fact]
+    public async Task InvalidContentSelector_ThrowsConfigException_BeforeThePageIsWritten()
+    {
+        // 原本頁面先寫進 raw/ 才用 extract.content 掃資產 → DomException 崩潰。修好 config 重跑時,
+        // 這一頁會因「已存在」被跳過,它的資產就永遠補不回來——所以必須在寫頁之前就停
+        var config = FastConfig();
+        config.Extract.Content = "section[id";
+        config.UrlPattern.LangMap = new Dictionary<string, string> { ["ch"] = "zh-Hant" };
+        var handler = new StubHandler(req => req.RequestUri!.AbsolutePath == "/ch/news/20210505.php"
+            ? StubHandler.Html(PageHtml)
+            : StubHandler.Bytes([1]));
+
+        var ex = await Assert.ThrowsAsync<ConfigException>(() =>
+            new OrphanFetcher(config, new HttpClient(handler)).FetchAsync(["20210505"], "news", RawDir, MediaDir));
+
+        Assert.Contains("extract.content", ex.Message);
+        Assert.False(File.Exists(Path.Combine(RawDir, "ch", "news", "20210505.php.html")));
+    }
+
+    [Fact]
+    public async Task InvalidContentSelector_NothingFetched_IsNotChecked()
+    {
+        // 沒有任何頁抓得到時 extract.content 從來不會被用到:維持原本的結果(記錯誤、照常結束)
+        var config = FastConfig();
+        config.Extract.Content = "section[id";
+        var handler = new StubHandler(_ => StubHandler.Status(HttpStatusCode.NotFound));
+
+        var report = await new OrphanFetcher(config, new HttpClient(handler))
+            .FetchAsync(["20210505"], "news", RawDir, MediaDir);
+
+        Assert.Equal(2, report.Errors.Count);
+    }
+
+    [Fact]
     public async Task RawBytes_PreservedVerbatim()
     {
         // 與 Python 版的刻意差異:存原始 bytes,編碼交給 config(§3.1)
