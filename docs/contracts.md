@@ -121,6 +121,7 @@ documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,o
 | reject_reason | enum | 卡在哪一條;`usable` 為 True 時留空 |
 
 排序:`source_url`、`hreflang`、`target_url` 字典序。恆輸出(沒宣告 hreflang 的站只有表頭)。
+收的是整份文件裡 `rel` 含 `alternate` 的 `<link hreflang href>`(不只 `<head>`;不收 `<a hreflang>`)。
 
 `reject_reason` 的值(即全部門檻,依判定順序):
 

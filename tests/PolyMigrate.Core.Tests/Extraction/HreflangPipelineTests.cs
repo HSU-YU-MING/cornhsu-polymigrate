@@ -48,6 +48,27 @@ public class HreflangPipelineTests : IDisposable
         File.ReadAllLines(Path.Combine(_root, "hreflang_map.csv"));
 
     [Fact]
+    public void AlternateThatTheParserPutsInTheBody_IsStillRead()
+    {
+        // 刻意讀整份文件、不只 <head>(ReadAlternates 的註解與 docs 原本寫「<head> 裡的」,與實作不符;
+        // 要不要改成只讀 <head> 待維護者裁定,見稽核 L3)。理由之一:舊 PHP 站的 include 檔常存成帶 BOM 的
+        // UTF-8,BOM 字元出現在 <head> 中段,HTML5 解析器就提早開 <body>,之後的 <link> 全進了 body——
+        // 只讀 doc.Head 的話,這類站的宣告會整批安靜地消失
+        var html = "<html><head><title>a</title>﻿" + Alternate("en", "/en/news/b.php")
+            + "</head><body><main>中文</main></body></html>";
+        Assert.Null(new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html).Head!.QuerySelector("link"));   // 防呆:確實落在 body
+        var path = Path.Combine(_root, "raw", "ch", "news", "a.php.html");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, html);
+        AddRaw("en/news/b.php.html");
+
+        var report = Run(Config("hreflang"));
+
+        Assert.Equal(1, report.HreflangDeclared);
+        Assert.Equal(1, report.HreflangUsable);
+    }
+
+    [Fact]
     public void TemplateCopiedAlternate_PointingEveryPageAtTheHomepage_ProducesNoSuggestion()
     {
         // SEO 外包把同一段 <link> 貼進每一頁的模板 —— 舊站最常見的壞法。

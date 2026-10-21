@@ -284,8 +284,14 @@ internal sealed partial class PageExtractor
     }
 
     /// <summary>
-    /// &lt;head&gt; 裡的 <c>&lt;link rel="alternate" hreflang&gt;</c>——全站唯一由作者「宣告」的
+    /// 頁面上的 <c>&lt;link rel="alternate" hreflang&gt;</c>——全站唯一由作者「宣告」的
     /// 語言版本對應,其餘配對線索(路徑、相簿、日期、標題)都是推測出來的。
+    ///
+    /// <para>讀的是<b>整份文件</b>,不只 <c>&lt;head&gt;</c>(這段註解原本寫「&lt;head&gt; 裡的」,與實作不符)。
+    /// 規範上 <c>rel=alternate</c> 的 link 只該出現在 head,但舊站常因 include 檔帶 BOM 或 head 裡夾了文字,
+    /// 讓 HTML5 解析器提早開 body,之後的 link 全落進 body——只讀 <c>doc.Head</c> 的話這類站的宣告會整批
+    /// 安靜地消失。代價是正文裡亂放的 link 也會被當成宣告(仍須過 <see cref="Pairing.HreflangIndex"/> 的門檻,
+    /// 而且只是建議)。要不要改成只讀 head 是待裁定的取捨,見 HreflangPipelineTests。</para>
     ///
     /// <para>刻意<b>不</b>認 <c>&lt;a hreflang&gt;</c>:那是「這個連結指向的東西是什麼語言」的標註,
     /// 不是「本頁的某語言版本在這裡」的宣告。內文裡一句「另見 &lt;a hreflang="en"&gt;英文說明&lt;/a&gt;」

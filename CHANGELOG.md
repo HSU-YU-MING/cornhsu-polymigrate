@@ -93,6 +93,10 @@
 - **修正(patch):`content/` 不存在時,`verify` 的摘要印出一個從未寫出的報告路徑,媒體列也印 `media refs : 0`。**
   exit 2 與 `[error] no_content` 明細本來就對,只有摘要誤導。現在印 `report : (not written)` 與
   `media checks : skipped (content directory not found)`。
+- **文件(none):hreflang 讀的是整份文件的 `<link rel="alternate" hreflang>`,不只 `<head>`。**
+  程式註解與 `docs/hreflang_量測與決策.md` 原本寫「`<head>` 裡的」,與實作不符;現在照實寫,並以測試釘住。
+  行為沒有改:舊站的 `<head>` 常被 include 檔的 BOM 提早截斷、`<link>` 落進 body,只讀 head 會讓這類站的
+  宣告整批消失。要不要改成只讀 head 留給維護者裁定。
 
 ## 2.3.1
 
