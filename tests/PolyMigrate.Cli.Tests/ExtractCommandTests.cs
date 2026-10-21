@@ -20,6 +20,11 @@ public class ExtractCommandTests : CliTestBase
         Assert.Contains("  markdown files   : 13\n", r.Out);
         Assert.Contains("  translation keys : 9\n", r.Out);
         Assert.Contains("  types            : article=3, event=2, listing=1, page=3\n", r.Out);
+        Assert.Contains("  flags            : needs_rebuild=1, text_in_image=4\n", r.Out);
+        Assert.Contains("  single-locale    : en=2, zh-Hant=3\n", r.Out);
+        Assert.Contains("  suggested pairs  : 2 (heuristic, review in content_inventory.csv)\n", r.Out);
+        Assert.Contains("  media referenced : 4\n", r.Out);
+        Assert.Contains("  stale in content : 0 (present but not written by this run)\n", r.Out);
         Assert.Contains("  missing images   : 2 (recorded in missing_images.csv, non-blocking)\n", r.Out);
         Assert.Contains("  need-fetch media : 1 (recorded in need_fetch_media.txt)\n", r.Out);
         Assert.Contains("  path issues      : 0 (0 pages skipped as unsafe, see path_issues.csv)\n", r.Out);

@@ -121,16 +121,18 @@ public class OrphanCommandTests : CliTestBase
     [Fact]
     public async Task Probe_SlugFileCannotBeWritten_ExitsTwo()
     {
-        // 寫不出 orphan_slugs.txt(所在目錄不存在)是 IO 錯誤:exit 2 + 「error: 訊息」,不是崩潰也不是 0
+        // 寫不出 slug 檔是 IO 錯誤:exit 2 + 「error: 訊息」,不是崩潰也不是 0。
+        // --out 指到一個既有目錄——檔案寫不進目錄,三個平台都一樣(丟的例外型別不同,都要接住)
         await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
         var config = SiteConfig(server.BaseUrl);
+        var blocker = PathOf("lists");
+        Directory.CreateDirectory(blocker);
 
-        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020",
-            "--out", PathOf("missing/dir/slugs.txt"));
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020", "--out", blocker);
 
         Assert.Equal(2, r.Exit);
         Assert.StartsWith("error: ", r.Err);
-        Assert.False(Directory.Exists(PathOf("missing")));
+        Assert.Empty(Directory.GetFileSystemEntries(blocker));
     }
 
     [Fact]
