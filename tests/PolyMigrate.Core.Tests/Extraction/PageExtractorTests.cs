@@ -244,6 +244,22 @@ public class PageExtractorTests : IDisposable
     }
 
     [Theory]
+    [InlineData("/ch/news/20260101.php", "/ch/news/20260101")]
+    [InlineData("map.php?a=1", "/ch/news/map?a=1")]
+    [InlineData("https://calendar.google.com/x.php", "https://calendar.google.com/x.php")]   // 外站不動
+    public void KeptIframe_LazyLoadDataSrc_IsRewrittenLikeSrc(string dataSrc, string rewritten)
+    {
+        // lazy-load 的嵌入把真正的網址放在 data-src(src 是 about:blank,捲到才由 JS 換上)。
+        // 2.x 只改寫 src:新站沿用 lazy-load 的 JS 時,data-src 仍指著舊站的 .php(決策檔 B1 留下的「要不要一併改寫」;3.0 照 src 改寫)
+        var html = "<html><body><section id=\"personal\">"
+            + $"<iframe src=\"about:blank\" data-src=\"{dataSrc}\"></iframe></section></body></html>";
+
+        var result = _noMirrorPages.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Contains($"<iframe src=\"about:blank\" data-src=\"{rewritten}\"></iframe>", result.BodyMarkdown);
+    }
+
+    [Theory]
     [InlineData("https://youtu.be/abc123")]
     [InlineData("https://www.YouTube.com/embed/abc123?start=30")]
     [InlineData("https://www.youtube-nocookie.com/embed/abc123")]   // 隱私強化模式:不含 youtube.com/embed 子字串

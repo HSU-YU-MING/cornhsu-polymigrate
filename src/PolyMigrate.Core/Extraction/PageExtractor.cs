@@ -186,10 +186,15 @@ internal sealed partial class PageExtractor
                     // ReverseMarkdown 處理:Unknown = Bypass 只輸出子節點,iframe 沒有子節點,整個會消失,
                     // 而且沒有任何清單或 warning 記得它。不猜型別,所以不進 videos/documents。
                     // 站內的 src 與 <a href> 走同一套路由改寫(外站不動、相對路徑以頁面網址解析):
-                    // 留著舊網址的話,同一頁的連結已改成新路由、iframe 卻還指著 .php,verify 會報 broken_link
-                    if (iframe.GetAttribute("src") is { Length: > 0 } original)
+                    // 留著舊網址的話,同一頁的連結已改成新路由、iframe 卻還指著 .php,verify 會報 broken_link。
+                    // lazy-load 的 data-src(src 是 about:blank,捲到才由 JS 換上)同一套改寫(3.0 起):
+                    // 新站沿用 lazy-load 的 JS 時,它才是真正被載入的網址
+                    foreach (var attribute in (string[])["src", "data-src"])
                     {
-                        iframe.SetAttribute("src", _links.Rewrite(original, page.SourceUrl));
+                        if (iframe.GetAttribute(attribute) is { Length: > 0 } original)
+                        {
+                            iframe.SetAttribute(attribute, _links.Rewrite(original, page.SourceUrl));
+                        }
                     }
                     embeds.Add(iframe.OuterHtml);
                     ReplaceWithPlaceholder(iframe, embeds.Count - 1);
