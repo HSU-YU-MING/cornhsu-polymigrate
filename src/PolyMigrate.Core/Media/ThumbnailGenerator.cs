@@ -18,7 +18,7 @@ public sealed class ThumbnailReport
 /// <summary>
 /// 縮圖產生(規格 make_thumbs.py):media/ 圖片 → 縮圖目錄(同結構、同檔名)。
 /// §2.6 坑:手機直拍照片 EXIF 方向顛倒 → 先依 EXIF 轉正(AutoOrient)再縮,
-/// 否則縮圖會顛倒/側躺。已存在的縮圖跳過(可重跑、增量)。
+/// 否則縮圖會顛倒/側躺。動畫 GIF / WebP 逐格縮放、保留動畫(3.0 起;2.3.1 以前只剩第一格)。已存在的縮圖跳過(可重跑、增量)。
 /// 影像庫用 Magick.NET(Apache 2.0)——ImageSharp 4.x 建置即要求授權金鑰,已棄用(§3.7)。
 /// </summary>
 public sealed class ThumbnailGenerator(SiteConfig config)
@@ -54,23 +54,22 @@ public sealed class ThumbnailGenerator(SiteConfig config)
             }
             try
             {
-                using var image = new MagickImage(file);
-                image.AutoOrient();   // EXIF 轉正,必須在縮放前
-                if (image.Width > (uint)thumbs.MaxWidth)
-                {
-                    image.FilterType = FilterType.Lanczos;
-                    image.Resize(new MagickGeometry((uint)thumbs.MaxWidth, 0));
-                }
-                if (Path.GetExtension(file).ToLowerInvariant() is ".jpg" or ".jpeg")
-                {
-                    image.Quality = (uint)thumbs.Quality;
-                }
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 // 先寫暫存再原子改名:中途中斷(Ctrl-C、磁碟滿)不會在最終路徑留半截圖,
                 // 否則重跑會因「檔案已存在」把壞縮圖當成已完成。暫存名沒有副檔名,
-                // 故明確指定格式(否則 Magick 會依 .tmp 推測格式而寫錯)。
+                // 故寫出時明確指定格式(否則 Magick 會依 .tmp 推測格式而寫錯)。
                 var tmp = target + ".tmp";
-                image.Write(tmp, image.Format);
+                if (!TryWriteAnimated(file, tmp, thumbs))
+                {
+                    using var image = new MagickImage(file);
+                    image.AutoOrient();   // EXIF 轉正,必須在縮放前
+                    Downscale(image, thumbs);
+                    if (Path.GetExtension(file).ToLowerInvariant() is ".jpg" or ".jpeg")
+                    {
+                        image.Quality = (uint)thumbs.Quality;
+                    }
+                    image.Write(tmp, image.Format);
+                }
                 File.Move(tmp, target, overwrite: true);
                 report.Created++;
                 if (report.Created % 200 == 0)
@@ -85,5 +84,49 @@ public sealed class ThumbnailGenerator(SiteConfig config)
             }
         }
         return report;
+    }
+
+    private static void Downscale(IMagickImage<byte> image, ThumbnailSection thumbs)
+    {
+        if (image.Width > (uint)thumbs.MaxWidth)
+        {
+            image.FilterType = FilterType.Lanczos;
+            image.Resize(new MagickGeometry((uint)thumbs.MaxWidth, 0));
+        }
+    }
+
+    /// <summary>
+    /// 多格的 GIF / WebP:逐格縮放、保留動畫(格數、每格的延遲與循環次數),寫到 <paramref name="tmp"/>。
+    /// 單格(或其他格式)回 false,由呼叫端走一般的單張路徑。
+    /// <para>2.3.1 以前一律 <c>new MagickImage(file)</c>,只讀第一格:動畫縮圖變成靜止的第一格,而且沒有任何提示
+    /// (決策檔 L4 選項 A)。先 <c>Coalesce</c>:GIF 的後續格常只存「跟上一格不同的那一塊」,不補成完整畫面就縮,
+    /// 各格的位置與大小會對不上。GIF 寫出前再 <c>Optimize</c> 回格間差異,檔案才不會因為每格都是全畫面而暴增;
+    /// WebP 的編碼器自己處理格間差異,不另外做。</para>
+    /// </summary>
+    private static bool TryWriteAnimated(string file, string tmp, ThumbnailSection thumbs)
+    {
+        if (Path.GetExtension(file).ToLowerInvariant() is not (".gif" or ".webp"))
+        {
+            return false;
+        }
+        using var frames = new MagickImageCollection(file);
+        if (frames.Count < 2)
+        {
+            return false;
+        }
+        var format = frames[0].Format;
+        frames.Coalesce();
+        foreach (var frame in frames)
+        {
+            frame.AutoOrient();
+            Downscale(frame, thumbs);
+            frame.ResetPage();   // 縮放後的畫布 = 格本身的大小(Coalesce 留下的是原圖的畫布)
+        }
+        if (format == MagickFormat.Gif)
+        {
+            frames.Optimize();
+        }
+        frames.Write(tmp, format);
+        return true;
     }
 }

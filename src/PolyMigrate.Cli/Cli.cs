@@ -104,7 +104,8 @@ public static class Cli
                           --dry-run: full run and report, but nothing written.
                     {Synopsis(ThumbsUsage)}
                           Generate thumbnails: media/ -> media_thumb/ (same layout). EXIF auto-orient,
-                          downscale to media.thumbnails.max_width. Existing thumbnails are skipped.
+                          downscale to media.thumbnails.max_width; animated GIF/WebP keep every frame.
+                          Existing thumbnails are skipped.
                     {Synopsis(ProbeUsage)}
                           Probe the live site for orphan pages (removed from indexes but still served):
                           per-day slugs in both YYYYMMDD and MMDDYYYY forms, plus A-D suffix variants.

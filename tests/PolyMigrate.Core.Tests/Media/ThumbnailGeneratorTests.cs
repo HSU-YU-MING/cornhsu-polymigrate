@@ -186,8 +186,7 @@ public class ThumbnailGeneratorTests : IDisposable
     {
         // 縮圖與原圖同檔名,內容就必須是同一種格式:重新編碼時不可把 PNG/GIF/WebP 統一轉成別種
         // (JPEG 那一半見 LeftoverTmpFromAnInterruptedRun_DoesNotCountAsDone)。
-        // 這裡的 GIF 只有一格。多格的 GIF 動畫目前會被縮成只剩第一格,那是待決的產品行為
-        // (保留動畫、原樣複製、或刻意只取第一格),決定之前不寫測試把現況釘成規格
+        // 這裡的 GIF 只有一格;多格的動畫見檔尾「動畫」那一組
         using (var image = new MagickImage(MagickColors.Red, 1200, 10))
         {
             image.Write(MediaPath(name), format);
@@ -231,5 +230,87 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(1, report.Created);
         Assert.Equal(1, report.Failed);
         Assert.Equal("corrupt.jpg", Assert.Single(report.Failures).Path);
+    }
+
+    // ── 動畫(決策檔 L4 選項 A):逐格縮放、保留動畫 ─────────────────────────────
+    // 2.3.1 以前以 new MagickImage(file) 讀檔,只讀第一格:動畫 GIF / WebP 的縮圖變成靜止的第一格,
+    // 照樣計入 created、沒有任何提示。docs/搬完之後你還要做的事.md 也提醒過「動畫 GIF 被重新編碼會壞掉」。
+
+    private static readonly MagickColor[] FrameColors = [MagickColors.Red, MagickColors.Lime, MagickColors.Blue];
+
+    /// <summary>三格動畫,每格一種純色、間隔 0.2 秒(AnimationDelay 的單位是 1/100 秒)、無限循環。</summary>
+    private void WriteAnimation(string relative, MagickFormat format, uint width, uint height)
+    {
+        using var animation = new MagickImageCollection();
+        foreach (var color in FrameColors)
+        {
+            animation.Add(new MagickImage(color, width, height) { AnimationDelay = 20, AnimationIterations = 0 });
+        }
+        animation.Write(MediaPath(relative), format);
+    }
+
+    [Theory]
+    [InlineData("anim.gif", MagickFormat.Gif)]
+    [InlineData("anim.webp", MagickFormat.WebP)]
+    public void AnimatedImage_KeepsEveryFrame_EachDownscaled(string name, MagickFormat format)
+    {
+        WriteAnimation(name, format, 2000, 500);
+
+        var report = Run();
+
+        Assert.Equal(1, report.Created);
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, name));
+        Assert.Equal(3, thumb.Count);
+        Assert.Equal(format, thumb[0].Format);
+        thumb.Coalesce();   // 讀回時補成完整畫面再比(寫出時可能做過格間差異最佳化)
+        Assert.All(thumb, frame =>
+        {
+            Assert.Equal((1000u, 250u), (frame.Width, frame.Height));
+            Assert.Equal(20u, frame.AnimationDelay);
+        });
+    }
+
+    [Fact]
+    public void AnimatedGif_FramesKeepTheirOwnContent()
+    {
+        // 逐格縮放,不是「第一格縮好再複製三次」:每格的顏色要對得上(GIF 對純色是無損的)
+        WriteAnimation("anim.gif", MagickFormat.Gif, 2000, 500);
+
+        Run();
+
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, "anim.gif"));
+        thumb.Coalesce();
+        for (var i = 0; i < FrameColors.Length; i++)
+        {
+            using var pixels = thumb[i].GetPixels();
+            Assert.Equal(FrameColors[i], pixels.GetPixel(500, 125).ToColor());
+        }
+    }
+
+    [Fact]
+    public void AnimatedGif_NarrowerThanMaxWidth_IsNotUpscaled_ButStaysAnimated()
+    {
+        WriteAnimation("small.gif", MagickFormat.Gif, 300, 200);
+
+        Run();
+
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, "small.gif"));
+        Assert.Equal(3, thumb.Count);
+        thumb.Coalesce();
+        Assert.All(thumb, frame => Assert.Equal((300u, 200u), (frame.Width, frame.Height)));
+    }
+
+    [Fact]
+    public void SingleFrameGif_StillOneFrame()
+    {
+        using (var image = new MagickImage(MagickColors.Red, 2000, 500))
+        {
+            image.Write(MediaPath("still.gif"), MagickFormat.Gif);
+        }
+
+        Run();
+
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, "still.gif"));
+        Assert.Equal((1000u, 250u), (Assert.Single(thumb).Width, thumb[0].Height));
     }
 }
