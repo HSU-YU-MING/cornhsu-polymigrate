@@ -13,8 +13,9 @@ public sealed class ConfigException(string message, Exception? inner = null) : E
 
 /// <summary>
 /// YAML site config 載入器(§3.9):underscored 命名、未知欄位報錯(不默默忽略)、載入後驗證。
-/// <para>3.0 起「寫壞的 config 不該等到某個指令才炸」:每個欄位凡是載入時驗得出來的(regex、URL、路徑形狀、
-/// 列舉值、數值範圍、YAML 寫了 key 卻沒給值),都在這裡驗,一次列出全部、點名欄位。用到時的檢查保留為第二道防線
+/// <para>3.0 起「寫壞的 config 不該等到某個指令才炸」:每個欄位逐一看過,寫壞了會到使用時才擲例外、或安靜地產出錯東西的
+/// (regex、URL、路徑形狀、列舉值、數值範圍、重複的 key、YAML 寫了 key 卻沒給值),都在這裡驗,一次列出全部、點名欄位。
+/// 不是每一種錯都驗得出來(selector 在真實頁面上選不選得到東西、頁型有沒有拼錯…),沒驗的列在 docs/contracts.md。用到時的檢查保留為第二道防線
 /// (函式庫呼叫端可以不經 loader、直接在程式裡組 <see cref="SiteConfig"/>)。</para>
 /// </summary>
 public static class SiteConfigLoader

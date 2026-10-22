@@ -124,8 +124,9 @@ CLI 指令與參數（含預設值）、**exit code**、Phase 輸出檔案格式
   於是既有使用者什麼都沒改就從 exit 0 變 1。同理 2.2.1 的殘檔回報**刻意不計入 warning**——
   那會在 patch 版動到 exit code。
 - **`SiteConfigLoader` 對未知欄位報錯**，所以「移除一個 config 欄位」會讓設過它的 config 載入失敗
-  （2.0.0 移掉四個死欄位就是這樣升的 major）。**3.0 起載入時驗每一個驗得出來的欄位**（selector、regex、路徑形狀、
-  BCP-47、數值範圍、寫了 key 卻沒給值…，表在 `docs/contracts.md`）。新增 config 欄位時，驗證寫進 `SiteConfigLoader`，
+  （2.0.0 移掉四個死欄位就是這樣升的 major）。**3.0 起載入時多驗一批欄位**（selector、regex、路徑形狀、
+  BCP-47、數值範圍、重複的 key、寫了 key 卻沒給值…；驗了什麼、沒驗什麼都列在 `docs/contracts.md`——不是每一種錯都驗得出來，
+  文件不要寫成「全部都驗」）。新增 config 欄位時，驗證寫進 `SiteConfigLoader`，
   不要只在用到時才檢查；但**收緊既有欄位的驗證會讓原本能載入的 config 失敗**，那是 YAML 面的破壞，要等 major。
 - `reject_reason` 明定為**開放集合**：未來新增門檻會新增值，消費端須容忍沒見過的值——先講明，
   以後新增門檻才不必動 `config_version`。

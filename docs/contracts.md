@@ -292,6 +292,17 @@ stderr 印一則 `note:` 說明怎麼遷移:新檔還不存在時,它是哪個 s
 | `media.pdf_labels` | key 是形狀正確的 BCP-47 標記;不在 `lang_map` 裡的(含大小寫不同)只**警告**——查表是精確比對,那條用不到;值不可空 |
 | `media.thumbnails` | `max_width` ≥ 1;`quality` 1～100 |
 
+**沒有驗的**(載入時判斷不了,或不是寫壞):
+
+- selector 與 regex 在真實頁面上選不選得到東西;regex 會不會太慢(災難性回溯)。
+- `type_rules` 的頁型與 `section_types` 的值有沒有對上:拼錯的頁型只是沒有規則,不會報錯。
+- `site.base_url` 連不連得到、帶的路徑對不對;`site.encoding` 與頁面實際的編碼合不合。
+- `media.web_prefix` 是不是媒體真正放的位置(`verify` 的 `--media-prefix` 也不會拿來對照)。
+- section 名稱與語言前綴在 `raw/` 裡存不存在;`strip_extensions` 是否真的出現在鏡像檔名裡。
+- BCP-47 只驗形狀、不查登記表(`xx-Foo` 照收);`lang_map` 兩個前綴對到同一個 locale 是合法的。
+- 自由文字的內容:`title_noise`、`title_markers`、PDF 標籤、cookie 值(只驗字元範圍)。
+- `media.thumbnails.max_width`、`extract.text_in_image_max_length` 的上限。
+
 用到時另有一道檢查(第二道防線,擋函式庫呼叫端不經 loader、直接在程式裡組的 `SiteConfig`):selector 在處理任何頁之前、
 `strip_title_prefix` 在建標題清理器時編譯。2.3.1 以前這張表只有一部分在載入時驗,其餘到用到時才炸、或安靜地產出錯的東西。
 

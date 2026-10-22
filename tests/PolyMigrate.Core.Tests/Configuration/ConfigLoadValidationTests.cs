@@ -3,8 +3,9 @@ using PolyMigrate.Core.Configuration;
 namespace PolyMigrate.Core.Tests.Configuration;
 
 /// <summary>
-/// 3.0 起「寫壞的 config 不該等到某個指令才炸」:<see cref="SiteConfig"/> 每個欄位逐一看過,凡是載入時就驗得出來的
-/// (regex、URL、路徑形狀、列舉值、數值範圍、YAML 寫了 key 卻沒給值),一律在載入時擋下,一次列出全部、點名欄位。
+/// 3.0 起「寫壞的 config 不該等到某個指令才炸」:<see cref="SiteConfig"/> 每個欄位逐一看過,寫壞了會到使用時才擲例外、
+/// 或安靜地產出錯東西的(regex、URL、路徑形狀、列舉值、數值範圍、YAML 寫了 key 卻沒給值),在載入時擋下,一次列出全部、點名欄位。
+/// 不是每一種錯都驗得出來;沒驗的列在 docs/contracts.md。
 /// 2.x 這些不是到某個指令、某一頁才擲例外(regex 編譯失敗、null 造成的 NullReferenceException——後者連 exit code 都不在契約內),
 /// 就是安靜地產出錯的東西(strip_extensions 少了點、web_prefix 不是根路徑、section 名稱含斜線永遠對不上…)。
 /// 用到時的檢查保留為第二道防線(不經 loader、直接在程式裡組的 config)。
