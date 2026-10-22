@@ -116,7 +116,8 @@ public sealed class ThumbnailGenerator(SiteConfig config)
     /// 單格(或其他格式)回 false,由呼叫端走一般的單張路徑。
     /// <para>2.3.1 以前一律 <c>new MagickImage(file)</c>,只讀第一格:動畫縮圖變成靜止的第一格,而且沒有任何提示
     /// (決策檔 L4 選項 A)。先 <c>Coalesce</c>:GIF 的後續格常只存「跟上一格不同的那一塊」,不補成完整畫面就縮,
-    /// 各格的位置與大小會對不上。GIF 寫出前再 <c>Optimize</c> 回格間差異,檔案才不會因為每格都是全畫面而暴增;
+    /// 各格的位置與大小會對不上(Coalesce 之後每格的畫布都從 (0,0) 起,AutoOrient 與 Resize 會跟著轉、跟著縮,
+    /// 所以不必再 ResetPage——實測加不加輸出逐位元相同)。GIF 寫出前再 <c>Optimize</c> 回格間差異,檔案才不會因為每格都是全畫面而暴增;
     /// WebP 的編碼器自己處理格間差異,不另外做。</para>
     /// </summary>
     private static bool TryWriteAnimated(string file, string tmp, ThumbnailSection thumbs)
@@ -136,7 +137,6 @@ public sealed class ThumbnailGenerator(SiteConfig config)
         {
             frame.AutoOrient();
             Downscale(frame, thumbs);
-            frame.ResetPage();   // 縮放後的畫布 = 格本身的大小(Coalesce 留下的是原圖的畫布)
         }
         if (format == MagickFormat.Gif)
         {
