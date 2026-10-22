@@ -92,6 +92,9 @@ exit code 一覽:
   **這仍是啟發式,大多數站與 `extract` 一致,但不是全部**:乾淨網址站的 `jane.doe.html` 會印成 `jane`,
   `strip_extensions: []` 的站上 `foo.php.html` 會印成 `foo`(`extract` 的 slug 分別是 `jane.doe`、`foo.php`)。
   **升級注意:含點的 slug 輸出會改變**(原本的截斷值本來就無法回餵 `fetch-orphans`)。列表頁 `index` 照舊列出。
+  **函式庫:public 的 `OrphanProber.KnownSlugs(rawDir, langPrefix, section)` 也隨之改變**(由「第一個點之前」改成
+  上述啟發式);它不帶 config,所以上面兩種情況下與 CLI 的 `probe-orphans`(改用 `strip_extensions`)結果不同。
+  要不要加一個帶 `strip_extensions` 的 public 多載(minor)留待決定。
 - **修正(patch):Windows 上 `slugs` 導成檔案時跟著 console 碼頁,回餵 `fetch-orphans` 變成亂碼網址。**
   2.2.0 與 `docs/搬完之後你還要做的事.md` 教的就是 `slugs … > local.txt` 這條管線;在 zh-TW Windows(cp950)
   用 cmd 或 Git Bash 導檔,`禪修` 寫成 Big5,`fetch-orphans` 以 UTF-8 讀回成 U+FFFD。現在 **stdout 導到檔案時

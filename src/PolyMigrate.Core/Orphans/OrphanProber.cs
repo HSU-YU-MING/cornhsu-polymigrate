@@ -47,7 +47,14 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
         }
     }
 
-    /// <summary>已抓到的 slug(raw/{lang}/{section}/ 檔名),探測時跳過。</summary>
+    /// <summary>
+    /// 已抓到的 slug(<c>raw/{lang}/{section}/</c> 的檔名),探測時跳過。
+    /// <para>這個多載不帶 config,所以檔名 → slug 用的是啟發式:去掉結尾的 <c>.html</c>,再去掉一段全是 ASCII 字母的副檔名
+    /// (2.3.1 以前是取第一個點之前)。它與 <c>extract</c> 的 slug 在兩種情況不一致:乾淨網址站的 <c>jane.doe.html</c>
+    /// (這裡得到 <c>jane</c>)、<c>strip_extensions: []</c> 的站上的 <c>foo.php.html</c>(這裡得到 <c>foo</c>)。
+    /// CLI 的 <c>probe-orphans</c> 改用依 <c>url_pattern.strip_extensions</c> 的規則,與 <c>extract</c> 完全一致,
+    /// 所以這兩種情況下此方法的結果會與 CLI 不同。</para>
+    /// </summary>
     public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section) =>
         Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section);
 
