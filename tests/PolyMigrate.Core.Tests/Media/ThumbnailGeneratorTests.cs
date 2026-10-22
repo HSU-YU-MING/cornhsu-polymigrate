@@ -300,6 +300,62 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.All(thumb, frame => Assert.Equal((300u, 200u), (frame.Width, frame.Height)));
     }
 
+    /// <summary>
+    /// 真實 GIF 的樣子:第一格是整張畫布,之後每格只存變動的那一塊(局部格,帶位移),每格延遲不同,只循環 3 次。
+    /// 上面的三格純色動畫每格都是整張畫布、延遲相同、無限循環——拿掉 Coalesce、把延遲或循環次數弄丟,它都看不出來
+    /// (審查建議 6:mutation L4-2、L4-6、L4-7 都存活)。
+    /// </summary>
+    private void WritePartialFrameAnimation(string relative)
+    {
+        using var animation = new MagickImageCollection();
+        animation.Add(new MagickImage(MagickColors.Red, 2000, 500)
+        {
+            AnimationDelay = 10,
+            AnimationIterations = 3,
+            GifDisposeMethod = GifDisposeMethod.None,
+        });
+        // 兩個局部格:400x200 的色塊,貼在畫布的 (800, 100);沒蓋到的地方沿用上一格(dispose none)
+        foreach (var (color, delay) in new[] { (MagickColors.Lime, 20u), (MagickColors.Blue, 70u) })
+        {
+            animation.Add(new MagickImage(color, 400, 200)
+            {
+                AnimationDelay = delay,
+                GifDisposeMethod = GifDisposeMethod.None,
+                Page = new MagickGeometry(800, 100, 2000, 500),
+            });
+        }
+        animation.Write(MediaPath(relative), MagickFormat.Gif);
+    }
+
+    [Fact]
+    public void PartialFrameGif_IsCoalescedBeforeScaling_AndKeepsEachDelayAndTheLoopCount()
+    {
+        WritePartialFrameAnimation("partial.gif");
+        using (var source = new MagickImageCollection(MediaPath("partial.gif")))
+        {
+            Assert.Equal(400u, source[1].Width);   // 前提:素材真的是局部格
+        }
+
+        var report = Run();
+
+        Assert.Equal(1, report.Created);
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, "partial.gif"));
+        Assert.Equal(3, thumb.Count);
+        Assert.Equal([10u, 20u, 70u], thumb.Select(f => f.AnimationDelay));   // 每格自己的延遲
+        Assert.Equal(3u, thumb[0].AnimationIterations);                       // 循環次數照舊
+        Assert.Equal((1000u, 250u), (thumb[0].Page.Width, thumb[0].Page.Height));   // 畫布跟著縮(ResetPage)
+        thumb.Coalesce();
+        // 色塊縮半後落在 (400..600, 50..150);色塊外沿用第一格的紅色。沒先 Coalesce 的話,局部格縮放時
+        // 不知道自己在畫布的哪裡,色塊會跑到左上角
+        MagickColor[] expected = [MagickColors.Red, MagickColors.Lime, MagickColors.Blue];
+        for (var i = 0; i < 3; i++)
+        {
+            using var pixels = thumb[i].GetPixels();
+            Assert.Equal(expected[i], pixels.GetPixel(500, 100).ToColor());
+            Assert.Equal(MagickColors.Red, pixels.GetPixel(100, 200).ToColor());
+        }
+    }
+
     [Fact]
     public void TruncatedAnimatedGif_StillGetsAFirstFrameThumbnail_LikeBefore()
     {
