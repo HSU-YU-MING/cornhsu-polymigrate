@@ -7,6 +7,9 @@ public class LinkRewriterTests
 {
     private static readonly SiteConfig Config = TestConfigs.IbpsLike();
     private static readonly LinkRewriter Rewriter = new(Config.Site, Config.UrlPattern);
+
+    /// <summary>鏡像裡一頁都沒有:所有連結目標都「不是鏡像頁」,檔案判斷與 scheme 判斷才會生效。</summary>
+    private static readonly LinkRewriter NoMirrorPages = new(Config.Site, Config.UrlPattern, new HashSet<string>());
     private const string PageUrl = "https://www.ibps-austin.org/ch/news/20260712.php";
 
     [Theory]
@@ -48,7 +51,7 @@ public class LinkRewriterTests
     [InlineData("ftp://www.ibps-austin.org/ch/file.php")]
     [InlineData("FTP://WWW.IBPS-AUSTIN.ORG/ch/file.php")]
     public void SameHostNonHttpScheme_Untouched(string href) =>
-        Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
+        Assert.Equal(href, NoMirrorPages.Rewrite(href, PageUrl));
 
     [Theory]
     // 第二輪審查:只剩一段的路徑一律加尾斜線(「只剩語言前綴 → 該語首頁」),連帶把檔案也改壞了:
@@ -63,6 +66,15 @@ public class LinkRewriterTests
     [InlineData("/v1.2-release.php", "/v1.2-release/")]   // .2-release 不是副檔名:仍是頁
     [InlineData("/2019.05.01.php", "/2019.05.01/")]       // .01 不是副檔名
     public void SingleSegment_TrailingSlashOnlyForPages(string href, string expected) =>
+        Assert.Equal(expected, NoMirrorPages.Rewrite(href, PageUrl));
+
+    [Theory]
+    // 最終驗證 I5:不知道鏡像有哪些頁(沒有傳路由集)時,原本「全部當成非鏡像頁」——日後新的呼叫端忘了傳,
+    // 指向鏡像頁的連結就會被改壞。沒傳時一律照頁的規則,與 9d17071 逐位元相同
+    [InlineData("/embed.swf", "/embed.swf/")]
+    [InlineData("/calendar.html", "/calendar.html/")]
+    [InlineData("ftp://www.ibps-austin.org/ch/file.php", "/ch/file")]
+    public void WithoutMirrorRoutes_FollowsThe9d17071PageRule(string href, string expected) =>
         Assert.Equal(expected, Rewriter.Rewrite(href, PageUrl));
 
     // ─────────────────────────────────────────────────────────────────────────

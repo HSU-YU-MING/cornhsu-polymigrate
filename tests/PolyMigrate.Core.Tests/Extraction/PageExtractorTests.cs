@@ -7,6 +7,9 @@ public class PageExtractorTests : IDisposable
     private readonly string _mediaRoot = Directory.CreateTempSubdirectory("polymigrate-media").FullName;
     private readonly PageExtractor _extractor = new(TestConfigs.IbpsLike());
 
+    /// <summary>鏡像裡一頁都沒有:iframe 的目標都「不是鏡像頁」,檔案與 scheme 判斷才會生效(見 LinkRewriter)。</summary>
+    private readonly PageExtractor _noMirrorPages = new(TestConfigs.IbpsLike(), new HashSet<string>());
+
     private static readonly RawPage ArticlePage = new(
         FilePath: "unused",
         LangPrefix: "ch",
@@ -235,7 +238,7 @@ public class PageExtractorTests : IDisposable
         // verify 就把它報成 broken_link(exit 2)——明明連到的是一個有搬過來的頁
         var html = $"<html><body><section id=\"personal\"><iframe src=\"{src}\"></iframe></section></body></html>";
 
-        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+        var result = _noMirrorPages.Extract(ArticlePage, html, _mediaRoot);
 
         Assert.Contains($"<iframe src=\"{rewritten.Replace("&", "&amp;")}\"></iframe>", result.BodyMarkdown);
     }

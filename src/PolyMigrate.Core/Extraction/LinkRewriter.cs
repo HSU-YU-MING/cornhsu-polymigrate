@@ -18,8 +18,8 @@ internal sealed class LinkRewriter
 
     /// <param name="pageRoutes">
     /// 鏡像裡每一頁的路由(<see cref="RouteForPath"/> 算出來的)。連結目標是鏡像頁時一律照頁的規則改寫;
-    /// 只有目標不是鏡像頁,才考慮「它其實是個檔案」(見 <see cref="Rewrite"/>)。null = 不知道鏡像有哪些頁,
-    /// 一律當成不是鏡像頁(單元測試用;管線一定會傳)。
+    /// 只有目標不是鏡像頁,才考慮「它其實是個檔案」(見 <see cref="Rewrite"/>)。null = 不知道鏡像有哪些頁:
+    /// 一律照頁的規則,與 9d17071 逐位元相同——日後新的呼叫端忘了傳時,至少不會把指向鏡像頁的連結改壞(最終驗證 I5)。
     /// </param>
     public LinkRewriter(SiteSection site, UrlPatternSection urlPattern, IReadOnlySet<string>? pageRoutes = null)
     {
@@ -53,7 +53,7 @@ internal sealed class LinkRewriter
         var route = RouteForPath(resolved.AbsolutePath);
         // 指向鏡像頁的連結一律照頁的規則(與 9d17071 逐位元相同,第三輪審查的原則);
         // 不是鏡像頁的目標才另外判斷:同 host 的非 http(s)(ftp:// 等)原樣保留,看起來是檔案的不加尾斜線
-        if (_pageRoutes?.Contains(route) != true)
+        if (_pageRoutes is not null && !_pageRoutes.Contains(route))
         {
             if (resolved.Scheme is not ("http" or "https"))
             {
