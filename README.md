@@ -13,11 +13,17 @@ PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, 
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
 Config-driven, fully offline-rerunnable, built on .NET.
 
-**Status: 2.3.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
+**Status: 3.0.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
-surface and the Phase output contracts remain stable** (additive since 1.0, apart from the 2.2
-`verify` exit-code change noted below): new features bump
-the minor version, fixes bump the patch. 2.0 was an engineering release — it narrowed the
+surface, exit codes, Phase output contracts and YAML config are frozen within a major version**:
+new features bump the minor version, fixes bump the patch, and anything that changes one of those
+four surfaces waits for a major. **3.0 is such a release** — it changes exit codes in a few cases
+so they follow the 0 / 1 / 2 / 130 contract (an orphan probe that got no usable answer, a failed
+npm launcher and an interrupted command no longer look like success), gives each section its own
+orphan slug list (`orphan_slugs.<section>.txt`), keeps animated GIF/WebP thumbnails animated, and
+adds probe/fetch entry points and cancellable overloads to the library. Config files, CSV columns
+and frontmatter fields are unchanged; **read the 3.0 upgrade checklist in the CHANGELOG before
+upgrading**. Earlier history: 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
 config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages) — though
 the npm launcher could only start the Windows/Linux arm64 builds from 2.3.1 on.
@@ -140,8 +146,8 @@ dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
 polymigrate verify .                        # link/media/frontmatter/unlinked-page audit, CI exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
-polymigrate probe-orphans site.yaml --section news --years 2021-2023
-polymigrate fetch-orphans site.yaml --section news
+polymigrate probe-orphans site.yaml --section news --years 2021-2023   # -> orphan_slugs.news.txt
+polymigrate fetch-orphans site.yaml --section news                      # reads orphan_slugs.news.txt
 polymigrate slugs . --section news          # slugs already mirrored under ./raw (pipeable)
 ```
 
@@ -189,7 +195,15 @@ if (report.HasErrors) { /* unsafe paths were skipped; see path_issues.csv */ }
 
 var verify = PolyMigrator.Verify("out/");      // no config needed; reads Phase 2 output only
 Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
+
+// Orphan pages (probe-orphans / fetch-orphans). Nothing is written until you decide to.
+var probe = await migrator.ProbeOrphansAsync("out/", "news", 2021, 2023);
+if (probe.NoUsableAnswers) { /* the site never answered: an empty list means nothing */ }
+else { await migrator.FetchOrphansAsync("out/", "news", probe.Found); }
 ```
+
+Extract, Verify and GenerateThumbnails also have overloads that take a `CancellationToken`
+(the probe/fetch methods take one as their last parameter).
 
 ## Layout
 

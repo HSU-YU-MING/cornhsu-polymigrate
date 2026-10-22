@@ -12,10 +12,13 @@
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
 
-**狀態:2.3。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
-並以一次真實的整站搬遷驗證(見下)。**CLI 介面與 Phase 輸出契約維持穩定**(自 1.0 起只增不改,
-2.2 的 `verify` exit code 變動見下):
-新功能升 minor、修正升 patch。2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
+**狀態:3.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
+並以一次真實的整站搬遷驗證(見下)。**CLI 介面、exit code、Phase 輸出契約與 YAML config 在同一個 major 內凍結**:
+新功能升 minor、修正升 patch,動到這四面的改動留到下一個 major。**3.0 就是這樣的一版**——幾個情境的 exit code
+改成符合 0 / 1 / 2 / 130 的契約(孤兒頁探測一個回答都沒拿到、npm 啟動腳本失敗、指令被中斷,都不再看起來像成功)、
+孤兒頁清單改成每個 section 一份(`orphan_slugs.<section>.txt`)、動畫 GIF / WebP 縮圖保留動畫,
+函式庫則多了 probe / fetch 入口與可取消的 overload。config、CSV 欄位、frontmatter 欄位都沒有變;
+**升級前請先看 CHANGELOG 3.0.0 的「升級必做」**。更早的沿革:2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
 收束到意圖中的進入點、移除未使用的 config 欄位;2.1 修補發佈管線(arm64 的 npm 平台包、
 符號套件),不過 Windows / Linux 的 arm64 平台包要到 2.3.1 修好啟動腳本才真的跑得起來;
 2.2 補上 `verify` 的盲點——沒有任何頁連過去的孤兒頁,因為巡檢是「跟著連結走」
@@ -115,8 +118,8 @@ dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
 polymigrate verify .                        # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
-polymigrate probe-orphans site.yaml --section news --years 2021-2023
-polymigrate fetch-orphans site.yaml --section news
+polymigrate probe-orphans site.yaml --section news --years 2021-2023   # → orphan_slugs.news.txt
+polymigrate fetch-orphans site.yaml --section news                      # 讀 orphan_slugs.news.txt
 polymigrate slugs . --section news          # 列出 ./raw 底下已鏡像的 slug(可直接導向檔案)
 ```
 
@@ -163,7 +166,14 @@ if (report.HasErrors) { /* 有不安全路徑被跳過,見 path_issues.csv */ }
 
 var verify = PolyMigrator.Verify("out/");      // 不需 config,只讀 Phase 2 輸出
 Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
+
+// 孤兒頁(probe-orphans / fetch-orphans):不寫任何檔,要不要寫、寫到哪由你決定
+var probe = await migrator.ProbeOrphansAsync("out/", "news", 2021, 2023);
+if (probe.NoUsableAnswers) { /* 站根本沒回答:空清單不代表沒有孤兒頁 */ }
+else { await migrator.FetchOrphansAsync("out/", "news", probe.Found); }
 ```
+
+Extract、Verify、GenerateThumbnails 另有收 `CancellationToken` 的 overload(probe / fetch 的最後一個參數就是它)。
 
 ## 目錄
 

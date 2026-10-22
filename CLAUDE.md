@@ -101,18 +101,25 @@ workflow 只剩 `ci.yml` 與 `release.yml`。**主線走 OIDC 就好**，不要�
 
 ## 地雷
 
-### 對外契約自 1.0 起凍結，範圍比想像的大
+### 對外契約在同一個 major 內凍結（現在是 3.x），範圍比想像的大
 
-CLI 指令與參數、**exit code**、Phase 輸出檔案格式（CSV 欄位、frontmatter 欄位）、YAML config 欄位，
-四面都是契約。破壞任一面 = major。幾個容易誤判的角落：
+CLI 指令與參數（含預設值）、**exit code**、Phase 輸出檔案格式（CSV 欄位、frontmatter 欄位）、YAML config 欄位，
+四面都是契約。破壞任一面 = major。1.0～2.x 一直守著同一份契約；**3.0 是第一次為了改正 exit code 而升的 major**
+（probe 一個回答都沒拿到 = 2、npm 啟動腳本失敗 = 2、同步指令第一次 Ctrl-C = 130、孤兒頁清單改成每個 section 一份
+`orphan_slugs.<section>.txt`），完整對照表在 CHANGELOG 3.0.0 與 [docs/contracts.md](docs/contracts.md)。
+2.x 時這些都卡在「既有情境的 exit code 改變 = major」而只能先寫警告——下一次遇到同樣的取捨，
+做法一樣：patch 只動訊息，exit code 留到 major。幾個容易誤判的角落：
 
 - **exit code 是最多人依賴的那份契約**（CI 與 shell 腳本直接吃）：0 乾淨 / 1 warning / 2 error /
   130 中斷。對應只在 `Cli.Report()` 定義一次，`CliTests` 末段有驗收測試釘著。**新增指令時
   catch 用共用的 `IsHandled()`，不要各自挑幾種例外**——2.2.0 之前五個指令各抄一份且抄得不一致，
   `extract`/`thumbs` 漏接取消，Ctrl-C 時直接崩潰而非乾淨回 130。**catch 接得到還不夠，指令也要真的看 token**：
   2.2.0 補齊 catch 之後，同步指令（extract/thumbs/verify/slugs）仍不看 token，第一次 Ctrl-C 沒作用、
-  照常跑完回 0/1/2，直到 `fix/product-bugs` 才把 token 穿進逐檔迴圈。新指令的長迴圈要逐項
-  `ct.ThrowIfCancellationRequested()`；Core 那一側用 internal overload 收 token，不改 public 簽章。
+  照常跑完回 0/1/2，直到 3.0 才把 token 穿進逐檔迴圈。新指令的長迴圈要逐項
+  `ct.ThrowIfCancellationRequested()`；Core 那一側提供收 token 的 public overload（3.0 起 Extract / Verify /
+  Thumbs / probe / fetch 都有），而且**以新增 overload 的方式加**——替既有方法加選用參數是二進位不相容。
+- **npm 啟動腳本自己失敗 = 2**（3.0 起；`bin/polymigrate.js` 的 `LAUNCHER_FAILURE_EXIT`）。2.x 回 1，
+  和「1 = warning」撞號，「0/1 放行」的 CI 會把「工具沒跑」當成通過。
 - **「新增一種 warning」是破壞性的**，即使檔案格式沒變。2.2.0 加了 `unlinked_page` warning，
   於是既有使用者什麼都沒改就從 exit 0 變 1。同理 2.2.1 的殘檔回報**刻意不計入 warning**——
   那會在 patch 版動到 exit code。
@@ -210,8 +217,9 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
   `§X.Y` 指向 [docs/搬遷工具_評估與規劃書.md](docs/搬遷工具_評估與規劃書.md)。
 - 函式庫公開面是 semver 契約：新 helper 一律 `internal`，`PolyMigrator` facade 是唯一有文件的
   進入點。測試靠 `InternalsVisibleTo`（`PolyMigrate.Core.Tests`）看得到內部型別；CLI（組件名 `polymigrate`）
-  也在 `InternalsVisibleTo` 裡——CLI 需要、但不該成為函式庫契約的細節（例如 `OrphanProber.ProbeDetailedAsync`）
-  走 internal，不要為了 CLI 擴大 public 面。
+  也在 `InternalsVisibleTo` 裡——CLI 需要、但不該成為函式庫契約的細節（例如 `PolyMigrator` 收 `HttpClient`
+  的 probe / fetch 多載，只給測試注入用）走 internal，不要為了 CLI 擴大 public 面。要公開的話先想清楚形狀：
+  一旦公開就凍結（3.0 把 `ProbeResult` 公開成唯讀的 `ProbeReport`，建構子刻意留 internal）。
 - 站別知識放 YAML config，不要進程式碼。
 - 收尾：CHANGELOG 補上本版段落（**tag 推出去就發佈了，沒有反悔的機會**），
   改過輸出格式就更新 `docs/contracts.md`，改過相依就更新 `THIRD-PARTY-NOTICES.md`，

@@ -16,7 +16,7 @@ public class OrphanCommandTests : CliTestBase
     [Fact]
     public async Task Probe_WritesSlugFile_LfSeparated_NoTrailingNewline_NoBom()
     {
-        // orphan_slugs.txt 是 fetch-orphans --slugs 的輸入,也常被 diff / wc -l 處理:格式要釘死
+        // orphan_slugs.<section>.txt 是 fetch-orphans --slugs 的輸入,也常被 diff / wc -l 處理:格式要釘死
         await using var server = new LoopbackHttpServer((_, path) =>
             path is "/ch/news/20200101.php" or "/ch/news/20200101A.php" or "/ch/news/12312020.php"
                 ? new LoopbackHttpServer.Response(200)

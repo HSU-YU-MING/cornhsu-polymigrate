@@ -2,7 +2,8 @@
 
 > 「可離線重跑」的前提:每個 Phase 的輸出是明確、版本化的檔案格式契約。
 > 契約定案後,才能只重跑 Phase 2 不重爬,也才是 NuGet lib 元件化的基礎。
-> 狀態:**自 1.0 起穩定。** 下列 CSV 格式與 frontmatter 欄位為對外契約,破壞性變更才升 major。
+> 狀態:**3.x 的契約。** 四面凍結:CLI 指令與參數(含預設值)、exit code、下列輸出檔格式(CSV 欄位、frontmatter 欄位)、
+> YAML config 欄位;動到任一面就升 major。與 2.x 的差異(exit code、孤兒頁清單的預設檔名)見 CHANGELOG 3.0.0。
 
 ## 通用規則
 
@@ -162,7 +163,8 @@ alternate 都指向首頁。限定「同語言」是因為多語站的合法情�
   寫編碼形式的話中日韓或含空白的舊網址永遠對不上);`{new}` 維持單次編碼(Location 標頭應為 ASCII),
   其中的 `$` 另編成 `%24`(`return` 會展開變數)。兩者含空白、`; { } " ' \ # $` 或控制字元時才加雙引號,
   引號內的 `"` 與 `\` 以反斜線跳脫。排序依寫出來的(解碼後的)路徑。
-- `_redirects` — Netlify 格式 `{old} {new} 301`(兩者皆為單次編碼的路徑)
+- `_redirects` — Netlify 格式 `{old} {new} 301`(兩者皆為單次編碼的路徑:Netlify 文件寫明路徑裡的特殊字元必須 URL 編碼,
+  見 <https://docs.netlify.com/manage/routing/redirects/overview/> 的 `_redirects` 語法段)
 
 兩者皆 UTF-8 無 BOM、`\n` 行尾、含結尾換行。
 
