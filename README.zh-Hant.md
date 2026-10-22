@@ -18,7 +18,8 @@
 改成符合 0 / 1 / 2 / 130 的契約(孤兒頁探測一個回答都沒拿到、npm 啟動腳本失敗、指令被中斷,都不再看起來像成功)、
 孤兒頁清單改成每個 section 一份(`orphan_slugs.<section>.txt`)、動畫 GIF / WebP 縮圖保留動畫,
 函式庫則多了 probe / fetch 入口與可取消的 overload。config 欄位、CSV 欄位、frontmatter 欄位都沒有變,
-但寫壞 CSS selector 的 config 現在任何指令一載入就擋下,不再等到哪一頁剛好用到才炸。**升級前請先看 CHANGELOG 3.0.0 的「升級必做」**。更早的沿革:2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
+但寫壞 CSS selector 的 config 現在任何指令一載入就擋下,不再等到哪一頁剛好用到才炸;孤兒頁探測有部分候選沒拿到回答時
+exit 1(清單照寫,但可能不完整)。**升級前請先看 CHANGELOG 3.0.0 的「升級必做」**。更早的沿革:2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
 收束到意圖中的進入點、移除未使用的 config 欄位;2.1 修補發佈管線(arm64 的 npm 平台包、
 符號套件),不過 Windows / Linux 的 arm64 平台包要到 2.3.1 修好啟動腳本才真的跑得起來;
 2.2 補上 `verify` 的盲點——沒有任何頁連過去的孤兒頁,因為巡檢是「跟著連結走」

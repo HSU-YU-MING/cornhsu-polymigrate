@@ -284,9 +284,10 @@ public class OrphanCommandTests : CliTestBase
     }
 
     [Fact]
-    public async Task Probe_SomeProbesUnanswered_WritesTheHits_AndWarnsTheListMayBeIncomplete()
+    public async Task Probe_SomeProbesUnanswered_WritesTheHits_WarnsTheListMayBeIncomplete_AndExitsOne()
     {
-        // 部分沒回答(例如 12 月整個月被限流):命中的照寫,但要講明清單可能不完整
+        // 部分沒回答(例如 12 月整個月被限流):命中的照寫,但要講明清單可能不完整。
+        // exit 1(3.0 起;2.x 印了 warning 卻回 0):契約的「1 = 有 warning、輸出仍可用」正是這個情況
         await using var server = new LoopbackHttpServer((_, path) => path switch
         {
             "/ch/news/20200101.php" => new LoopbackHttpServer.Response(200),
@@ -297,7 +298,7 @@ public class OrphanCommandTests : CliTestBase
 
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
-        Assert.Equal(0, r.Exit);
+        Assert.Equal(1, r.Exit);
         Assert.Equal("20200101"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.news.txt")));
         // 12 月 31 天 × 2 種格式 = 62 個沒回答;20200101 命中後的 A 探測(404)也算一次
         Assert.Equal(

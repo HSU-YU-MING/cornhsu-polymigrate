@@ -113,7 +113,8 @@ public static class Cli
                           --years: one year (2021) or a range (2021-2023).
                           --lang: defaults to the first url_pattern.lang_map key.
                           --out: defaults to <root>/orphan_slugs.<section>.txt (one list per section).
-                          Exits 2 without writing the list when no probe got a usable answer.
+                          Exits 1 when only some probes got no usable answer (the list may be incomplete),
+                          2 without writing the list when none did.
                     {Synopsis(FetchUsage)}
                           Fetch probed orphan pages (all langs) into raw/ and their assets into media/.
                           --slugs: defaults to <root>/orphan_slugs.<section>.txt, the list probe-orphans
@@ -512,11 +513,14 @@ public static class Cli
 
             File.WriteAllText(outFile, string.Join('\n', found));
             Console.WriteLine($"Probe done: {found.Count} orphan slugs -> {outFile}");
+            // 部分沒拿到回答:清單照寫(命中的都是真的),但可能不完整——正是契約的「1 = 有 warning、輸出仍可用」。
+            // 2.x 印了 warning 卻回 0,只看 exit code 的排程看不出這次漏了一段(3.0 起回 1)
             if (result.UnansweredCount > 0)
             {
                 Console.Error.WriteLine(
                     $"warning: {result.UnansweredCount} of {result.Checks} probes got no usable answer ({unanswered});"
                     + " the list may be incomplete. Rerun later to fill the gaps.");
+                return 1;
             }
             return 0;
         }

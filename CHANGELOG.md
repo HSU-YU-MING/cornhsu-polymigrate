@@ -18,7 +18,7 @@
    (例如 `orphan_slugs.news.txt`);不確定是哪個 section 的,就刪掉重探。腳本裡明寫 `--out` / `--slugs` 的不受影響。
    沒改名也不會靜默出錯:`fetch-orphans` 找不到新檔時會指出舊檔與改名方式並 exit 2,`probe-orphans` 會印一則 `note:`。
 2. **檢查 CI / 排程怎麼解讀 exit code**(見「exit code 對照表」),尤其是「0/1 放行」的流程:`probe-orphans` 一個回答都沒拿到、
-   npm 啟動腳本自己失敗,現在都是 **2**;`verify` 可能因為保留下來的 iframe 由 0/1 變 **2**;同步指令按一次 Ctrl-C 就是 **130**。
+   npm 啟動腳本自己失敗,現在都是 **2**;`probe-orphans` 有部分候選沒拿到回答時是 **1**(2.x 是 0);`verify` 可能因為保留下來的 iframe 由 0/1 變 **2**;同步指令按一次 Ctrl-C 就是 **130**。
 3. **重產動畫縮圖。** `thumbs` 會跳過已存在的縮圖:要拿到保留動畫的 GIF / WebP 縮圖,先刪掉 `media_thumb/` 裡的 `.gif` / `.webp` 再跑一次。
 4. **部署 `redirects.nginx.conf` 之前重新 `nginx -t`。** 含非 ASCII 或特殊字元的舊網址改寫成解碼後的路徑,寫法與排序都會變。
 5. **Windows 使用者:重跑 `extract` 後,每一個 `.md` 的行尾都會改變**(frontmatter 改成 `\n`),第一次 commit 會是整片的行尾 diff。
@@ -33,8 +33,11 @@
 - **`probe-orphans` 一個回答都沒拿到時 exit 2**(2.x:0)。每個候選都是連線錯誤、逾時、重試後仍 409,或 401/403/429/5xx 這類
   不是「有/沒有」的回答時——伺服器掛了、被 WAF 擋、`site.base_url` 打錯——2.x 只印警告、exit 0,只看 exit code 的排程會讀成
   「沒有孤兒頁」。清單照舊不寫(既有檔原樣保留,沒有檔也不建空檔),stderr 第一行改成 `error:` 並列出原因(例如 `HTTP 503: 732`)。
-  部分候選沒拿到回答時不變:照寫、警告清單可能不完整、exit 0。
   **遷移**:把 2 當成「這次沒問到,稍後重跑」,不要當成清單已經更新。
+- **`probe-orphans` 有部分候選沒拿到回答時 exit 1**(2.x:0)。清單照寫(命中的都是真的),stderr 照舊警告清單可能不完整、
+  列出原因與筆數——2.x 印了 `warning:` 卻回 0,只看 exit code 的排程看不出這次漏了一段(例如 12 月整個月被限流)。
+  契約的「1 = 有 warning、輸出仍可用」正是這個情況。
+  **遷移**:「0/1 放行」的流程不受影響;只接受 0 的流程,把 1 當成「清單可用但不完整,稍後重跑補齊」。
 - **`probe-orphans --out` / `fetch-orphans --slugs` 預設 `<root>/orphan_slugs.<section>.txt`**(2.x:各 section 共用
   `<root>/orphan_slugs.txt`——探第二個 section 會蓋掉第一個的清單,一個回答都沒拿到時留下來的也可能是別的 section 的)。
   2.x 的檔不讀、不寫、不刪;用到預設檔名而它還在時,stderr 印一則 `note:` 說明怎麼遷移(不影響 exit code);
@@ -88,7 +91,7 @@ IO 錯誤一律 2;未知指令 2。
 |---|---|---|---|---|
 | `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | 第一次 Ctrl-C |
 | `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | 第一次 Ctrl-C |
-| `probe-orphans` | 跑完(不論命中幾筆,含部分候選沒拿到回答) | — | `--years` 不合法;**一個回答都沒拿到**;沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
+| `probe-orphans` | 跑完、每個候選都拿到回答(不論命中幾筆) | **部分候選沒拿到回答**(清單照寫,可能不完整) | `--years` 不合法;**一個回答都沒拿到**;沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `verify` | 無 issue | 只有 warning | 有 error(含保留的 iframe 指向沒搬的站內頁);`--allow-unlinked` 檔不存在 | 第一次 Ctrl-C |
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | 第一次 Ctrl-C |
@@ -100,6 +103,7 @@ IO 錯誤一律 2;未知指令 2。
 |---|---|---|
 | **同步指令(`extract` / `thumbs` / `verify` / `slugs`)按一次 Ctrl-C** | 照常跑完,0/1/2 | 130 |
 | **`probe-orphans` 一個回答都沒拿到** | 0 | 2 |
+| **`probe-orphans` 部分候選沒拿到回答** | 0(有 `warning:`) | 1 |
 | **npm 啟動腳本自己失敗** | 1 | 2 |
 | **`verify`:保留的 iframe 指向沒搬過來的站內頁** | 0/1(iframe 不在 Markdown 裡) | 2 |
 | **`fetch-orphans` 沒給 `--slugs`,只有 2.x 的 `orphan_slugs.txt`** | 照讀(0/1) | 2(訊息講明怎麼改名) |
@@ -147,7 +151,7 @@ IO 錯誤一律 2;未知指令 2。
 - **`probe-orphans` 一個回答都沒拿到時,把既有的清單覆寫成空檔。** 連線錯誤、逾時、403/429/5xx 原本一律當成「不存在」,
   全部失敗時照樣「跑完、0 筆」——先前探好的清單(預設延遲下一年約 36 分鐘的請求量)被清空。現在分開統計「確定沒有」
   (404、410、其他 2xx、3xx)與「沒拿到回答」:一個回答都沒拿到時不寫清單(exit code 見「破壞性變更」);
-  部分沒拿到回答時照寫,stderr 警告清單可能不完整並列出原因。
+  部分沒拿到回答時照寫,stderr 警告清單可能不完整並列出原因(exit code 見「破壞性變更」)。
 - **`probe-orphans` 要整批探完才發現 `--out` 寫不出去。** 目錄不存在或 `--out` 指到一個目錄時,原本先發完一整輪請求
   (一年 730 個以上,預設延遲下約 36 分鐘)才在寫檔時 exit 2。現在探測前就檢查,一個請求都不發;檢查不留痕跡
   (既有檔內容與修改時間不變,原本沒有的檔不會被建成空檔)。exit code 仍是 2。(中斷時把已命中的部分寫出**刻意不做**:
@@ -229,7 +233,7 @@ IO 錯誤一律 2;未知指令 2。
   `[error] no_content` 明細本來就對,只有摘要誤導。現在印 `report : (not written)` 與 `media checks : skipped (content directory not found)`。
 - **CLI 內建說明和 parser 不一致,也漏寫預設值與別名。** `extract` 參數錯誤時印的 `Usage:` 沒有 `--dry-run`(與 `--help` 不同);
   六個指令的語法列現在只寫一次,`--help` 與參數錯誤的 `Usage:` 共用。`--help` 另補上:`--years` 可只給一年、`probe-orphans` 的
-  `--lang` 預設是 `lang_map` 第一個 key、`--out` / `--slugs` 的預設檔名、probe 一個回答都沒拿到時 exit 2、動畫縮圖保留每一格、
+  `--lang` 預設是 `lang_map` 第一個 key、`--out` / `--slugs` 的預設檔名、probe 部分 / 全部候選沒拿到回答時的 exit 1 / 2、動畫縮圖保留每一格、
   `-h` / `-v` 別名,以及「`--root` 預設是 config 所在目錄」。
 
 ### 文件

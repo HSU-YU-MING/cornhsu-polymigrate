@@ -23,7 +23,8 @@ npm launcher and an interrupted command no longer look like success), gives each
 orphan slug list (`orphan_slugs.<section>.txt`), keeps animated GIF/WebP thumbnails animated, and
 adds probe/fetch entry points and cancellable overloads to the library. Config fields, CSV columns
 and frontmatter fields are unchanged, but a config with an invalid CSS selector is now rejected
-when it is loaded, by every command, instead of when some page happens to use it.
+when it is loaded, by every command, instead of when some page happens to use it, and a probe in
+which only some candidates got no answer exits 1 (the list is written, but may be incomplete).
 **Read the 3.0 upgrade checklist in the CHANGELOG before upgrading**.
 Earlier history: 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused

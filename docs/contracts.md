@@ -231,7 +231,8 @@ exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_p
 一行一個 slug,依探測順序;UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**;每次探測跑完整份覆寫。
 例外:**一個回答都沒拿到**(每個候選都是連線錯誤、逾時、重試後仍 409,或 401/403/429/5xx 這類
 不是「有/沒有」的狀態)時不寫——既有檔原樣保留,沒有檔也不建空檔(空清單會被讀成「沒有孤兒頁」),
-stderr 印 `error:` 並列出原因,**exit 2**(2.3.1 以前是 0)。部分候選沒拿到回答時照寫,stderr 警告清單可能不完整(exit 0)。
+stderr 印 `error:` 並列出原因,**exit 2**(2.3.1 以前是 0)。部分候選沒拿到回答時照寫,stderr 警告清單可能不完整並列出原因,
+**exit 1**(有 warning、輸出仍可用;2.3.1 以前是 0)。
 「確定沒有」的回答是 404、410、其他 2xx,以及 3xx(probe 不跟轉址,轉址頁不算命中)。
 **2.x 的 `<root>/orphan_slugs.txt`**(各 section 共用一份)3.0 起不讀、不寫、不刪。用到預設檔名而它還在時,
 stderr 印一則 `note:` 說明怎麼遷移(它是哪個 section 的清單,就改名成 `orphan_slugs.<section>.txt`;否則刪掉),
@@ -267,7 +268,7 @@ config 的 CSS selector(`extract.content`、每一個 `type_rules.*.title_select
 |---|---|---|---|---|
 | `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | Ctrl-C |
 | `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | Ctrl-C |
-| `probe-orphans` | 跑完(不論命中幾筆,含部分候選沒拿到回答) | — | `--years` 不合法;一個回答都沒拿到(不寫清單,見上);沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
+| `probe-orphans` | 跑完、每個候選都拿到回答(不論命中幾筆) | 部分候選沒拿到回答(清單照寫,可能不完整) | `--years` 不合法;一個回答都沒拿到(不寫清單,見上);沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | Ctrl-C |
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | Ctrl-C |

@@ -79,6 +79,7 @@ public class GlobalCommandTests : CliTestBase
         Assert.Contains("--lang: defaults to the first url_pattern.lang_map key", help);
         Assert.Contains("--out: defaults to <root>/orphan_slugs.<section>.txt", help);
         Assert.Contains("--slugs: defaults to <root>/orphan_slugs.<section>.txt", help);
+        Assert.Contains("Exits 1 when only some probes got no usable answer (the list may be incomplete)", help);
     }
 
     [Theory]
