@@ -225,6 +225,22 @@ public class OrphanProberTests
     }
 
     [Fact]
+    public async Task Detailed_EveryCandidateAlreadyMirrored_IsNotNoUsableAnswers()
+    {
+        // 每個候選(連 A～D 後綴)都已鏡像:一個請求都不用發,Checks = 0、沒拿到回答的也是 0。
+        // 這是「確定沒有新孤兒頁」,不是「站沒回答」——NoUsableAnswers 必須是 false,否則 CLI 會 exit 2、不寫清單
+        // (審查 mutation H2B-4「NoUsableAnswers 不看 Checks > 0」原本存活)
+        var handler = new StubHandler(_ => StubHandler.Status(HttpStatusCode.ServiceUnavailable));
+
+        var result = await Prober(handler).ProbeDetailedAsync("ch", "news", 2021, 2021, KnownExceptFirst(0));
+
+        Assert.Empty(handler.Requests);
+        Assert.Equal(0, result.Checks);
+        Assert.Equal(0, result.UnansweredCount);
+        Assert.False(result.NoUsableAnswers);
+    }
+
+    [Fact]
     public async Task Detailed_RetrySucceeding_CountsAsAnswered()
     {
         // 第一次 409、重試拿到 404:有回答,不算進 Unanswered
