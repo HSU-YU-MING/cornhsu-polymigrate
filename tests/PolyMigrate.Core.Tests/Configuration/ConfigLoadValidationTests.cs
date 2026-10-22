@@ -123,6 +123,52 @@ public class ConfigLoadValidationTests
         Assert.Equal("site.yaml: config is invalid:\n  - " + error, Error(yaml));
     }
 
+    // ── YAML 重複 key:YamlDotNet 預設安靜接受、後者覆蓋前者(審查建議 4)──────────────────────────
+    // section_types: { news: article, news: event } 載入後只剩 event,沒有任何提示
+
+    [Fact]
+    public void DuplicateKey_InAMap_FailsAtLoad_NamingTheFieldAndLine()
+    {
+        var yaml = Yaml(extract: "  section_types: { news: article, news: event }\n");   // 第 9 行
+
+        Assert.Equal(
+            "site.yaml: config is invalid:\n"
+            + "  - extract.section_types: 'news' appears more than once (line 9); the later value would silently replace the earlier one.",
+            Error(yaml));
+    }
+
+    [Fact]
+    public void DuplicateTopLevelSection_FailsAtLoad()
+    {
+        var yaml = Yaml(tail: "extract:\n  content: \"body\"\n");   // 第二個 extract 在第 9 行
+
+        Assert.Contains("  - 'extract' appears more than once (line 9); the later value would silently replace the earlier one.", Error(yaml));
+    }
+
+    [Fact]
+    public void DuplicateKey_IsListedTogetherWithTheOtherProblems()
+    {
+        var yaml = Yaml(
+            urlPattern: "  strip_extensions: [php]\n",
+            extract: "  type_rules:\n    article:\n      title_selector: \"h3\"\n      title_selector: \"h3[[\"\n");
+
+        var message = Error(yaml);
+
+        Assert.Contains("  - extract.type_rules.article: 'title_selector' appears more than once (line 13);", message);
+        Assert.Contains("  - url_pattern.strip_extensions entry 'php'", message);
+        Assert.Contains("  - extract.type_rules.article.title_selector: 'h3[['", message);   // 後者照樣驗
+    }
+
+    [Fact]
+    public void SameKeyInDifferentMaps_IsNotADuplicate()
+    {
+        var config = SiteConfigLoader.Load(Yaml(extract:
+            "  section_types: { news: article }\n  section_flags: { news: needs_rebuild }\n"
+            + "  type_rules:\n    article:\n      remove_selectors: [h5, h5]\n    event:\n      remove_selectors: [h5]\n"));
+
+        Assert.Equal("needs_rebuild", config.Extract.SectionFlags["news"]);
+    }
+
     [Fact]
     public void EveryProblem_IsListedAtOnce()
     {

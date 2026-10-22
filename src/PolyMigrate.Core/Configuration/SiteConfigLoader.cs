@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using PolyMigrate.Core.Extraction;
 using PolyMigrate.Core.Pairing;
 using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -44,8 +45,10 @@ public static class SiteConfigLoader
             .Build();   // 不設 IgnoreUnmatchedProperties → 未知欄位一律報錯
 
         SiteConfig config;
+        List<string> duplicates;
         try
         {
+            duplicates = DuplicateKeys(yaml);
             config = deserializer.Deserialize<SiteConfig>(yaml)
                 ?? throw new ConfigException($"{sourceName}: config is empty.");
         }
@@ -54,13 +57,95 @@ public static class SiteConfigLoader
             throw new ConfigException($"{sourceName}: invalid config — {ex.InnerException?.Message ?? ex.Message}", ex);
         }
 
-        Validate(config, sourceName);
+        Validate(config, sourceName, duplicates);
         return config;
     }
 
-    private static void Validate(SiteConfig c, string src)
+    /// <summary>
+    /// 同一個對照表裡重複的 key。YamlDotNet 預設安靜接受、後者覆蓋前者(<c>section_types: { news: article, news: event }</c>
+    /// 載入後只剩 event,沒有任何提示;審查建議 4)。逐一走解析事件,記下每個對照表的路徑,訊息點名欄位與行號;
+    /// 與其餘的驗證錯誤一起列出(後者照樣驗——用的是覆蓋後的值)。
+    /// </summary>
+    private static List<string> DuplicateKeys(string yaml)
     {
-        var errors = new List<string>();
+        var problems = new List<string>();
+        var stack = new Stack<YamlLevel>();
+        var parser = new Parser(new StringReader(yaml));
+        while (parser.MoveNext())
+        {
+            switch (parser.Current)
+            {
+                case MappingStart or SequenceStart:
+                    var path = stack.TryPeek(out var parent) ? parent.ChildPath() : "";
+                    stack.Push(new YamlLevel(parser.Current is MappingStart, path));
+                    break;
+                case MappingEnd or SequenceEnd:
+                    stack.Pop();
+                    break;
+                case Scalar scalar when stack.TryPeek(out var level):
+                    if (level.Mapping && level.ExpectKey && !level.Keys.Add(scalar.Value))
+                    {
+                        var where = level.Path.Length == 0 ? "" : $"{level.Path}: ";
+                        problems.Add($"{where}'{scalar.Value}' appears more than once (line {scalar.Start.Line}); the later value would silently replace the earlier one.");
+                    }
+                    level.Consume(scalar.Value);
+                    break;
+                case AnchorAlias when stack.TryPeek(out var level):
+                    level.Consume(null);
+                    break;
+            }
+        }
+        return problems;
+    }
+
+    /// <summary><see cref="DuplicateKeys"/> 走到的一層對照表或清單。</summary>
+    private sealed class YamlLevel(bool mapping, string path)
+    {
+        public bool Mapping { get; } = mapping;
+        public string Path { get; } = path;
+        public HashSet<string> Keys { get; } = new(StringComparer.Ordinal);
+        public bool ExpectKey { get; private set; } = true;
+        private string? _key;
+        private int _index;
+
+        /// <summary>下一個子節點(對照表的值、清單的項目)的路徑,並把這一層推進到下一格。</summary>
+        public string ChildPath()
+        {
+            if (!Mapping)
+            {
+                return $"{Path}[{_index++}]";
+            }
+            if (ExpectKey)
+            {
+                ExpectKey = false;   // 複合 key(很少見):不追蹤它的路徑
+                return $"{Path}.?";
+            }
+            ExpectKey = true;
+            return Path.Length == 0 ? _key ?? "" : $"{Path}.{_key}";
+        }
+
+        /// <summary>這一層讀到一個純量(對照表的 key 或值、清單的項目)。</summary>
+        public void Consume(string? scalar)
+        {
+            if (!Mapping)
+            {
+                _index++;
+            }
+            else if (ExpectKey)
+            {
+                _key = scalar;
+                ExpectKey = false;
+            }
+            else
+            {
+                ExpectKey = true;
+            }
+        }
+    }
+
+    private static void Validate(SiteConfig c, string src, List<string> duplicates)
+    {
+        var errors = new List<string>(duplicates);
 
         if (c.ConfigVersion != 1)
         {

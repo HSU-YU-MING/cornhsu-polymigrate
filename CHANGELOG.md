@@ -83,6 +83,8 @@
   某一頁才炸——2.x 的這些值不是到使用時才擲例外,就是安靜地產出錯的東西。新增的載入時檢查:
   - **寫了 key 卻沒給值**(`site:`、`title_noise:` 後面什麼都沒有,或清單裡的 `~`):2.x 在載入或使用時 `NullReferenceException`
     (未處理例外,exit code 不在契約內)或 `Value cannot be null`。現在逐一點名(清單、對照表提示寫 `[]` / `{}` 或拿掉 key)。
+  - **重複的 key**:同一個對照表裡同一個 key 出現兩次(`section_types: { news: article, news: event }`),2.x 安靜地讓後者蓋掉前者;
+    現在點名欄位與行號。
   - `extract.strip_title_prefix`:用與標題清理相同的選項編譯 regex(2.x 要到 `extract` 建標題清理器時才 exit 2,
     訊息是 .NET 的 `Invalid pattern …`、沒點名欄位;`thumbs` / `probe-orphans` 永遠不報)。
   - `site.base_url`:不可帶 query 或 fragment(網址一律組成 `<base_url>/<路徑>`,2.x 照樣把路徑接在 `?…` 後面發出去)。
