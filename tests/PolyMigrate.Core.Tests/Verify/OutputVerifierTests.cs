@@ -545,6 +545,20 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Fact]
+    public void PageOnlyReachedThroughDataSrc_StillCountsAsLinked_ButIsNotCheckedAsALink()
+    {
+        // 第三輪審查 B3:75fbf30 讓 data-src 不再被當成連結檢查(不報假的 broken_link),但也連帶不再算入口——
+        // 只被 lazy-load iframe 指到的頁開始報 unlinked_page,verify 由 0 變 1。入口照 9d17071 算,只是不檢查壞連結
+        AddPage("ch/index.md", body: "<iframe data-src=\"/ch/news/d\" src=\"about:blank\"></iframe>"
+            + "<iframe data-src=\"/ch/news/nope\"></iframe>", pageType: "page");
+        AddPage("ch/news/d.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);   // d 不是孤島;/ch/news/nope 也不報 broken_link
+    }
+
+    [Fact]
     public void PageOnlyEmbeddedByAnIframe_CountsAsLinked()
     {
         // 現況(待維護者裁定,見決策紀錄「被 iframe 嵌入算不算有入口」):iframe 的 src 與 <a href> 一樣

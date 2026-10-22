@@ -170,6 +170,22 @@ public sealed partial class OutputVerifier
                     }
                 }
             }
+
+            // data-src / data-href 這類:不檢查壞連結(不是瀏覽器會載入的網址),但照樣算入口——
+            // 只被 lazy-load iframe 指到的頁,在新站上(沿用那段 JS 時)訪客還是到得了;
+            // 不算的話它會開始報 unlinked_page,verify 由 0 變 1(第三輪審查 B3)
+            foreach (var reference in ExtractEntryOnlyRefs(body))
+            {
+                if (reference.StartsWith(mediaPrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var route = ResolveRoute(reference, routes);
+                if (route != selfRoute)
+                {
+                    referenced.Add(route);
+                }
+            }
         }
 
         issues.AddRange(FindOrphans(pageRoutes, referenced, allowUnlinked));
@@ -315,6 +331,24 @@ public sealed partial class OutputVerifier
         }
     }
 
+    /// <summary>
+    /// 只算入口、不檢查的站內引用:屬性名以 href / src 結尾、但前面還連著字(data-src、data-href、xsrc)。
+    /// 用的是 9d17071 原本那條沒有邊界的比對,扣掉 <see cref="HtmlTarget"/> 已經抓到的——
+    /// 入口集合因此與 9d17071 相同,只是這些不再報 broken_link。
+    /// </summary>
+    private static IEnumerable<string> ExtractEntryOnlyRefs(string body)
+    {
+        var checkedAt = HtmlTarget().Matches(body).Select(m => m.Index).ToHashSet();
+        foreach (Match m in AnyHrefOrSrcAttribute().Matches(body))
+        {
+            var value = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
+            if (!checkedAt.Contains(m.Index) && value is ['/', not '/', ..])
+            {
+                yield return value;
+            }
+        }
+    }
+
     private static HashSet<string> LoadKnownMissing(string outDir)
     {
         var known = new HashSet<string>(StringComparer.Ordinal);
@@ -353,4 +387,8 @@ public sealed partial class OutputVerifier
     // 沒有邊界的話它們也被當成站內連結,指向已搬好的頁照樣報 broken_link(第二輪審查實測 exit 0 → 2)
     [GeneratedRegex("""(?<![\w-])(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlTarget();
+
+    // 沒有邊界的版本(9d17071 的 HtmlTarget):只拿來找「算入口、不檢查」的那些,見 ExtractEntryOnlyRefs
+    [GeneratedRegex("""(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", RegexOptions.IgnoreCase)]
+    private static partial Regex AnyHrefOrSrcAttribute();
 }

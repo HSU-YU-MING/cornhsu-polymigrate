@@ -62,6 +62,25 @@ public class VerifyCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task PagesReachedOnlyViaFtpLinkOrDataSrc_AreNotUnlinked()
+    {
+        // 第三輪審查 B3 的重現(review3 的 site-up):9d17071 回 0,9254591 / 75fbf30 之後回 1——
+        // 同 host 的 ftp:// 連結與 data-src 不再算入口,被它們指到、又沒有其他入口的頁開始報 unlinked_page
+        var config = Write("site/site.yaml", Config().Replace("base_url: https://example.invalid", "base_url: https://legacy.example.org"));
+        Write("site/raw/ch/index.php.html", Page("<a href=\"/ch/news/a.php\">a</a> <a href=\"/ch/news/c.php\">c</a>"));
+        Write("site/raw/ch/news/a.php.html", Page("<a href=\"ftp://legacy.example.org/ch/news/b.php\">b via ftp</a>"));
+        Write("site/raw/ch/news/b.php.html", Page("<p>b</p>"));
+        Write("site/raw/ch/news/c.php.html", Page("<iframe data-src=\"/ch/news/d\" src=\"about:blank\"></iframe>"));
+        Write("site/raw/ch/news/d.php.html", Page("<p>d</p>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(0, r.Exit);
+        Assert.DoesNotContain("unlinked_page", r.Out);
+    }
+
+    [Fact]
     public async Task KeptIframe_ToASameSitePageNotInTheMirror_IsABrokenLink()
     {
         // 剩下真的會多報的情境:iframe 指向沒搬過來的站內舊網址(例如表單頁)。修 H3 之前這個 iframe
