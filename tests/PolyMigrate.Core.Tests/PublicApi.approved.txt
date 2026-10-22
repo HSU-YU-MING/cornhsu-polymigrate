@@ -156,6 +156,7 @@
    public static HttpClient CreateHttpClient(PolyMigrate.Core.Configuration.SiteConfig config, bool allowRedirects = false)
    public static IEnumerable<string> DateCandidates(int yearFrom, int yearTo)
    public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section)
+   public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section, IReadOnlyList<string> stripExtensions)
    public Task<List<string>> ProbeAsync(string langPrefix, string section, int yearFrom, int yearTo, IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default)
 
 ## sealed class PolyMigrate.Core.PolyMigrator

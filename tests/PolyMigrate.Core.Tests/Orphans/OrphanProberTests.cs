@@ -348,6 +348,30 @@ public class OrphanProberTests
         }
     }
 
+    [Theory]
+    // 檔名                    不帶 config(啟發式)   strip_extensions: [.php](與 extract 相同)
+    [InlineData("jane.doe.html", "jane", "jane.doe")]
+    [InlineData("a.php5.html", "a", "a.php5")]
+    [InlineData("A.PHP.html", "A", "A.PHP")]
+    [InlineData("20210101.php.html", "20210101", "20210101")]
+    public void KnownSlugs_WithStripExtensions_MatchesExtract_WhereTheHeuristicCannot(string file, string heuristic, string withConfig)
+    {
+        // 3.0 起 public:函式庫呼叫端手上有 config 時,拿得到與 CLI probe-orphans 相同的已知 slug 集
+        var raw = Directory.CreateTempSubdirectory("polymigrate-known").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(raw, "ch", "news"));
+            File.WriteAllText(Path.Combine(raw, "ch", "news", file), "");
+
+            Assert.Equal([heuristic], OrphanProber.KnownSlugs(raw, "ch", "news"));
+            Assert.Equal([withConfig], OrphanProber.KnownSlugs(raw, "ch", "news", [".php"]));
+        }
+        finally
+        {
+            Directory.Delete(raw, recursive: true);
+        }
+    }
+
     [Fact]
     public void CreateHttpClient_NoAuthWorkaround_SendsNoCookie_AndConfiguredUserAgent()
     {

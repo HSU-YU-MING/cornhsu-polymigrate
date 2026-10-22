@@ -54,17 +54,16 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
     /// 的 slug 在這些情況不一致:乾淨網址站的 <c>jane.doe.html</c>(這裡得到 <c>jane</c>);<c>strip_extensions: []</c> 的
     /// <c>foo.php.html</c>(這裡得到 <c>foo</c>);副檔名不在 <c>strip_extensions</c> 裡的(只列 <c>.php</c> 時的
     /// <c>a.php5.html</c>、<c>a.asp.html</c>,這裡得到 <c>a</c>);大小寫不符的(<c>A.PHP.html</c>,這裡得到 <c>A</c>)。
-    /// CLI 的 <c>probe-orphans</c> 改用依 <c>url_pattern.strip_extensions</c> 的規則,與 <c>extract</c> 完全一致,
-    /// 所以在這些情況下此方法的結果會與 CLI 不同。</para>
+    /// 手上有 config 時用帶 <c>stripExtensions</c> 的多載,結果與 <c>extract</c> 及 CLI 的 <c>probe-orphans</c> 一致。</para>
     /// </summary>
     public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section) =>
         Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section);
 
     /// <summary>
-    /// 同上,但依 config 的 <c>strip_extensions</c> 剝檔名尾綴——與 extract 完全相同的 slug 規則
-    /// (上面那個不帶 config,只能用啟發式;public 簽章不動)。CLI 的 probe-orphans 用這個。
+    /// 同上,但依 config 的 <c>url_pattern.strip_extensions</c> 剝檔名尾綴(傳 <c>config.UrlPattern.StripExtensions</c>):
+    /// 與 <c>extract</c> 寫出的 slug 完全相同的規則,CLI 的 <c>probe-orphans</c> 用的就是這個(3.0 起 public)。
     /// </summary>
-    internal static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section, IReadOnlyList<string> stripExtensions) =>
+    public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section, IReadOnlyList<string> stripExtensions) =>
         Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section, stripExtensions);
 
     public async Task<List<string>> ProbeAsync(
