@@ -7,7 +7,7 @@
 ## 通用規則
 
 - 表格清單(`*.csv`,含 `verify_report.csv`)一律 UTF-8 **含 BOM**(人工覆核走 Excel,無 BOM 中文會亂碼)、`\r\n` 行尾(最後一列也是)、RFC 4180 跳脫;欄位順序固定,列排序規則明確(決定性輸出,§3.10)。
-  純文字清單 `need_fetch_media.txt`、`orphan_slugs.txt` 不是 CSV,格式見各自段落。
+  純文字清單 `need_fetch_media.txt`、`orphan_slugs.<section>.txt` 不是 CSV,格式見各自段落。
 - **CSV 公式注入防護**(1.1.2 起):交付用 CSV 的欄位若以 `=` `+` `-` `@`、tab 或 CR 開頭,寫出時會前置一個單引號 `'`
   (Excel 才不會把它當公式執行),所以這類欄位讀回來比原始資料多一個前綴字元。內部快取 `.polymigrate/media_sha1_cache.csv` 不加。
 - Markdown(`content/**/*.md`)UTF-8 **無 BOM**;結構為 `---\n` + frontmatter + `---\n\n` + 內文 + `\n`,
@@ -221,21 +221,24 @@ UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**(0 筆時為空檔);ordinal 
 exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_page` 之後,
 原本 exit 0 的專案可能變成 exit 1。
 
-## `probe-orphans` → `fetch-orphans`:`orphan_slugs.txt`
+## `probe-orphans` → `fetch-orphans`:`orphan_slugs.<section>.txt`
 
-`probe-orphans` 的輸出、`fetch-orphans --slugs` 的預設輸入(皆預設 `<root>/orphan_slugs.txt`)。
+`probe-orphans` 的輸出、`fetch-orphans --slugs` 的預設輸入,**每個 section 一份**:皆預設
+`<root>/orphan_slugs.<section>.txt`(例如 `--section news` → `orphan_slugs.news.txt`;3.0 起)。
+`--section` 不是單一名稱(含 `/` `\` `:`,或是 `.` `..`)時拼不出預設檔名 → exit 2,請以 `--out` / `--slugs` 指定。
 一行一個 slug,依探測順序;UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**;每次探測跑完整份覆寫。
 例外:**一個回答都沒拿到**(每個候選都是連線錯誤、逾時、重試後仍 409,或 401/403/429/5xx 這類
 不是「有/沒有」的狀態)時不寫——既有檔原樣保留,沒有檔也不建空檔(空清單會被讀成「沒有孤兒頁」),
 stderr 印 `error:` 並列出原因,**exit 2**(2.3.1 以前是 0)。部分候選沒拿到回答時照寫,stderr 警告清單可能不完整(exit 0)。
 「確定沒有」的回答是 404、410、其他 2xx,以及 3xx(probe 不跟轉址,轉址頁不算命中)。
-**檔案是各 section 共用的**:預設 `--out` 對每個 `--section` 都是同一個 `<root>/orphan_slugs.txt`,所以「保留下來的舊檔」
-可能是另一個 section 探到的清單(stderr 會明講);探不只一個 section 時,請每個 section 各自指定 `--out`,
-並以 `fetch-orphans --slugs` 餵回同一個 section 的清單。
+**2.x 的 `<root>/orphan_slugs.txt`**(各 section 共用一份)3.0 起不讀、不寫、不刪。用到預設檔名而它還在時,
+stderr 印一則 `note:` 說明怎麼遷移(它是哪個 section 的清單,就改名成 `orphan_slugs.<section>.txt`;否則刪掉),
+不影響 exit code;`fetch-orphans` 找不到 `orphan_slugs.<section>.txt`、但舊檔在時,錯誤訊息(exit 2)
+也講明改名或以 `--slugs` 指定舊檔。
 `fetch-orphans` 讀取時逐行去頭尾空白、略過空行,所以 `slugs` 的輸出或手寫清單也能直接餵。
 清單以 UTF-8 讀取(有 BOM 時依 BOM 判斷 UTF-8 / UTF-16 / UTF-32)。
 
-但書:`slugs` 寫的是 stdout,行尾為 `Environment.NewLine`(Windows 為 `\r\n`),不是上面 `orphan_slugs.txt`
+但書:`slugs` 寫的是 stdout,行尾為 `Environment.NewLine`(Windows 為 `\r\n`),不是上面 `orphan_slugs.<section>.txt`
 的固定格式;行尾不影響 `fetch-orphans`(逐行讀取)。編碼:
 - **stdout 被導到檔案時(cmd、Git Bash 的 `>`)一律是無 BOM 的 UTF-8**,與 console 碼頁無關——
   在 zh-TW Windows(cp950)上導檔,`fetch-orphans` 也讀得回中日韓 slug。
@@ -260,8 +263,8 @@ config 的 CSS selector(`extract.content`、`type_rules.*.title_selector` / `rem
 |---|---|---|---|---|
 | `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | Ctrl-C |
 | `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | Ctrl-C |
-| `probe-orphans` | 跑完(不論命中幾筆,含部分候選沒拿到回答) | — | `--years` 不合法;一個回答都沒拿到(不寫清單,見上) | Ctrl-C |
-| `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在 | Ctrl-C |
+| `probe-orphans` | 跑完(不論命中幾筆,含部分候選沒拿到回答) | — | `--years` 不合法;一個回答都沒拿到(不寫清單,見上);沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
+| `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | Ctrl-C |
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | Ctrl-C |
 
@@ -276,7 +279,7 @@ PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編
 `probe-orphans` / `fetch-orphans` 隨時(等待中的延遲與進行中的請求都會被打斷);`slugs` 印出第一行之前。
 檢查點之間的單一步驟(一頁的抽取、一張圖的縮放、`extract` 的配對計算)會先做完。
 已寫出的 `.md`、縮圖、`raw/` 頁與資產保留(只寫不刪;縮圖與孤兒頁是原子寫入,不會留半截檔),已算好的媒體雜湊盡量存進內部快取(在算雜湊途中或「開始寫清單」那個檢查點取消都會存;存不了不影響 130);
-`extract` 的清單檔、`verify_report.csv`、`orphan_slugs.txt` 被中斷時一份都不寫,`slugs` 的 stdout 一行都不印。
+`extract` 的清單檔、`verify_report.csv`、`orphan_slugs.<section>.txt` 被中斷時一份都不寫,`slugs` 的 stdout 一行都不印。
 第二次 Ctrl-C 不再攔截,由 runtime 直接終止行程(給單一步驟本身就很久時的逃生門),不經 PolyMigrate 收尾,
 結束碼由作業系統決定。(2.3.1 以前只有 `probe-orphans` / `fetch-orphans` 接取消訊號,其餘指令要第二次才停、
 而且拿不到 130。)

@@ -70,15 +70,15 @@ public class GlobalCommandTests : CliTestBase
     public async Task Help_StatesAliasesAndDefaults()
     {
         // 原本 --help 沒寫:-h / -v 別名、--years 可只給一年、probe 的 --lang 預設是 lang_map 第一個 key、
-        // probe 的 --out 與 fetch 的 --slugs 預設 <root>/orphan_slugs.txt
+        // probe 的 --out 與 fetch 的 --slugs 預設 <root>/orphan_slugs.<section>.txt(3.0 起每個 section 一份)
         var help = (await Run("--help")).Out;
 
         Assert.Contains("polymigrate --help, -h", help);
         Assert.Contains("polymigrate --version, -v", help);
         Assert.Contains("--years: one year (2021) or a range (2021-2023)", help);
         Assert.Contains("--lang: defaults to the first url_pattern.lang_map key", help);
-        Assert.Contains("--out: defaults to <root>/orphan_slugs.txt", help);
-        Assert.Contains("--slugs: defaults to <root>/orphan_slugs.txt", help);
+        Assert.Contains("--out: defaults to <root>/orphan_slugs.<section>.txt", help);
+        Assert.Contains("--slugs: defaults to <root>/orphan_slugs.<section>.txt", help);
     }
 
     [Theory]

@@ -111,12 +111,12 @@ public static class Cli
                           Polite (site.polite.delay_ms) and sends site.auth_workaround cookies.
                           --years: one year (2021) or a range (2021-2023).
                           --lang: defaults to the first url_pattern.lang_map key.
-                          --out: defaults to <root>/orphan_slugs.txt, shared by every --section;
-                          probing more than one section? give each its own --out.
+                          --out: defaults to <root>/orphan_slugs.<section>.txt (one list per section).
+                          Exits 2 without writing the list when no probe got a usable answer.
                     {Synopsis(FetchUsage)}
                           Fetch probed orphan pages (all langs) into raw/ and their assets into media/.
-                          --slugs: defaults to <root>/orphan_slugs.txt (one slug per line); pass the list
-                          probed for the same --section.
+                          --slugs: defaults to <root>/orphan_slugs.<section>.txt, the list probe-orphans
+                          wrote for the same --section (one slug per line).
                     {Synopsis(VerifyUsage)}
                           Verify extracted output: frontmatter fields, internal links, media refs,
                           and unlinked pages — pages no other page links to, which visitors can
@@ -463,7 +463,21 @@ public static class Cli
             var config = SiteConfigLoader.LoadFile(configPath);
             var langPrefix = options.GetValueOrDefault("--lang", config.UrlPattern.LangMap.Keys.First());
             var root = ResolveRoot(configPath, options);
-            var outFile = Path.GetFullPath(options.GetValueOrDefault("--out", Path.Combine(root, "orphan_slugs.txt")));
+            string outFile;
+            if (options.TryGetValue("--out", out var outOption))
+            {
+                outFile = Path.GetFullPath(outOption);
+            }
+            else if (DefaultSlugFile(root, section) is { } perSection)
+            {
+                outFile = perSection;
+                NoteLegacySlugFile(root, section, outFile);
+            }
+            else
+            {
+                Console.Error.WriteLine($"--section '{section}' can't be part of the default slug file name; pass --out <file>.");
+                return 2;
+            }
             EnsureWritable(outFile);
             var known = PolyMigrate.Core.Orphans.OrphanProber.KnownSlugs(
                 Path.Combine(root, "raw"), langPrefix, section, config.UrlPattern.StripExtensions);   // 與 extract 同一條 slug 規則
@@ -487,12 +501,10 @@ public static class Cli
                 Console.Error.WriteLine(
                     $"error: none of the {result.Checks} probes got a usable answer ({unanswered})."
                     + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.");
-                // 保留下來的舊檔不一定是這個 section 的:預設的 --out 是各 section 共用的同一個檔,
-                // B 全部失敗時留著的可能是 A 的清單,接著跑 fetch-orphans --section B 就會拿 A 的 slug 去抓
+                // 2.x 的預設 --out 是各 section 共用的同一個檔,這裡還得警告「留著的可能是別的 section 的清單」;
+                // 3.0 起預設檔名帶 section,留著的就是這個 section 先前探到的
                 Console.Error.WriteLine(File.Exists(outFile)
-                    ? $"warning: {outFile} was left as it was: it holds an earlier probe's list, possibly for another"
-                        + " --section (the default --out is shared by all sections). Don't feed it to"
-                        + $" 'fetch-orphans --section {section}' until a probe of {section} succeeds; give each section its own --out."
+                    ? $"warning: {outFile} was left as it was (it holds an earlier probe's list)."
                     : $"warning: {outFile} was not written; an empty list would read as \"no orphan pages\".");
                 return 2;
             }
@@ -530,10 +542,43 @@ public static class Cli
         {
             var config = SiteConfigLoader.LoadFile(configPath);
             var root = ResolveRoot(configPath, options);
-            var slugsFile = Path.GetFullPath(options.GetValueOrDefault("--slugs", Path.Combine(root, "orphan_slugs.txt")));
-            if (!File.Exists(slugsFile))
+            string slugsFile;
+            if (options.TryGetValue("--slugs", out var slugsOption))
             {
-                Console.Error.WriteLine($"Slug list not found: {slugsFile} (run probe-orphans first)");
+                slugsFile = Path.GetFullPath(slugsOption);
+                if (!File.Exists(slugsFile))
+                {
+                    Console.Error.WriteLine($"Slug list not found: {slugsFile} (run probe-orphans first)");
+                    return 2;
+                }
+            }
+            else if (DefaultSlugFile(root, section) is { } perSection)
+            {
+                slugsFile = perSection;
+                var legacy = Path.Combine(root, LegacySlugFileName);
+                if (!File.Exists(slugsFile))
+                {
+                    // 2.x 的共用清單不自動讀(它可能是任何一個 section 的),但手上明明有一份清單時,
+                    // 只說「找不到」會讓人以為清單不見了:講明它是什麼、怎麼遷移
+                    if (File.Exists(legacy))
+                    {
+                        Console.Error.WriteLine($"Slug list not found: {slugsFile}.");
+                        Console.Error.WriteLine(
+                            $"{legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section;"
+                            + $" 3.0 no longer reads it on its own. If it holds the {section} list, rename it to"
+                            + $" orphan_slugs.{section}.txt, or pass --slugs {legacy}.");
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine($"Slug list not found: {slugsFile} (run probe-orphans first)");
+                    }
+                    return 2;
+                }
+                NoteLegacySlugFile(root, section, slugsFile);
+            }
+            else
+            {
+                Console.Error.WriteLine($"--section '{section}' can't be part of the default slug file name; pass --slugs <file>.");
                 return 2;
             }
             var slugs = File.ReadAllLines(slugsFile).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
@@ -558,6 +603,33 @@ public static class Cli
         catch (Exception ex) when (IsHandled(ex))
         {
             return Report(ex);
+        }
+    }
+
+    /// <summary>2.x 的預設清單檔(各 section 共用一份)。3.0 起不讀、不寫、不刪,只用來提示怎麼遷移。</summary>
+    private const string LegacySlugFileName = "orphan_slugs.txt";
+
+    /// <summary>
+    /// probe 的 <c>--out</c> 與 fetch 的 <c>--slugs</c> 的預設值:<c>&lt;root&gt;/orphan_slugs.&lt;section&gt;.txt</c>
+    /// (3.0 起每個 section 一份,決策檔 H2 選項 E)。2.x 各 section 共用 <c>orphan_slugs.txt</c>:探第二個 section
+    /// 就蓋掉第一個的清單,一個回答都沒拿到時留下來的也可能是別的 section 的。
+    /// section 不是單一名稱(含 <c>/</c> <c>\</c> <c>:</c>、或是 <c>.</c> <c>..</c>)時拼不出檔名 → null,由呼叫端請使用者明確指定。
+    /// </summary>
+    private static string? DefaultSlugFile(string root, string section) =>
+        section is "" or "." or ".." || section.AsSpan().IndexOfAny('/', '\\', ':') >= 0
+            ? null
+            : Path.GetFullPath(Path.Combine(root, $"orphan_slugs.{section}.txt"));
+
+    /// <summary>用到預設檔名、而 2.x 的共用清單還在時,講一次它不再被讀寫、以及怎麼遷移(不改 exit code)。</summary>
+    private static void NoteLegacySlugFile(string root, string section, string perSection)
+    {
+        var legacy = Path.Combine(root, LegacySlugFileName);
+        if (File.Exists(legacy))
+        {
+            Console.Error.WriteLine(
+                $"note: {legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section."
+                + $" Since 3.0 the default list is per section ({perSection}) and the old file is no longer read or written."
+                + $" If it holds the {section} list, rename it to orphan_slugs.{section}.txt; otherwise delete it.");
         }
     }
 

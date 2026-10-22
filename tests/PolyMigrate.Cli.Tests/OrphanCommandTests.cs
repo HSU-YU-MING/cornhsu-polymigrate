@@ -26,7 +26,7 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
         Assert.Equal(0, r.Exit);
-        var slugFile = PathOf("site/orphan_slugs.txt");   // 預設 <root>/orphan_slugs.txt
+        var slugFile = PathOf("site/orphan_slugs.news.txt");   // 預設 <root>/orphan_slugs.<section>.txt
         Assert.Equal("20200101\n20200101A\n12312020"u8.ToArray(), File.ReadAllBytes(slugFile));
         Assert.Contains($"Probing {server.BaseUrl}/ch/news/ for 2020-2020 (0 known slugs skipped, delay 0ms)...\n", r.Out);
         Assert.Contains($"Probe done: 3 orphan slugs -> {slugFile}\n", r.Out);
@@ -48,7 +48,7 @@ public class OrphanCommandTests : CliTestBase
         Assert.Equal(0, r.Exit);
         Assert.Contains($"Probing {server.BaseUrl}/en/news/", r.Out);
         Assert.All(server.Requests, q => Assert.StartsWith("HEAD /en/news/", q));
-        Assert.Equal(""u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));   // 0 筆 = 空檔
+        Assert.Equal(""u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.news.txt")));   // 0 筆 = 空檔
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class OrphanCommandTests : CliTestBase
         Assert.Contains("HEAD /en/news/01012021A.php", server.Requests);
         Assert.Equal(365 * 2, server.Requests.Count);
         Assert.True(File.Exists(outFile));
-        Assert.False(File.Exists(PathOf("work/orphan_slugs.txt")));
+        Assert.False(File.Exists(PathOf("work/orphan_slugs.news.txt")));
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class OrphanCommandTests : CliTestBase
             return LoopbackHttpServer.Response.NotFound;
         });
         var config = SiteConfig(server.BaseUrl);
-        var slugFile = Write("site/orphan_slugs.txt", "20190101\n20190102");
+        var slugFile = Write("site/orphan_slugs.news.txt", "20190101\n20190102");
 
         var r = await RunWith(cts.Token, "probe-orphans", config, "--section", "news", "--years", "2020");
 
@@ -137,7 +137,7 @@ public class OrphanCommandTests : CliTestBase
 
         Assert.Equal(0, probe.Exit);
         Assert.Contains($"Probing {server.BaseUrl}/news/ for 2020-2020", probe.Out);
-        Assert.Equal("20200101"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
+        Assert.Equal("20200101"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.news.txt")));
         Assert.Equal(0, fetch.Exit);
         Assert.Contains("GET /news/20200101.php", server.Requests);
         Assert.DoesNotContain(server.Requests, q => q.Contains("//"));
@@ -161,7 +161,7 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2021");
 
         Assert.Equal(0, r.Exit);
-        Assert.Equal("20210105A\n20210107"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
+        Assert.Equal("20210105A\n20210107"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.news.txt")));
     }
 
     [Fact]
@@ -173,22 +173,97 @@ public class OrphanCommandTests : CliTestBase
         // 「真的沒有」與「根本沒問到」
         await using var server = new LoopbackHttpServer((_, _) => new LoopbackHttpServer.Response(503));
         var config = SiteConfig(server.BaseUrl);
-        var slugFile = Write("site/orphan_slugs.txt", "20190101\n20190102");
+        var slugFile = Write("site/orphan_slugs.news.txt", "20190101\n20190102");
 
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
         Assert.Equal(2, r.Exit);
         Assert.Equal("20190101\n20190102", File.ReadAllText(slugFile));
-        // 審查 minor 6:預設的 --out 是各 section 共用的 <root>/orphan_slugs.txt,保留下來的可能是另一個
-        // section 的清單——接著跑 fetch-orphans --section news 就會拿別人的 slug 去抓。訊息要講明這一點
+        // 預設檔名帶 section(3.0),保留下來的就是這個 section 先前的清單;2.x 共用一個檔時要另外警告
+        // 「可能是別的 section 的」,那段話已經不需要
         Assert.Equal(
             "error: none of the 732 probes got a usable answer (HTTP 503: 732)."
             + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.\n"
-            + $"warning: {slugFile} was left as it was: it holds an earlier probe's list, possibly for another"
-            + " --section (the default --out is shared by all sections). Don't feed it to"
-            + " 'fetch-orphans --section news' until a probe of news succeeds; give each section its own --out.\n",
+            + $"warning: {slugFile} was left as it was (it holds an earlier probe's list).\n",
             r.Err);
         Assert.DoesNotContain("Probe done", r.Out);   // 失敗了:stdout 不印「完成」
+    }
+
+    [Fact]
+    public async Task Probe_DefaultOut_IsPerSection_SoSectionsDoNotOverwriteEachOther()
+    {
+        // 3.0(決策檔 H2 選項 E):預設 --out 帶 section。2.x 是各 section 共用的 orphan_slugs.txt:
+        // 探完 events 會蓋掉 news 的清單,接著 fetch-orphans --section news 就拿 events 的 slug 去抓
+        await using var server = new LoopbackHttpServer((_, path) =>
+            path is "/ch/news/20200101.php" or "/ch/events/20200102.php"
+                ? new LoopbackHttpServer.Response(200)
+                : LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl);
+
+        var news = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+        var events = await Run("probe-orphans", config, "--section", "events", "--years", "2020");
+
+        Assert.Equal(0, news.Exit);
+        Assert.Equal(0, events.Exit);
+        Assert.Equal("20200101", File.ReadAllText(PathOf("site/orphan_slugs.news.txt")));
+        Assert.Equal("20200102", File.ReadAllText(PathOf("site/orphan_slugs.events.txt")));
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
+        Assert.Empty(news.Err);
+    }
+
+    /// <summary>2.x 留下的共用清單:3.0 不讀、不寫、不刪,但每次用到預設檔名時都講一次怎麼遷移。</summary>
+    private string LegacyNote(string legacy, string section) =>
+        $"note: {legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section."
+        + $" Since 3.0 the default list is per section ({PathOf($"site/orphan_slugs.{section}.txt")}) and the old file"
+        + $" is no longer read or written. If it holds the {section} list, rename it to orphan_slugs.{section}.txt;"
+        + " otherwise delete it.\n";
+
+    [Fact]
+    public async Task Probe_Legacy2xSlugFile_IsLeftAlone_AndTheMigrationIsSpelledOut()
+    {
+        await using var server = new LoopbackHttpServer((_, path) => path == "/ch/news/20200101.php"
+            ? new LoopbackHttpServer.Response(200)
+            : LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl);
+        var legacy = Write("site/orphan_slugs.txt", "20190101");
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Equal("20190101", File.ReadAllText(legacy));
+        Assert.Equal("20200101", File.ReadAllText(PathOf("site/orphan_slugs.news.txt")));
+        Assert.Equal(LegacyNote(legacy, "news"), r.Err);
+        Assert.True(r.Err.Replace(Root, "").All(char.IsAscii));
+    }
+
+    [Fact]
+    public async Task Probe_ExplicitOut_DoesNotMentionTheLegacyFile()
+    {
+        await using var server = new LoopbackHttpServer((_, _) => LoopbackHttpServer.Response.NotFound);
+        var config = SiteConfig(server.BaseUrl);
+        Write("site/orphan_slugs.txt", "20190101");
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020", "--out", PathOf("site/list.txt"));
+
+        Assert.Equal(0, r.Exit);
+        Assert.Empty(r.Err);
+    }
+
+    [Theory]
+    [InlineData("news/2020")]
+    [InlineData("..")]
+    public async Task DefaultSlugFile_NeedsASectionThatIsASingleName(string section)
+    {
+        // 預設檔名是 orphan_slugs.<section>.txt:section 不是單一名稱時拼不出一個檔名,要明講、請使用者指定
+        var config = SiteConfig("https://example.invalid");
+
+        var probe = await Run("probe-orphans", config, "--section", section, "--years", "2020");
+        var fetch = await Run("fetch-orphans", config, "--section", section);
+
+        Assert.Equal(2, probe.Exit);
+        Assert.Equal($"--section '{section}' can't be part of the default slug file name; pass --out <file>.\n", probe.Err);
+        Assert.Equal(2, fetch.Exit);
+        Assert.Equal($"--section '{section}' can't be part of the default slug file name; pass --slugs <file>.\n", fetch.Err);
     }
 
     [Fact]
@@ -201,9 +276,9 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
         Assert.Equal(2, r.Exit);
-        Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.news.txt")));
         Assert.StartsWith("error: none of the 732 probes got a usable answer (HTTP 403: 732)", r.Err);
-        Assert.EndsWith($"warning: {PathOf("site/orphan_slugs.txt")} was not written; an empty list would read as \"no orphan pages\".\n", r.Err);
+        Assert.EndsWith($"warning: {PathOf("site/orphan_slugs.news.txt")} was not written; an empty list would read as \"no orphan pages\".\n", r.Err);
         // 先拿掉暫存路徑再檢查:TEMP 含非 ASCII 的開發機(例如中文使用者名稱)上,路徑本身就不是 ASCII
         Assert.True(r.Err.Replace(Root, "").All(char.IsAscii), "警告要是純 ASCII:cp437 等 console 印不出 × 與 —");
     }
@@ -223,7 +298,7 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
         Assert.Equal(0, r.Exit);
-        Assert.Equal("20200101"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
+        Assert.Equal("20200101"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.news.txt")));
         // 12 月 31 天 × 2 種格式 = 62 個沒回答;20200101 命中後的 A 探測(404)也算一次
         Assert.Equal(
             "warning: 62 of 733 probes got no usable answer (HTTP 429: 62); the list may be incomplete."
@@ -247,7 +322,7 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
         Assert.Equal(0, r.Exit);
-        Assert.Equal("20200102"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.txt")));
+        Assert.Equal("20200102"u8.ToArray(), File.ReadAllBytes(PathOf("site/orphan_slugs.news.txt")));
         Assert.DoesNotContain("HEAD /ch/index.php", server.Requests);   // 沒有跟過去
         Assert.Empty(r.Err);   // 轉址與 404 都是「確定沒有」的回答,不是「沒拿到回答」
     }
@@ -299,7 +374,7 @@ public class OrphanCommandTests : CliTestBase
         var kept = await Run("probe-orphans", config, "--section", "news", "--years", "2020", "--out", existing);
 
         Assert.Equal(2, fresh.Exit);   // 一個回答都沒拿到 = error(3.0)
-        Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.news.txt")));
         Assert.Equal(2, kept.Exit);
         Assert.Equal("20190101", File.ReadAllText(existing));
         Assert.Equal(before, File.GetLastWriteTimeUtc(existing));
@@ -313,7 +388,7 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "0");
 
         Assert.Equal(2, r.Exit);
-        Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.news.txt")));
     }
 
     [Fact]
@@ -349,7 +424,7 @@ public class OrphanCommandTests : CliTestBase
             : LoopbackHttpServer.Response.Html(OrphanPage));
         var config = SiteConfig(server.BaseUrl);
         // 人工編過的清單:前後空白、空行、只有空白的行(CLI 逐行 Trim、略過空行)
-        Write("site/orphan_slugs.txt", "  20200101  \n\n   \n20200102\n");
+        Write("site/orphan_slugs.news.txt", "  20200101  \n\n   \n20200102\n");
 
         var r = await Run("fetch-orphans", config, "--section", "news");
 
@@ -387,7 +462,7 @@ public class OrphanCommandTests : CliTestBase
             LoopbackHttpServer.Response.Html("<html><body><main>new</main></body></html>"));
         var config = SiteConfig(server.BaseUrl);
         var existing = Write("site/raw/ch/news/20200101.php.html", "mirrored earlier");
-        Write("site/orphan_slugs.txt", "20200101");
+        Write("site/orphan_slugs.news.txt", "20200101");
 
         var r = await Run("fetch-orphans", config, "--section", "news");
 
@@ -409,7 +484,7 @@ public class OrphanCommandTests : CliTestBase
             _ => LoopbackHttpServer.Response.NotFound,
         });
         var config = SiteConfig(server.BaseUrl, langMap: "{ ch: zh-Hant }");
-        Write("site/orphan_slugs.txt", "20200101");
+        Write("site/orphan_slugs.news.txt", "20200101");
 
         var r = await Run("fetch-orphans", config, "--section", "news");
 
@@ -427,7 +502,7 @@ public class OrphanCommandTests : CliTestBase
             ? new LoopbackHttpServer.Response(200, "image/jpeg", [1, 2, 3])
             : LoopbackHttpServer.Response.Html(OrphanPage));
         var config = Write("cfg/site.yaml", Config(baseUrl: server.BaseUrl));
-        Write("work/orphan_slugs.txt", "20200101");
+        Write("work/orphan_slugs.news.txt", "20200101");
 
         var r = await Run("fetch-orphans", config, "--section", "news", "--root", PathOf("work"));
 
@@ -447,7 +522,7 @@ public class OrphanCommandTests : CliTestBase
             : LoopbackHttpServer.Response.Html(OrphanPage));
         var good = Config(baseUrl: server.BaseUrl, langMap: "{ ch: zh-Hant }");
         var config = Write("site/site.yaml", good.Replace("content: \"main\"", "content: \"main[\""));
-        Write("site/orphan_slugs.txt", "20200101");
+        Write("site/orphan_slugs.news.txt", "20200101");
 
         var r = await Run("fetch-orphans", config, "--section", "news");
 
@@ -473,7 +548,7 @@ public class OrphanCommandTests : CliTestBase
             return LoopbackHttpServer.Response.Html("<html><body><main>x</main></body></html>");
         });
         var config = SiteConfig(server.BaseUrl);
-        Write("site/orphan_slugs.txt", "20200101\n20200102");
+        Write("site/orphan_slugs.news.txt", "20200101\n20200102");
 
         var r = await RunWith(cts.Token, "fetch-orphans", config, "--section", "news");
 
@@ -487,7 +562,7 @@ public class OrphanCommandTests : CliTestBase
     public async Task Fetch_AlreadyCancelled_Returns130_WithoutAnyRequest()
     {
         var config = SiteConfig("https://example.invalid");
-        Write("site/orphan_slugs.txt", "20200101");
+        Write("site/orphan_slugs.news.txt", "20200101");
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
@@ -505,7 +580,42 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("fetch-orphans", config, "--section", "news");
 
         Assert.Equal(2, r.Exit);
-        Assert.Equal($"Slug list not found: {PathOf("site/orphan_slugs.txt")} (run probe-orphans first)\n", r.Err);
+        Assert.Equal($"Slug list not found: {PathOf("site/orphan_slugs.news.txt")} (run probe-orphans first)\n", r.Err);
+    }
+
+    [Fact]
+    public async Task Fetch_OnlyTheLegacy2xSlugFile_ExitsTwo_AndSaysHowToMigrate()
+    {
+        // 2.x 的 orphan_slugs.txt 不再自動讀(它可能是任何一個 section 的清單),但不可以只說「找不到」:
+        // 使用者手上明明有一份清單。講明它是什麼、怎麼改名,或用 --slugs 直接指定
+        var config = SiteConfig("https://example.invalid");
+        var legacy = Write("site/orphan_slugs.txt", "20200101");
+
+        var r = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal(
+            $"Slug list not found: {PathOf("site/orphan_slugs.news.txt")}.\n"
+            + $"{legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section;"
+            + " 3.0 no longer reads it on its own. If it holds the news list, rename it to orphan_slugs.news.txt,"
+            + $" or pass --slugs {legacy}.\n",
+            r.Err);
+    }
+
+    [Fact]
+    public async Task Fetch_BothFiles_ReadsThePerSectionList_AndNotesTheLegacyFile()
+    {
+        await using var server = new LoopbackHttpServer((_, _) =>
+            LoopbackHttpServer.Response.Html("<html><body><main>x</main></body></html>"));
+        var config = SiteConfig(server.BaseUrl, langMap: "{ ch: zh-Hant }");
+        var legacy = Write("site/orphan_slugs.txt", "20200101");
+        Write("site/orphan_slugs.news.txt", "20200102");
+
+        var r = await Run("fetch-orphans", config, "--section", "news");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Equal(["GET /ch/news/20200102.php"], server.Requests);
+        Assert.Equal(LegacyNote(legacy, "news"), r.Err);
     }
 
     [Fact]
