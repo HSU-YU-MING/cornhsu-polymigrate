@@ -259,6 +259,19 @@ public class PageExtractorTests : IDisposable
         Assert.Contains($"<iframe src=\"about:blank\" data-src=\"{rewritten}\"></iframe>", result.BodyMarkdown);
     }
 
+    [Fact]
+    public void KeptIframe_BothSrcAndDataSrcOnTheSite_AreBothRewritten()
+    {
+        // src 是預覽頁、data-src 是 lazy-load 換上的完整頁:兩個都是站內網址時兩個都要改寫,不是只改其中一個
+        // (審查 mutation DS-3「兩者都在時只改 data-src」原本存活)
+        var html = "<html><body><section id=\"personal\">"
+            + "<iframe src=\"preview.php\" data-src=\"/ch/news/20260101.php\"></iframe></section></body></html>";
+
+        var result = _noMirrorPages.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Contains("<iframe src=\"/ch/news/preview\" data-src=\"/ch/news/20260101\"></iframe>", result.BodyMarkdown);
+    }
+
     [Theory]
     [InlineData("https://youtu.be/abc123")]
     [InlineData("https://www.YouTube.com/embed/abc123?start=30")]
