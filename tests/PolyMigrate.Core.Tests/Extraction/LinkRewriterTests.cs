@@ -139,6 +139,16 @@ public class LinkRewriterTests
         Assert.Equal(expected, RewriterFor("ch,zh.tw", "/calendar.html/").Rewrite(href, PageUrl));
 
     [Theory]
+    // 「是不是鏡像頁」是路由逐字比對(ordinal、分大小寫),CHANGELOG 照這個寫(最終驗證 I4)
+    [InlineData("/contact.php", "/contact/")]               // 大小寫相同:鏡像頁,照頁的規則
+    [InlineData("/CONTACT.PHP", "/CONTACT.PHP")]            // 大小寫不同:不是鏡像頁(9d17071 是 /CONTACT.PHP/)
+    [InlineData("/CALENDAR.HTML", "/CALENDAR.HTML")]        // 同上(9d17071 是 /CALENDAR.HTML/)
+    [InlineData("/docs.v2", "/docs.v2")]                    // 只有子頁、沒有自己的 index 頁:不是鏡像頁(9d17071 是 /docs.v2/)
+    [InlineData("ftp://www.ibps-austin.org/docs.v2/", "ftp://www.ibps-austin.org/docs.v2/")]
+    public void MirrorPageMatching_IsOrdinal_AndNeedsThePageItself(string href, string expected) =>
+        Assert.Equal(expected, RewriterFor("ch", "/contact/", "/calendar.html/", "/docs.v2/a").Rewrite(href, PageUrl));
+
+    [Theory]
     // 絕對 http(s) 連結一律原樣保留(只改寫相對連結),同站的也一樣;scheme 的大小寫不影響這個判斷。
     // 測資必須是「同站」:別站的網址就算前綴比對改成分大小寫,也會在後面的 host 檢查被原樣傳回,守不住前綴這一關
     [InlineData("https://www.ibps-austin.org/ch/news/a.php")]

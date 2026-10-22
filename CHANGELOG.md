@@ -150,6 +150,11 @@ exit code 一覽:
     原本以 `/` 結尾、或那一段是語言前綴的,仍當頁、照舊加尾斜線;`.2-rc`、`.01` 這種 slug 裡的點不算副檔名。
   - 同 host、scheme 不是 http(s) 的網址(`ftp://`、`file://`、`ws://`…)原樣保留,不再改寫成站內路由。
     指向鏡像頁的仍照舊改寫。
+  - 「是不是鏡像頁」是拿連結算出的路由與鏡像頁的路由**逐字比對(ordinal,分大小寫)**,所以下面兩種也算
+    「不是鏡像頁」、套用上面兩條:大小寫與鏡像頁不同的連結(鏡像頁是 `/contact.php`、連結寫 `/CONTACT.PHP`
+    → `/CONTACT.PHP`,原本 `/CONTACT.PHP/`;兩者都不是那一頁在新站的路由 `/contact/`),以及只有子頁、
+    沒有自己 index 頁的目錄(鏡像有 `docs.v2/a.php` 但沒有 `docs.v2/index.php` 時,`/docs.v2` → `/docs.v2`,
+    原本 `/docs.v2/`;同 host 的 `ftp://…/docs.v2/` 原樣保留)。
   **升級注意:內文連結與 iframe 在上述兩種情況會改變(`verify_report.csv` 裡對應的 `broken_link` 明細字串跟著變,
   例如 `/embed.swf/` → `/embed.swf`;同 host 非 http(s) 的不再被檢查);頁的路由與 301 檔不變。** 開發過程中 `9254591` 曾把
   判斷套在頁的路由上(`/jane.doe.php`、`/CONTACT.PHP`、`/calendar.html` 頁、key 為 `zh.tw` 的語言首頁等的
