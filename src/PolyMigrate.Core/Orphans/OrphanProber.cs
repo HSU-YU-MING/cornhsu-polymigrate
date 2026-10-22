@@ -7,6 +7,12 @@ namespace PolyMigrate.Core.Orphans;
 /// 探測孤兒頁的結果(<see cref="OrphanProber.ProbeDetailedAsync"/>、<see cref="PolyMigrator.ProbeOrphansAsync(string, string, int, int, string?, Action{string}?, CancellationToken)"/>)。
 /// 分開統計「確定沒有」與「沒拿到回答」:伺服器掛了、被 WAF 擋、<c>base_url</c> 打錯時,<see cref="Found"/> 一樣是空的,
 /// 但那不代表沒有孤兒頁——看 <see cref="NoUsableAnswers"/>。3.0 起 public(2.x 是 internal 的 ProbeResult)。
+/// <para>建構子是 internal:結果只由探測產生。取得方式有兩種——
+/// 用 facade:<c>await PolyMigrator.FromConfigFile("site.yaml").ProbeOrphansAsync(root, "news", 2021, 2023)</c>
+/// (自己建 HttpClient、自己算已鏡像的 slug,規則與 CLI 的 <c>probe-orphans</c> 相同);或用底層型別、自己提供
+/// HttpClient 與已知 slug 集:<c>await new OrphanProber(config, httpClient).ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known)</c>
+/// (<c>known</c> 通常是 <see cref="OrphanProber.KnownSlugs(string, string, string, IReadOnlyList{string})"/>,
+/// HttpClient 用 <see cref="OrphanProber.CreateHttpClient"/> 建才會帶 User-Agent、cookie,而且不跟轉址)。</para>
 /// </summary>
 public sealed class ProbeReport
 {
