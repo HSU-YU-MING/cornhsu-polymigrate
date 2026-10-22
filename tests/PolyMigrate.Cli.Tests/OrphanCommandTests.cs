@@ -276,6 +276,13 @@ public class OrphanCommandTests : CliTestBase
     [Theory]
     [InlineData("news/2020")]
     [InlineData("..")]
+    // 作業系統不允許的檔名字元:原本丟出在地化的 IO 錯誤(zh-TW Windows 上是亂碼的「檔案名稱、目錄名稱…語法錯誤」),
+    // 而且只在 Windows 上——Linux 的檔名幾乎什麼都收。一律照 Windows 的規則擋,三平台同一個結果(審查可接受項)
+    [InlineData("news*")]
+    [InlineData("a?b")]
+    [InlineData("a<b>")]
+    [InlineData("a|b")]
+    [InlineData("a\"b")]
     public async Task DefaultSlugFile_NeedsASectionThatIsASingleName(string section)
     {
         // 預設檔名是 orphan_slugs.<section>.txt:section 不是單一名稱時拼不出一個檔名,要明講、請使用者指定

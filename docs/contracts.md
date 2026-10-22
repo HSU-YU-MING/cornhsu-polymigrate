@@ -227,7 +227,7 @@ exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_p
 
 `probe-orphans` 的輸出、`fetch-orphans --slugs` 的預設輸入,**每個 section 一份**:皆預設
 `<root>/orphan_slugs.<section>.txt`(例如 `--section news` → `orphan_slugs.news.txt`;3.0 起)。
-`--section` 不是單一名稱(含 `/` `\` `:`,或是 `.` `..`)時拼不出預設檔名 → exit 2,請以 `--out` / `--slugs` 指定。
+`--section` 不能當檔名的一部分(含 `/` `\` `:` `*` `?` `"` `<` `>` `|` 或控制字元,或是 `.` `..`;一律照 Windows 的規則,三平台相同)時拼不出預設檔名 → exit 2,請以 `--out` / `--slugs` 指定。
 一行一個 slug,依探測順序;UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**;每次探測跑完整份覆寫。
 例外:**一個回答都沒拿到**(每個候選都是連線錯誤、逾時、重試後仍 409,或 401/403/429/5xx 這類
 不是「有/沒有」的狀態)時不寫——既有檔原樣保留,沒有檔也不建空檔(空清單會被讀成「沒有孤兒頁」),

@@ -640,9 +640,15 @@ public static class Cli
     /// section 不是單一名稱(含 <c>/</c> <c>\</c> <c>:</c>、或是 <c>.</c> <c>..</c>)時拼不出檔名 → null,由呼叫端請使用者明確指定。
     /// </summary>
     private static string? DefaultSlugFile(string root, string section) =>
-        section is "" or "." or ".." || section.AsSpan().IndexOfAny('/', '\\', ':') >= 0
+        section is "" or "." or ".." || section.Any(ch => NotInFileNames.Contains(ch) || char.IsControl(ch))
             ? null
             : Path.GetFullPath(Path.Combine(root, $"orphan_slugs.{section}.txt"));
+
+    /// <summary>
+    /// 預設檔名不能含的字元:一律照 Windows 的規則(Linux 的檔名幾乎什麼都收),三平台同一個結果。
+    /// 原本只擋 / \ :,<c>news*</c> 之類在 Windows 上丟出在地化的 IO 錯誤(審查可接受項)。
+    /// </summary>
+    private static readonly char[] NotInFileNames = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
     /// <summary>
     /// 用到預設檔名、而 2.x 的共用清單還在時,講一次它不再被讀寫、以及怎麼遷移(不改 exit code)。
