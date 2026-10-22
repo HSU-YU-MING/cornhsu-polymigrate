@@ -293,7 +293,7 @@ public class MediaHashCacheAndRedirectTests : IDisposable
 
         Assert.False(report.HasErrors);
         var issues = File.ReadAllLines(Path.Combine(_root, "path_issues.csv"));
-        Assert.Equal("severity,page,issue", issues[0].TrimStart('﻿'));
+        Assert.Equal("severity,page,issue", issues[0].TrimStart('\uFEFF'));
         Assert.Single(issues);   // 只有表頭
     }
 }

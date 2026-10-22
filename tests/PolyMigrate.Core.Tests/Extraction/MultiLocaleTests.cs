@@ -109,7 +109,7 @@ public class MultiLocaleTests : IDisposable
         Assert.Empty(report.OnlyInLocale);   // 「只有某語言」在單語站沒有意義
 
         var rows = File.ReadAllLines(Path.Combine(_root, "content_inventory.csv"))
-            .Select(l => l.TrimStart('﻿').Split(','))
+            .Select(l => l.TrimStart('\uFEFF').Split(','))
             .ToList();
         var header = rows[0];
         Assert.Equal(

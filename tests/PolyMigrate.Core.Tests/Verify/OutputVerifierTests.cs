@@ -310,7 +310,7 @@ public class OutputVerifierTests : IDisposable
         // ch/b 的兩個 detail 依發現順序是 /zzz 在前
         Directory.CreateDirectory(Path.Combine(_root, "media"));
         File.WriteAllText(Path.Combine(_root, "missing_images.csv"),
-            "﻿source_page,missing_image\r\nhttps://example.org/ch/a.php,/media/known.jpg\r\n");
+            "\uFEFFsource_page,missing_image\r\nhttps://example.org/ch/a.php,/media/known.jpg\r\n");
         AddPage("ch/a.md", body: "![](/media/known.jpg)");
         AddPage("ch/b.md", body: "[x](/zzz) [y](/aaa)");
         AddPage("ch/c.md", body: "[z](/mmm)");

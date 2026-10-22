@@ -74,7 +74,7 @@ public class CsvTests : IDisposable
     {
         // Excel 存回的檔常常沒有結尾換行;最後一列不能因此被吃掉
         var path = Path.Combine(_dir, "edited.csv");
-        File.WriteAllText(path, "﻿h1,h2\r\na,b\r\nc,d");
+        File.WriteAllText(path, "\uFEFFh1,h2\r\na,b\r\nc,d");
 
         var rows = Csv.ReadRows(path).ToList();
 

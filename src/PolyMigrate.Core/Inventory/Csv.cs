@@ -39,7 +39,7 @@ internal static class Csv
     /// <summary>讀回本工具寫出的 CSV(RFC 4180,含引號跳脫;自動吃掉 BOM)。</summary>
     public static IEnumerable<IReadOnlyList<string>> ReadRows(string path)
     {
-        var text = File.ReadAllText(path, Encoding.UTF8).TrimStart('﻿');
+        var text = File.ReadAllText(path, Encoding.UTF8).TrimStart('\uFEFF');
         var row = new List<string>();
         var field = new StringBuilder();
         var inQuotes = false;
