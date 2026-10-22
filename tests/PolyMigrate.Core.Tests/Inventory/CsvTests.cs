@@ -70,6 +70,18 @@ public class CsvTests : IDisposable
     }
 
     [Fact]
+    public void ReadRows_Utf8Bom_IsNotPartOfTheFirstField()
+    {
+        // 本工具寫的 CSV 都含 BOM;讀回時第一欄不可以帶著它(verify 讀 missing_images.csv、快取讀自己)
+        var path = Path.Combine(_dir, "bom.csv");
+        File.WriteAllBytes(path, [0xEF, 0xBB, 0xBF, .. "h1,h2\r\na,b\r\n"u8.ToArray()]);
+
+        var rows = Csv.ReadRows(path).ToList();
+
+        Assert.Equal(["h1", "h2"], rows[0]);
+    }
+
+    [Fact]
     public void ReadRows_LastRowWithoutTrailingNewline_IsStillRead()
     {
         // Excel 存回的檔常常沒有結尾換行;最後一列不能因此被吃掉
