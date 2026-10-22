@@ -121,7 +121,8 @@ public sealed partial class OutputVerifier
                 page == "index.md" || page.EndsWith("/index.md", StringComparison.Ordinal)));
 
             // frontmatter images[].local 也要驗(相簿頁型的圖不在內文)
-            var refs = new List<string>(ExtractInternalRefs(body));
+            var (htmlChecked, htmlEntryOnly) = HtmlRefs(body);
+            var refs = new List<string>(MarkdownRefs(body).Concat(htmlChecked));
             if (fm?.GetValueOrDefault("images") is IEnumerable<object> images)
             {
                 foreach (var img in images)
@@ -174,7 +175,7 @@ public sealed partial class OutputVerifier
             // data-src / data-href 這類:不檢查壞連結(不是瀏覽器會載入的網址),但照樣算入口——
             // 只被 lazy-load iframe 指到的頁,在新站上(沿用那段 JS 時)訪客還是到得了;
             // 不算的話它會開始報 unlinked_page,verify 由 0 變 1(第三輪審查 B3)
-            foreach (var reference in ExtractEntryOnlyRefs(body))
+            foreach (var reference in htmlEntryOnly)
             {
                 if (reference.StartsWith(mediaPrefix, StringComparison.Ordinal))
                 {
@@ -311,8 +312,8 @@ public sealed partial class OutputVerifier
         return l.Length == 0 ? "/" : l;
     }
 
-    /// <summary>抽正文裡的站內引用:markdown 連結/圖片 與內嵌 HTML 的 href/src,只留 "/" 開頭者。</summary>
-    private static IEnumerable<string> ExtractInternalRefs(string body)
+    /// <summary>正文裡 Markdown 連結/圖片的站內引用(只留 "/" 開頭者)。</summary>
+    private static IEnumerable<string> MarkdownRefs(string body)
     {
         foreach (Match m in MarkdownTarget().Matches(body))
         {
@@ -321,32 +322,33 @@ public sealed partial class OutputVerifier
                 yield return m.Groups[1].Value;
             }
         }
-        foreach (Match m in HtmlTarget().Matches(body))
+    }
+
+    /// <summary>
+    /// 內嵌 HTML 的站內引用(只留 "/" 開頭者),分成兩組,兩組的聯集恰好是 9d17071 看得到的那一份:
+    /// <list type="bullet">
+    /// <item><b>Checked</b>:真正的 <c>href</c> / <c>src</c> 屬性——檢查壞連結與缺圖,也算入口。</item>
+    /// <item><b>EntryOnly</b>:屬性名只是以 href / src 結尾(<c>data-src</c>、<c>data-href</c>、<c>xsrc</c>)——
+    /// 算入口,站內頁不檢查壞連結(見 Run)。</item>
+    /// </list>
+    /// 一律以 9d17071 那條沒有邊界的比對(<see cref="AnyHrefOrSrcAttribute"/>)為準,只用有邊界的比對
+    /// (<see cref="HtmlTarget"/>)判斷「這個起點是不是真正的屬性」。有邊界的比對若單獨跑,會在 <c>data-src</c>
+    /// 的值中間找到 <c>src='…'</c>——9d17071 從來不會看到那裡,檢查集合就比 9d 大(最終驗證 I3:r4-d 由 0 變 2)。
+    /// </summary>
+    private static (List<string> Checked, List<string> EntryOnly) HtmlRefs(string body)
+    {
+        var attributeStarts = HtmlTarget().Matches(body).Select(m => m.Index).ToHashSet();
+        var checkedRefs = new List<string>();
+        var entryOnly = new List<string>();
+        foreach (Match m in AnyHrefOrSrcAttribute().Matches(body))
         {
             var value = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
             if (value is ['/', not '/', ..])
             {
-                yield return value;
+                (attributeStarts.Contains(m.Index) ? checkedRefs : entryOnly).Add(value);
             }
         }
-    }
-
-    /// <summary>
-    /// 只算入口、不檢查的站內引用:屬性名以 href / src 結尾、但前面還連著字(data-src、data-href、xsrc)。
-    /// 用的是 9d17071 原本那條沒有邊界的比對,扣掉 <see cref="HtmlTarget"/> 已經抓到的——
-    /// 入口集合因此與 9d17071 相同,只是這些不再報 broken_link。
-    /// </summary>
-    private static IEnumerable<string> ExtractEntryOnlyRefs(string body)
-    {
-        var checkedAt = HtmlTarget().Matches(body).Select(m => m.Index).ToHashSet();
-        foreach (Match m in AnyHrefOrSrcAttribute().Matches(body))
-        {
-            var value = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
-            if (!checkedAt.Contains(m.Index) && value is ['/', not '/', ..])
-            {
-                yield return value;
-            }
-        }
+        return (checkedRefs, entryOnly);
     }
 
     private static HashSet<string> LoadKnownMissing(string outDir)
@@ -388,7 +390,7 @@ public sealed partial class OutputVerifier
     [GeneratedRegex("""(?<![\w-])(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlTarget();
 
-    // 沒有邊界的版本(9d17071 的 HtmlTarget):只拿來找「算入口、不檢查」的那些,見 ExtractEntryOnlyRefs
+    // 沒有邊界的版本(9d17071 的 HtmlTarget):內嵌 HTML 的引用一律以它為準,見 HtmlRefs
     [GeneratedRegex("""(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", RegexOptions.IgnoreCase)]
     private static partial Regex AnyHrefOrSrcAttribute();
 }

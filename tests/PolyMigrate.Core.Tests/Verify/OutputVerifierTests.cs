@@ -560,6 +560,23 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Fact]
+    public void SrcInsideADataAttributeValue_IsNeitherCheckedNorAnEntry()
+    {
+        // 最終驗證 I3(r4-d):data-* 屬性的值裡含有 src='…' 時,有邊界的比對會在值的中間找到它——
+        // 9d17071 那條沒有邊界的比對整段吃掉 data-src="…",從來不會看到裡面的 src。結果檢查集合比 9d 還大,
+        // r4-d 由 exit 0 變 2,與「只會變少」相反。只檢查「也是無邊界比對起點」的位置,檢查集合因此是 9d 的子集
+        AddPage("ch/a.md", body: "<iframe data-src=\"x src='/ch/gone'\"></iframe>", pageType: "listing");
+        AddPage("ch/news/p6.md", pageType: "page");
+        AddPage("ch/b.md", body: "<a title=\"x\" data-src=\"/a?b= src='/ch/news/p6'\">y</a>", pageType: "listing");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.DoesNotContain(report.Issues, i => i.Kind == "broken_link");
+        // p6 只出現在 data-src 值的中間:不是入口(與 9d17071 相同,r4-c)
+        Assert.Contains(report.Issues, i => i.Kind == "unlinked_page" && i.Page == "ch/news/p6.md");
+    }
+
+    [Fact]
     public void PageOnlyReachedThroughDataSrc_StillCountsAsLinked_ButIsNotCheckedAsALink()
     {
         // 第三輪審查 B3:75fbf30 讓 data-src 不再被當成連結檢查(不報假的 broken_link),但也連帶不再算入口——
