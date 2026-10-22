@@ -211,12 +211,20 @@ public class OrphanCommandTests : CliTestBase
         Assert.Empty(news.Err);
     }
 
-    /// <summary>2.x 留下的共用清單:3.0 不讀、不寫、不刪,但每次用到預設檔名時都講一次怎麼遷移。</summary>
-    private string LegacyNote(string legacy, string section) =>
+    /// <summary>
+    /// 2.x 留下的共用清單:3.0 不讀、不寫、不刪,但每次用到預設檔名時都講一次怎麼遷移。
+    /// 新檔還不存在時才叫人改名;新檔已經在了,改名會用舊清單蓋掉新清單,所以改叫人刪掉(審查建議 7)。
+    /// </summary>
+    private string LegacyRenameNote(string legacy, string section) =>
         $"note: {legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section."
         + $" Since 3.0 the default list is per section ({PathOf($"site/orphan_slugs.{section}.txt")}) and the old file"
         + $" is no longer read or written. If it holds the {section} list, rename it to orphan_slugs.{section}.txt;"
         + " otherwise delete it.\n";
+
+    private string LegacyDeleteNote(string legacy, string section) =>
+        $"note: {legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section."
+        + $" Since 3.0 the default list is per section and {PathOf($"site/orphan_slugs.{section}.txt")} already exists;"
+        + " the old file is no longer read or written, so delete it (renaming it would overwrite the newer list).\n";
 
     [Fact]
     public async Task Probe_Legacy2xSlugFile_IsLeftAlone_AndTheMigrationIsSpelledOut()
@@ -232,8 +240,24 @@ public class OrphanCommandTests : CliTestBase
         Assert.Equal(0, r.Exit);
         Assert.Equal("20190101", File.ReadAllText(legacy));
         Assert.Equal("20200101", File.ReadAllText(PathOf("site/orphan_slugs.news.txt")));
-        Assert.Equal(LegacyNote(legacy, "news"), r.Err);
+        // 探完 orphan_slugs.news.txt 就有了:這時照「改名」去做,會用 2.x 的舊清單蓋掉剛探好的新清單
+        Assert.Equal(LegacyDeleteNote(legacy, "news"), r.Err);
         Assert.True(r.Err.Replace(Root, "").All(char.IsAscii));
+    }
+
+    [Fact]
+    public async Task Probe_Legacy2xSlugFile_NothingWritten_StillSaysRename()
+    {
+        // 一個回答都沒拿到:新檔沒寫出來,舊檔改名仍是對的遷移方式
+        await using var server = new LoopbackHttpServer((_, _) => new LoopbackHttpServer.Response(503));
+        var config = SiteConfig(server.BaseUrl);
+        var legacy = Write("site/orphan_slugs.txt", "20190101");
+
+        var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+
+        Assert.Equal(2, r.Exit);
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.news.txt")));
+        Assert.EndsWith(LegacyRenameNote(legacy, "news"), r.Err);
     }
 
     [Fact]
@@ -617,7 +641,7 @@ public class OrphanCommandTests : CliTestBase
 
         Assert.Equal(0, r.Exit);
         Assert.Equal(["GET /ch/news/20200102.php"], server.Requests);
-        Assert.Equal(LegacyNote(legacy, "news"), r.Err);
+        Assert.Equal(LegacyDeleteNote(legacy, "news"), r.Err);   // 兩個檔都在:新檔才是讀的那一份
     }
 
     [Fact]

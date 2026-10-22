@@ -15,7 +15,8 @@
 
 1. **改名孤兒頁清單。** `probe-orphans` / `fetch-orphans` 的預設清單改成每個 section 一份 `<root>/orphan_slugs.<section>.txt`,
    2.x 的 `<root>/orphan_slugs.txt` 不再被讀寫。手上有舊檔的話,它是哪個 section 的清單就改名成 `orphan_slugs.<section>.txt`
-   (例如 `orphan_slugs.news.txt`);不確定是哪個 section 的,就刪掉重探。腳本裡明寫 `--out` / `--slugs` 的不受影響。
+   (例如 `orphan_slugs.news.txt`);不確定是哪個 section 的,或那個 section 已經用 3.0 探過(新檔已經在了),就刪掉——
+   改名會用舊清單蓋掉新清單。腳本裡明寫 `--out` / `--slugs` 的不受影響。
    沒改名也不會靜默出錯:`fetch-orphans` 找不到新檔時會指出舊檔與改名方式並 exit 2,`probe-orphans` 會印一則 `note:`。
 2. **檢查 CI / 排程怎麼解讀 exit code**(見「exit code 對照表」),尤其是「0/1 放行」的流程:`probe-orphans` 一個回答都沒拿到、
    npm 啟動腳本自己失敗,現在都是 **2**;`probe-orphans` 有部分候選沒拿到回答時是 **1**(2.x 是 0);`verify` 可能因為保留下來的 iframe 由 0/1 變 **2**;同步指令按一次 Ctrl-C 就是 **130**。
@@ -41,7 +42,7 @@
   **遷移**:「0/1 放行」的流程不受影響;只接受 0 的流程,把 1 當成「清單可用但不完整,稍後重跑補齊」。
 - **`probe-orphans --out` / `fetch-orphans --slugs` 預設 `<root>/orphan_slugs.<section>.txt`**(2.x:各 section 共用
   `<root>/orphan_slugs.txt`——探第二個 section 會蓋掉第一個的清單,一個回答都沒拿到時留下來的也可能是別的 section 的)。
-  2.x 的檔不讀、不寫、不刪;用到預設檔名而它還在時,stderr 印一則 `note:` 說明怎麼遷移(不影響 exit code);
+  2.x 的檔不讀、不寫、不刪;用到預設檔名而它還在時,stderr 印一則 `note:` 說明怎麼遷移(新檔還不存在才叫人改名,已經存在就只叫人刪掉;不影響 exit code);
   `fetch-orphans` 找不到新檔、但舊檔在時,錯誤訊息(exit 2)講明改名或以 `--slugs` 指定舊檔。
   `--section` 不是單一名稱(含 `/` `\` `:`,或是 `.` `..`)時拼不出預設檔名,exit 2,請明確指定 `--out` / `--slugs`。
   **遷移**:見「升級必做」第 1 條。

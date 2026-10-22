@@ -473,6 +473,7 @@ public static class Cli
             var langPrefix = options.GetValueOrDefault("--lang", config.UrlPattern.LangMap.Keys.First());
             var root = ResolveRoot(configPath, options);
             string outFile;
+            var usesDefaultOut = false;
             if (options.TryGetValue("--out", out var outOption))
             {
                 outFile = Path.GetFullPath(outOption);
@@ -480,7 +481,7 @@ public static class Cli
             else if (DefaultSlugFile(root, section) is { } perSection)
             {
                 outFile = perSection;
-                NoteLegacySlugFile(root, section, outFile);
+                usesDefaultOut = true;
             }
             else
             {
@@ -502,6 +503,17 @@ public static class Cli
             // 訊息只用 ASCII:cp437 之類的 console 印不出 × 與 —(會變成問號)
             var unanswered = string.Join(", ", result.Unanswered.Select(kv => $"{kv.Key}: {kv.Value}"));
 
+            // 2.x 共用清單的遷移提示放在最後才印:要先知道這次有沒有寫出 orphan_slugs.<section>.txt——
+            // 寫出來了就只能叫人刪舊檔(改名會蓋掉剛探好的清單;審查建議 7)
+            int Finish(int exitCode)
+            {
+                if (usesDefaultOut)
+                {
+                    NoteLegacySlugFile(root, section, outFile);
+                }
+                return exitCode;
+            }
+
             // 一個回答都沒拿到(伺服器掛了、被 WAF 擋、base_url 打錯):空清單會被讀成「沒有孤兒頁」,
             // 還會蓋掉先前探好的清單——所以不寫,既有檔原樣保留。而且是 error(exit 2,3.0 起):
             // 2.x 回 0,只看 exit code 的排程分不出「真的沒有」與「根本沒問到」(決策檔 H2 選項 B)
@@ -515,7 +527,7 @@ public static class Cli
                 Console.Error.WriteLine(File.Exists(outFile)
                     ? $"warning: {outFile} was left as it was (it holds an earlier probe's list)."
                     : $"warning: {outFile} was not written; an empty list would read as \"no orphan pages\".");
-                return 2;
+                return Finish(2);
             }
 
             File.WriteAllText(outFile, string.Join('\n', found));
@@ -527,9 +539,9 @@ public static class Cli
                 Console.Error.WriteLine(
                     $"warning: {result.UnansweredCount} of {result.Checks} probes got no usable answer ({unanswered});"
                     + " the list may be incomplete. Rerun later to fill the gaps.");
-                return 1;
+                return Finish(1);
             }
-            return 0;
+            return Finish(0);
         }
         catch (Exception ex) when (IsHandled(ex))
         {
@@ -632,17 +644,24 @@ public static class Cli
             ? null
             : Path.GetFullPath(Path.Combine(root, $"orphan_slugs.{section}.txt"));
 
-    /// <summary>用到預設檔名、而 2.x 的共用清單還在時,講一次它不再被讀寫、以及怎麼遷移(不改 exit code)。</summary>
+    /// <summary>
+    /// 用到預設檔名、而 2.x 的共用清單還在時,講一次它不再被讀寫、以及怎麼遷移(不改 exit code)。
+    /// 新檔還不存在才叫人改名;已經存在(probe 剛寫出來、或 fetch 讀的就是它)時改名會用舊清單蓋掉新清單,
+    /// 所以只叫人刪掉(審查建議 7)。
+    /// </summary>
     private static void NoteLegacySlugFile(string root, string section, string perSection)
     {
         var legacy = Path.Combine(root, LegacySlugFileName);
-        if (File.Exists(legacy))
+        if (!File.Exists(legacy))
         {
-            Console.Error.WriteLine(
-                $"note: {legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section."
-                + $" Since 3.0 the default list is per section ({perSection}) and the old file is no longer read or written."
-                + $" If it holds the {section} list, rename it to orphan_slugs.{section}.txt; otherwise delete it.");
+            return;
         }
+        var history = $"note: {legacy} was written by PolyMigrate 2.x, which shared one slug list across every --section.";
+        Console.Error.WriteLine(File.Exists(perSection)
+            ? history + $" Since 3.0 the default list is per section and {perSection} already exists;"
+                + " the old file is no longer read or written, so delete it (renaming it would overwrite the newer list)."
+            : history + $" Since 3.0 the default list is per section ({perSection}) and the old file is no longer read or written."
+                + $" If it holds the {section} list, rename it to orphan_slugs.{section}.txt; otherwise delete it.");
     }
 
     /// <summary>

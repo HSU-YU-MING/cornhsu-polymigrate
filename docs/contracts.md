@@ -235,7 +235,9 @@ stderr 印 `error:` 並列出原因,**exit 2**(2.3.1 以前是 0)。部分候選
 **exit 1**(有 warning、輸出仍可用;2.3.1 以前是 0)。
 「確定沒有」的回答是 404、410、其他 2xx,以及 3xx(probe 不跟轉址,轉址頁不算命中)。
 **2.x 的 `<root>/orphan_slugs.txt`**(各 section 共用一份)3.0 起不讀、不寫、不刪。用到預設檔名而它還在時,
-stderr 印一則 `note:` 說明怎麼遷移(它是哪個 section 的清單,就改名成 `orphan_slugs.<section>.txt`;否則刪掉),
+stderr 印一則 `note:` 說明怎麼遷移:新檔還不存在時,它是哪個 section 的清單就改名成 `orphan_slugs.<section>.txt`、否則刪掉;
+新檔已經存在時(`probe-orphans` 剛寫出來,或 `fetch-orphans` 讀的就是它)只叫人刪掉——改名會用舊清單蓋掉新清單。
+`probe-orphans` 的這則提示印在最後(要先知道這次有沒有寫出新檔),
 不影響 exit code;`fetch-orphans` 找不到 `orphan_slugs.<section>.txt`、但舊檔在時,錯誤訊息(exit 2)
 也講明改名或以 `--slugs` 指定舊檔。
 `fetch-orphans` 讀取時逐行去頭尾空白、略過空行,所以 `slugs` 的輸出或手寫清單也能直接餵。
