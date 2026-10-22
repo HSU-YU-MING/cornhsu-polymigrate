@@ -21,6 +21,8 @@ exit code 一覽:
     不再被改寫成站內路由去檢查——兩者都只會減少 `broken_link`,入口集合(`unlinked_page`)不變,可能由 2 變 0/1。
   - `fetch-orphans`:`lang_map` key 為 `""` 的站、伺服器不合併斜線時,原本請求 `//news/…` 全部 404(exit 1),
     現在請求正確網址,可能由 1 變 0。
+  - `extract`:內部快取 `.polymigrate/media_sha1_cache.csv` 存不了(`.polymigrate` 被同名檔案佔住、唯讀、磁碟滿)時,
+    原本 exit 2、`redirect_map.csv` 之後的清單都沒寫;現在清單全部寫出,照 warning 有無回 0/1。
 - **刻意沒動、留給維護者裁定**:`probe-orphans` 一個回答都沒拿到時要不要非零結束、npm 啟動腳本失敗時要不要回 2。
 
 - **修正(patch):config 的 CSS selector 寫壞時,`extract` 與 `fetch-orphans` 以未處理例外崩潰。**
@@ -130,6 +132,15 @@ exit code 一覽:
   稽核清單判為 patch:逐指令 exit code 表的 130 欄由「—」變成可達,而且 2.2.0 早就宣稱 extract/thumbs 會回 130。
   但「按一次 Ctrl-C」這個情境原本得到 0/1/2,嚴格說是既有情境的 exit code 改變——**semver 判讀待維護者確認**,
   確認前請勿把它當成已定案的 patch。
+- **修正(patch;exit code 只會變綠,見上):`extract` 的內部媒體雜湊快取存不了時,清單只寫一半、exit 2。**
+  `.polymigrate/media_sha1_cache.csv` 是內部加速檔、不是交付物,但原本夾在 `media_manifest.csv` 與
+  `redirect_map.csv` 之間存檔、沒有保護:`.polymigrate` 被同名檔案佔住、唯讀或磁碟滿時擲 IO 錯誤 → **exit 2**,
+  `redirect_map.csv`、`redirects.nginx.conf`、`_redirects`、`missing_images.csv`、`path_issues.csv`、
+  `need_fetch_media.txt` 都沒有更新(留著上一次的舊檔,或根本沒有)。現在所有清單寫完才存,存不了就略過
+  (stderr 不印東西,只是下次重跑要重讀媒體),exit code 照 warning 有無回 0/1。
+  另外快取改成先寫暫存檔再改名(存到一半被終止不會留下截斷的快取檔;存失敗時暫存檔會清掉、原本的快取檔不動),
+  讀快取時 sha1 不是 40 位小寫十六進位的列丟掉——原本截斷的最後一列若大小與 mtime 對得上,半截 sha1
+  會被當成命中、寫進 `media_manifest.csv`。
 - **修正(patch):`probe-orphans` 要整批探完才發現 `--out` 寫不出去。** 目錄不存在或 `--out` 指到一個目錄時,
   原本先發完一整輪請求(一年 730 個以上,預設延遲下約 36 分鐘)才在寫檔時 exit 2。現在探測前就檢查,
   一個請求都不發;檢查不留痕跡(既有檔內容與修改時間不變,原本沒有的檔不會被建成空檔)。exit code 仍是 2。
