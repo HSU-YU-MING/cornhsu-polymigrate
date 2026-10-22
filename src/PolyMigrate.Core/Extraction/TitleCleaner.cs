@@ -10,6 +10,13 @@ namespace PolyMigrate.Core.Extraction;
 /// </summary>
 internal sealed class TitleCleaner
 {
+    /// <summary>
+    /// 標題前綴 regex 的選項(內建三式與 config 的 <c>strip_title_prefix</c> 共用)。IgnoreCase 一律搭 CultureInvariant:
+    /// 否則 tr-TR 上的 Turkish-I 會讓 "News" 之類標記字在不同機器 locale 下清出不同結果。
+    /// 載入 config 時也用同一組選項驗 <c>strip_title_prefix</c>,驗過的就一定編得起來。
+    /// </summary>
+    internal const RegexOptions PrefixOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+
     private static readonly char[] EdgeTrimChars = [.. " \t—|·-:："];
     private static readonly char[] PrefixTrimChars = [.. " \t—|·：:"];
 
@@ -20,15 +27,13 @@ internal sealed class TitleCleaner
     public TitleCleaner(ExtractSection extract)
     {
         // 空字串會讓 StartsWith("")/EndsWith("") 永遠成立 → 下面 while 迴圈永不收斂,先濾掉
-        _noise = [.. extract.TitleNoise.Where(n => n.Length > 0)];
+        _noise = [.. extract.TitleNoise.Where(n => n is { Length: > 0 })];
 
-        var markers = extract.TitleMarkers.Where(m => m.Length > 0).ToList();
+        var markers = extract.TitleMarkers.Where(m => m is { Length: > 0 }).ToList();
         var alternation = string.Join('|', markers.Select(Regex.Escape));
         var optionalMarker = markers.Count > 0 ? $@"(?:{alternation})?" : "";
 
-        // IgnoreCase 一律搭 CultureInvariant:否則 tr-TR 上的 Turkish-I 會讓 "News" 之類標記字
-        // 在不同機器 locale 下清出不同結果(與 i18n 決定性目標相悖)
-        const RegexOptions Opts = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        const RegexOptions Opts = PrefixOptions;
 
         // 日期+標記前綴三式:2025/02/02 新聞:|News 02/02/2025:|02/02/2025新聞:|2025/02/02:等
         List<Regex> prefixes =

@@ -22,8 +22,9 @@ so they follow the 0 / 1 / 2 / 130 contract (an orphan probe that got no usable 
 npm launcher and an interrupted command no longer look like success), gives each section its own
 orphan slug list (`orphan_slugs.<section>.txt`), keeps animated GIF/WebP thumbnails animated, and
 adds probe/fetch entry points and cancellable overloads to the library. Config fields, CSV columns
-and frontmatter fields are unchanged, but a config with an invalid CSS selector is now rejected
-when it is loaded, by every command, instead of when some page happens to use it, and a probe in
+and frontmatter fields are unchanged, but a config with an invalid value (a CSS selector, a regex, a
+path that isn't a single segment, a malformed URL or language tag, a key left without a value…) is now
+rejected when it is loaded, by every command, instead of when some page or command happens to use it, and a probe in
 which only some candidates got no answer exits 1 (the list is written, but may be incomplete).
 **Read the 3.0 upgrade checklist in the CHANGELOG before upgrading**.
 Earlier history: 2.0 was an engineering release — it narrowed the

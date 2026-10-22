@@ -255,6 +255,40 @@ stderr 印一則 `note:` 說明怎麼遷移(它是哪個 section 的清單,就�
   - **Git Bash 的管線**(例如 `slugs … | sort > x.txt`)同樣是 console 碼頁:先 `chcp.com 65001` 再跑。
 - Linux / macOS 的 console 編碼取自 locale,一般就是 UTF-8,沒有這個問題。
 
+## YAML config:載入時的驗證(3.0 起)
+
+欄位與預設值見 README 與 [examples/ibps-austin.yaml](../examples/ibps-austin.yaml)。**任何指令載入 config 時**就驗下列各項,
+寫壞的一律 `ConfigException` → exit 2,訊息為 `<config>: config is invalid:` 之後每個問題一行、點名欄位;
+不論這次會不會用到那個欄位(`thumbs` / `probe-orphans` 讀到只有 `extract` 才用的欄位也一樣)。
+
+| 欄位 | 載入時驗證 |
+|---|---|
+| 未知欄位 | 報錯(不默默忽略) |
+| 任何區段、清單、對照表 | 寫了 key 卻沒給值(YAML 的 null)報錯;清單裡的 `~` 項目報錯 |
+| `config_version` | 必須是 1 |
+| `site.base_url` | 絕對 http(s) 網址,不帶 query 或 fragment(可以帶路徑) |
+| `site.encoding` | 已知的編碼名 |
+| `site.polite.delay_ms` | 0～1073741823 |
+| `site.user_agent` | 不含控制字元 |
+| `site.auth_workaround` | `type` 只能是 `cookie`;cookie 名不可空、不含 `=` `;` 空白與控制字元,值不含 `;` 與控制字元 |
+| `url_pattern.lang_map` | 至少一組;key 是 `""` 或單一路徑段(不含 `/` `\` `:`,不是 `.` `..`);值是形狀正確的 BCP-47 標記 |
+| `url_pattern.default_lang` | 必填,而且是 `lang_map` 的值之一 |
+| `url_pattern.strip_extensions` | 每一項以 `.` 開頭、至少兩個字元,不含 `/` `\` `?` `#` 與空白 |
+| `extract.content` | 必填,合法的 CSS selector |
+| `extract.title_noise` / `title_markers` | 沒有 null 項目(空字串允許,用到時略過) |
+| `extract.strip_title_prefix` | 每一項是合法的 .NET regex(與標題清理相同的選項) |
+| `extract.section_types` | key 是單一目錄名;頁型不可空 |
+| `extract.section_flags` | key 是單一目錄名;flag 不可空、不含 `;` |
+| `extract.type_rules.*` | `title_selector` 與每一個 `remove_selectors` 是合法的 CSS selector(頁型寫了但沒給規則 = 沒有規則) |
+| `extract.text_in_image_max_length` | ≥ 0 |
+| `pairing.fallback` | 已知的啟發式名稱,不重複 |
+| `media.web_prefix` | 以 `/` 開頭的根相對路徑或絕對 http(s) 網址,不含空白、引號、`<` `>` `?` `#` |
+| `media.pdf_labels` | key 是 `lang_map` 的 locale;值不可空 |
+| `media.thumbnails` | `max_width` ≥ 1;`quality` 1～100 |
+
+用到時另有一道檢查(第二道防線,擋函式庫呼叫端不經 loader、直接在程式裡組的 `SiteConfig`):selector 在處理任何頁之前、
+`strip_title_prefix` 在建標題清理器時編譯。2.3.1 以前這張表只有一部分在載入時驗,其餘到用到時才炸、或安靜地產出錯的東西。
+
 ## exit code
 
 0 乾淨 / 1 warning / 2 error / 130 中斷。所有指令的用法錯誤、config 錯誤、IO 錯誤一律 2;未知指令 2。

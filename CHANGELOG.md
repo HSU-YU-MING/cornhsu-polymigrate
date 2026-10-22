@@ -7,8 +7,8 @@
 **Major:修正一輪產品 bug,並把 2.x 期間因為會動到凍結面而留待裁定的改動一次做完。**
 四面契約裡,這一版動到的是 **exit code**(見下面的對照表)、**CLI 的預設值**(`probe-orphans --out` /
 `fetch-orphans --slugs` 的預設檔名)與 **.NET 函式庫的行為**(`OrphanProber` 兩處語意、selector 寫壞時的例外型別)。
-**YAML config 欄位、CSV 欄位與 frontmatter 欄位都沒有改**;既有 config 原樣可用,除非裡面有寫壞的 CSS selector
-(3.0 起載入時就擋,見「破壞性變更」)。CLI 指令與參數沒有增減。
+**YAML config 欄位、CSV 欄位與 frontmatter 欄位都沒有改**;既有 config 原樣可用,除非裡面有寫壞的值
+(CSS selector、regex、路徑形狀、網址、YAML 寫了 key 卻沒給值…——3.0 起載入時就擋,見「破壞性變更」)。CLI 指令與參數沒有增減。
 函式庫的 public 簽章只有新增、沒有移除或更改(`PublicApi.approved.txt` 的 diff 全是新增)。
 
 ### ⚠️ 升級必做
@@ -22,9 +22,10 @@
 3. **重產動畫縮圖。** `thumbs` 會跳過已存在的縮圖:要拿到保留動畫的 GIF / WebP 縮圖,先刪掉 `media_thumb/` 裡的 `.gif` / `.webp` 再跑一次。
 4. **部署 `redirects.nginx.conf` 之前重新 `nginx -t`。** 含非 ASCII 或特殊字元的舊網址改寫成解碼後的路徑,寫法與排序都會變。
 5. **Windows 使用者:重跑 `extract` 後,每一個 `.md` 的行尾都會改變**(frontmatter 改成 `\n`),第一次 commit 會是整片的行尾 diff。
-6. **先載入一次 config,修掉寫壞的 CSS selector。** 3.0 起載入 config 時就驗全部 selector 欄位:2.x 能跑、但裡面有寫壞的
-   `type_rules`(這次沒有頁屬於那個頁型)的 config,現在任何指令一讀到就 exit 2,訊息列出每一個寫壞的欄位與 selector。
-   例如跑一次 `polymigrate extract site.yaml --dry-run` 就知道。
+6. **先載入一次 config,修掉寫壞的值。** 3.0 起載入 config 時就驗每一個驗得出來的欄位(CSS selector、`strip_title_prefix` 的 regex、
+   `base_url`、路徑形狀、BCP-47、cookie 與 User-Agent、數值範圍、寫了 key 卻沒給值,完整清單見「破壞性變更」):2.x 能跑、
+   但裡面有寫壞的值的 config(例如 `type_rules` 裡這次沒用到的頁型、只有 `extract` 才會用到的 regex),
+   現在任何指令一讀到就 exit 2,訊息一次列出每一個寫壞的欄位。例如跑一次 `polymigrate extract site.yaml --dry-run` 就知道。
 7. **函式庫使用者**:`OrphanProber.ProbeAsync` 的 `known` 語意、`OrphanProber.KnownSlugs` / `PolyMigrator.MirrorSlugs` 的 slug 規則、
    selector 寫壞時擲的例外型別都變了,見下一節。
 
@@ -78,6 +79,27 @@
   (擋函式庫呼叫端不經 loader、直接在程式裡組的 config)。函式庫的 `SiteConfigLoader.Load` / `LoadFile`、
   `PolyMigrator.FromConfigFile` 對這類 config 改擲 `ConfigException`。
   **遷移**:修好或刪掉寫壞的 selector(見「升級必做」第 6 條)。
+- **config 載入時驗證所有驗得出來的欄位**(selector 以外;`SiteConfig` 每個欄位逐一看過)。原則同上:寫壞的 config 不該等到某個指令、
+  某一頁才炸——2.x 的這些值不是到使用時才擲例外,就是安靜地產出錯的東西。新增的載入時檢查:
+  - **寫了 key 卻沒給值**(`site:`、`title_noise:` 後面什麼都沒有,或清單裡的 `~`):2.x 在載入或使用時 `NullReferenceException`
+    (未處理例外,exit code 不在契約內)或 `Value cannot be null`。現在逐一點名(清單、對照表提示寫 `[]` / `{}` 或拿掉 key)。
+  - `extract.strip_title_prefix`:用與標題清理相同的選項編譯 regex(2.x 要到 `extract` 建標題清理器時才 exit 2,
+    訊息是 .NET 的 `Invalid pattern …`、沒點名欄位;`thumbs` / `probe-orphans` 永遠不報)。
+  - `site.base_url`:不可帶 query 或 fragment(網址一律組成 `<base_url>/<路徑>`,2.x 照樣把路徑接在 `?…` 後面發出去)。
+  - `site.user_agent`、`site.auth_workaround.set`:不可含控制字元(換行會讓請求送不出去,probe 把它算成連線錯誤);
+    cookie 名不可空、不可含 `=` `;` 空白,值不可含 `;`。
+  - `site.polite.delay_ms`:上限 1073741823(409 後的重試等兩倍,超過時 `Task.Delay` 要到探測當下才擲例外)。
+  - `url_pattern.lang_map`:key 必須是 `""` 或單一路徑段(含斜線的永遠對不上任何鏡像頁,`..` 會讓 probe 讀到 `raw/` 以外);
+    值必須是形狀正確的 BCP-47 標記(`zh_Hant` 這類底線寫法 2.x 照收)。
+  - `url_pattern.strip_extensions`:每一項是以 `.` 開頭的副檔名(`php` 會剝到 slug 中間;`""` 永遠成立、讓後面的副檔名全部失效)。
+  - `extract.section_types` / `section_flags`:key 是單一目錄名(含斜線的永遠對不上);頁型不可空(null 要到用到 `type_rules` 時才擲例外);
+    flag 不可空、不可含 `;`(`content_inventory.csv` 以 `;` 分隔 flags)。
+  - `pairing.fallback`:不可重複(2.x 同一種證據加兩次權重、`pair_evidence` 寫兩次)。
+  - `media.web_prefix`:根相對路徑(`/media/`)或絕對 http(s) 網址,不含空白、引號、`<` `>` `?` `#`(相對路徑在巢狀頁上指錯地方)。
+  - `media.pdf_labels`:key 必須是 `lang_map` 的 locale(依頁面 locale 精確查表,打錯的那條 2.x 安靜地退回 `View PDF`);值不可空。
+  一律 `ConfigException` → exit 2,與 selector 的錯誤一起在同一則訊息裡逐行列出、點名欄位。用到時的檢查保留為第二道防線
+  (標題清理器照樣編譯 regex,而且改成容忍 `title_noise` / `title_markers` 的 null 項目)。
+  **遷移**:照訊息修好或拿掉那些值(見「升級必做」第 6 條)。`examples/ibps-austin.yaml` 與測試用的 config 都不受影響。
 - **函式庫:config 的 CSS selector 寫壞時擲 `ConfigException`**(2.x:AngleSharp 的 `DomException`)。影響
   `PolyMigrator.Extract`、`ExtractionPipeline.Run`、`OrphanFetcher.FetchAsync` 與新的 `PolyMigrator.FetchOrphansAsync`。
   **遷移**:改接 `ConfigException`(訊息點名寫壞的欄位)。
@@ -110,6 +132,8 @@ IO 錯誤一律 2;未知指令 2。
 | **沒給 `--out` / `--slugs`,`--section` 含 `/` 等** | 照跑 | 2 |
 | config 的 CSS selector 寫壞、而且這次用得到(`extract` / `fetch-orphans`) | 未處理例外(不在契約內) | 2 |
 | **config 有寫壞、但這次用不到的 selector**(沒有頁屬於的頁型;`thumbs` / `probe-orphans` 讀到的任何 selector) | 照跑(0/1) | 2(載入時) |
+| **config 有其他寫壞的值**(`strip_title_prefix` 的 regex、沒有點的 `strip_extensions`、含斜線的 section / 語言 key、不是根路徑的 `web_prefix`、帶 query 的 `base_url`、重複的 `fallback`…) | 照跑(0/1),或到用到時才 2 | 2(載入時) |
+| **YAML 寫了 key 卻沒給值**(`site:`、`title_noise:`…) | 未處理例外或用到時 2 | 2(載入時) |
 | `verify`:只被 iframe 嵌入的頁 | 1(`unlinked_page`) | 0 |
 | `verify`:`data-src` 這類名稱只是以 href/src 結尾的屬性、同 host 非 http(s) 連結指向站內 | 可能 2(假的 `broken_link`) | 不檢查 |
 | `fetch-orphans`:`lang_map` key 為 `""`、伺服器不合併斜線 | 1(全部 404) | 0 |

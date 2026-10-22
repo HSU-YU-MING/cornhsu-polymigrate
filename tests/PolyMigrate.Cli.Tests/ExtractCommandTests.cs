@@ -243,18 +243,39 @@ public class ExtractCommandTests : CliTestBase
         Assert.True(File.Exists(PathOf("site/content/ch/news/gone.md")));   // 只寫不刪
     }
 
-    [Fact]
-    public async Task InvalidRegexInStripTitlePrefix_ExitsTwo_WithMessage()
+    [Theory]
+    [InlineData("extract")]
+    [InlineData("thumbs")]   // thumbs 根本不用 strip_title_prefix:2.x 照樣 exit 0
+    public async Task InvalidRegexInStripTitlePrefix_ExitsTwo_AtLoad_NamingTheField(string command)
     {
-        // config 載入時不驗 regex;壞掉的 pattern 在抽取時才爆——必須仍是乾淨的 exit 2,不是崩潰
+        // 2.x 載入時不驗 regex:extract 要到建標題清理器時才 exit 2(「error: Invalid pattern …」,沒點名欄位),
+        // 不用它的指令永遠不報。3.0 起載入時就擋,訊息點名欄位與 pattern
         var config = Write("site/site.yaml", Config(extraExtract: "  strip_title_prefix: ['(']"));
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+        Write("site/media/a.jpg", "not used");
+
+        var r = await Run(command, config);
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal($"{config}: config is invalid:\n"
+            + "  - extract.strip_title_prefix: '(' is not a valid regular expression (InsufficientClosingParentheses at offset 1).\n", r.Err);
+        Assert.Empty(r.Out);
+        Assert.False(Directory.Exists(PathOf("site/content")));
+        Assert.False(Directory.Exists(PathOf("site/media_thumb")));
+    }
+
+    [Fact]
+    public async Task ConfigKeyWithNoValue_ExitsTwo_InsteadOfCrashing()
+    {
+        // YAML 寫了 key 卻沒給值 → null。2.x 在載入或使用時 NullReferenceException:未處理例外,exit code 不在契約內
+        var config = Write("site/site.yaml", Config(extraExtract: "  title_noise:"));
         Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
 
         var r = await Run("extract", config);
 
         Assert.Equal(2, r.Exit);
-        Assert.StartsWith("error: ", r.Err);   // 訊息本文來自 .NET 的 RegexParseException,不綁字面
-        Assert.Empty(r.Out);
+        Assert.Equal($"{config}: config is invalid:\n"
+            + "  - extract.title_noise has no value (write [] for an empty list, or remove the key for the default).\n", r.Err);
     }
 
     [Fact]
