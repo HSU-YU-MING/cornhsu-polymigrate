@@ -277,8 +277,8 @@ stderr 印一則 `note:` 說明怎麼遷移(它是哪個 section 的清單,就�
 | `extract.content` | 必填,合法的 CSS selector |
 | `extract.title_noise` / `title_markers` | 沒有 null 項目(空字串允許,用到時略過) |
 | `extract.strip_title_prefix` | 每一項是合法的 .NET regex(與標題清理相同的選項) |
-| `extract.section_types` | key 是單一目錄名;頁型不可空 |
-| `extract.section_flags` | key 是單一目錄名;flag 不可空、不含 `;` |
+| `extract.section_types` | key 是 `""`(根層頁)或單一目錄名;頁型不可空 |
+| `extract.section_flags` | key 是 `""`(根層頁)或單一目錄名;flag 不可空、不含 `;` |
 | `extract.type_rules.*` | `title_selector` 與每一個 `remove_selectors` 是合法的 CSS selector(頁型寫了但沒給規則 = 沒有規則) |
 | `extract.text_in_image_max_length` | ≥ 0 |
 | `pairing.fallback` | 已知的啟發式名稱,不重複 |

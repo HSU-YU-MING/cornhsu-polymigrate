@@ -94,9 +94,11 @@ public class ConfigLoadValidationTests
         { Yaml(urlPattern: "  strip_extensions: [\"\", .php]\n"),
           "url_pattern.strip_extensions entry '' must be a file extension starting with '.' (e.g. .php), without '/', '\\', '?', '#' or whitespace." },
         { Yaml(extract: "  section_types: { \"news/2024\": article }\n"),
-          "extract.section_types key 'news/2024' must be a single directory name (no '/', '\\' or ':', not '.' or '..')." },
-        { Yaml(extract: "  section_flags: { \"\": needs_rebuild }\n"),
-          "extract.section_flags key '' must be a single directory name (no '/', '\\' or ':', not '.' or '..')." },
+          "extract.section_types key 'news/2024' must be \"\" (root-level pages) or a single directory name (no '/', '\\' or ':', not '.' or '..')." },
+        { Yaml(extract: "  section_flags: { \"..\": needs_rebuild }\n"),
+          "extract.section_flags key '..' must be \"\" (root-level pages) or a single directory name (no '/', '\\' or ':', not '.' or '..')." },
+        { Yaml(extract: "  section_flags: { \"a:b\": needs_rebuild }\n"),
+          "extract.section_flags key 'a:b' must be \"\" (root-level pages) or a single directory name (no '/', '\\' or ':', not '.' or '..')." },
         { Yaml(tail: "media:\n  web_prefix: media/\n"),
           "media.web_prefix must be a root-relative path starting with '/' (e.g. /media/) or an absolute http(s) URL, without whitespace, quotes, '<', '>', '?' or '#', got 'media/'." },
 
@@ -154,6 +156,17 @@ public class ConfigLoadValidationTests
 
         Assert.Equal("https://cdn.example.org/media", config.Media.WebPrefix);
         Assert.Null(config.Extract.TypeRules["article"]);   // 頁型寫了但沒規則 = 沒有規則(用到時本來就這樣處理)
+    }
+
+    [Fact]
+    public void RootLevelSectionKey_IsAllowed_AndAppliesToRootLevelPages()
+    {
+        // 根層頁(raw/about.php.html、無語言前綴站的 raw/x.php.html)的 section 就是 ""。2.3.1 會套用這個 key;
+        // 606e01b 把它當成「不是單一目錄名」擋掉了(審查必修 2)。比照 lang_map 允許 "",其餘形狀照擋
+        var config = SiteConfigLoader.Load(Yaml(extract: "  section_types: { \"\": article }\n  section_flags: { \"\": needs_rebuild }\n"));
+
+        Assert.Equal("article", new PolyMigrate.Core.Extraction.PageClassifier(config.Extract).Classify("", "about"));
+        Assert.Equal("needs_rebuild", config.Extract.SectionFlags[""]);
     }
 
     [Fact]

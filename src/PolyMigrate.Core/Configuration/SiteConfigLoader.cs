@@ -243,14 +243,15 @@ public static class SiteConfigLoader
                 }
             }
         }
-        // section 名稱是 raw/ 底下的目錄名:含斜線的 key 永遠對不上任何頁(2.x 安靜地當成沒設定)
+        // section 名稱是 raw/ 底下的目錄名:含斜線的 key 永遠對不上任何頁(2.x 安靜地當成沒設定)。
+        // "" 合法:根層頁(raw/about.php.html)的 section 就是 "",2.3.1 會套用它(審查必修 2)
         if (Map(errors, extract.SectionTypes, "extract.section_types") is { } sectionTypes)
         {
             foreach (var (section, pageType) in sectionTypes)
             {
-                if (!IsPathSegment(section))
+                if (!IsSectionKey(section))
                 {
-                    errors.Add($"extract.section_types key '{section}' must be a single directory name (no '/', '\\' or ':', not '.' or '..').");
+                    errors.Add($"extract.section_types key '{section}' must be {SectionKeyRule}.");
                 }
                 if (string.IsNullOrWhiteSpace(pageType))
                 {
@@ -263,9 +264,9 @@ public static class SiteConfigLoader
         {
             foreach (var (section, flag) in sectionFlags)
             {
-                if (!IsPathSegment(section))
+                if (!IsSectionKey(section))
                 {
-                    errors.Add($"extract.section_flags key '{section}' must be a single directory name (no '/', '\\' or ':', not '.' or '..').");
+                    errors.Add($"extract.section_flags key '{section}' must be {SectionKeyRule}.");
                 }
                 if (string.IsNullOrWhiteSpace(flag) || flag.Contains(';'))
                 {
@@ -375,6 +376,12 @@ public static class SiteConfigLoader
         (prefix.StartsWith('/')
          || (Uri.TryCreate(prefix, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)))
         && !prefix.Any(ch => ch is '"' or '\'' or '<' or '>' or '?' or '#' || char.IsWhiteSpace(ch) || char.IsControl(ch));
+
+    private const string SectionKeyRule =
+        "\"\" (root-level pages) or a single directory name (no '/', '\\' or ':', not '.' or '..')";
+
+    /// <summary>section_types / section_flags 的 key:"" 或單一路徑段(與 lang_map 的 key 同一條規則)。</summary>
+    private static bool IsSectionKey(string value) => value.Length == 0 || IsPathSegment(value);
 
     /// <summary>單一路徑段:非空、不含 / \ :、不是 . 或 ..(與 slugs 的 --section / --lang 同一條規則)。</summary>
     private static bool IsPathSegment(string value) =>

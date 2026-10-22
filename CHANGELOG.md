@@ -92,7 +92,7 @@
   - `url_pattern.lang_map`:key 必須是 `""` 或單一路徑段(含斜線的永遠對不上任何鏡像頁,`..` 會讓 probe 讀到 `raw/` 以外);
     值必須是形狀正確的 BCP-47 標記(`zh_Hant` 這類底線寫法 2.x 照收)。
   - `url_pattern.strip_extensions`:每一項是以 `.` 開頭的副檔名(`php` 會剝到 slug 中間;`""` 永遠成立、讓後面的副檔名全部失效)。
-  - `extract.section_types` / `section_flags`:key 是單一目錄名(含斜線的永遠對不上);頁型不可空(null 要到用到 `type_rules` 時才擲例外);
+  - `extract.section_types` / `section_flags`:key 是 `""`(根層頁的 section)或單一目錄名(含斜線的永遠對不上);頁型不可空(null 要到用到 `type_rules` 時才擲例外);
     flag 不可空、不可含 `;`(`content_inventory.csv` 以 `;` 分隔 flags)。
   - `pairing.fallback`:不可重複(2.x 同一種證據加兩次權重、`pair_evidence` 寫兩次)。
   - `media.web_prefix`:根相對路徑(`/media/`)或絕對 http(s) 網址,不含空白、引號、`<` `>` `?` `#`(相對路徑在巢狀頁上指錯地方)。
