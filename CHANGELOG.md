@@ -87,6 +87,9 @@ exit code 一覽:
   在檔名第一個點就截斷,和 `extract` 寫出的 slug 不一致。** `raw/ch/news/v1.2-release.php.html` 原本印 `v1`
   (`extract` 寫的是 `slug: v1.2-release`),餵給 `fetch-orphans --slugs` 就去抓不存在的網址。
   `probe-orphans` 手上有 config,已知 slug 集改用 `url_pattern.strip_extensions`,與 `extract` 完全相同的規則。
+  **升級注意(probe):** 鏡像檔名的副檔名不在 `strip_extensions` 裡、或大小寫不同(例如 `strip_extensions: [.php]`
+  而鏡像是 `20260301.PHP.html`)時,這個檔原本被當成已知的 `20260301`、現在不算(`extract` 也一直把它當成另一頁
+  `20260301.PHP`),所以那個日期會被探測,`orphan_slugs.txt` 可能多出這類 slug。
   `slugs` 與 `PolyMigrator.MirrorSlugs` 不帶 config、不知道 `strip_extensions`,改成去掉結尾的 `.html`
   再去掉一個全是 ASCII 字母的副檔名(`.php`、`.asp`、`.aspx`…),`2019.05.01.html` 這類乾淨網址不會被多剝——
   **這仍是啟發式,大多數站與 `extract` 一致,但不是全部**:乾淨網址站的 `jane.doe.html` 會印成 `jane`,
