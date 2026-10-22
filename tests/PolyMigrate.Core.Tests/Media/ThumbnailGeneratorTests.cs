@@ -475,6 +475,23 @@ public class ThumbnailGeneratorTests : IDisposable
     }
 
     [Fact]
+    public void FirstFrameFallbackThatAlsoFails_IsOnlyAFailure()
+    {
+        // 第一格就壞了:決定改用第一格,單張讀取卻也失敗。原本先記進 AnimationsAsFirstFrame 才寫,
+        // 同一個檔同時出現在 [fail] 與 [first frame](最終驗證建議 6)。只有寫成功的才算「用了第一格」
+        var path = MediaPath("dead.gif");
+        File.WriteAllBytes(path, RawGif.Build((400, 200), [(400, 200), (400, 200), (400, 200)], corruptFrame: 0));
+        Assert.ThrowsAny<MagickException>(() => new MagickImage(path));   // 前提:單張也讀不起來
+
+        var report = Run();
+
+        Assert.Equal(1, report.Failed);
+        Assert.Equal("dead.gif", Assert.Single(report.Failures).Path);
+        Assert.Empty(report.AnimationsAsFirstFrame);
+        Assert.Equal(0, report.Created);
+    }
+
+    [Fact]
     public void AnimationWithinTheBudget_IsKept_AndCounted()
     {
         WriteAnimation("small.gif", MagickFormat.Gif, 2000, 500);

@@ -79,16 +79,9 @@ public sealed class ThumbnailGenerator(SiteConfig config)
                 // 否則重跑會因「檔案已存在」把壞縮圖當成已完成。暫存名沒有副檔名,
                 // 故寫出時明確指定格式(否則 Magick 會依 .tmp 推測格式而寫錯)。
                 var tmp = target + ".tmp";
-                if (TryWriteAnimated(file, tmp, thumbs, out var firstFrameReason))
+                var animated = TryWriteAnimated(file, tmp, thumbs, out var firstFrameReason);
+                if (!animated)
                 {
-                    report.AnimationsKept++;
-                }
-                else
-                {
-                    if (firstFrameReason is not null)
-                    {
-                        report.AnimationsAsFirstFrame.Add((relative.Replace('\\', '/'), firstFrameReason));
-                    }
                     using var image = new MagickImage(file);
                     image.AutoOrient();   // EXIF 轉正,必須在縮放前
                     Downscale(image, thumbs);
@@ -104,6 +97,16 @@ public sealed class ThumbnailGenerator(SiteConfig config)
                 }
                 File.Move(tmp, target, overwrite: true);
                 report.Created++;
+                // 寫成功才計數:改用第一格、單張卻也寫不出來的只算 failed
+                // (原本先記進 AnimationsAsFirstFrame 才寫,同一個檔同時出現在 [fail] 與 [first frame];最終驗證建議 6)
+                if (animated)
+                {
+                    report.AnimationsKept++;
+                }
+                else if (firstFrameReason is not null)
+                {
+                    report.AnimationsAsFirstFrame.Add((relative.Replace('\\', '/'), firstFrameReason));
+                }
                 if (report.Created % 200 == 0)
                 {
                     progress?.Invoke($"...{report.Created} done");
