@@ -524,9 +524,12 @@ public static class Cli
                     + " Check site.base_url, site.user_agent, site.auth_workaround (cookies) and site.polite.delay_ms, then rerun.");
                 // 2.x 的預設 --out 是各 section 共用的同一個檔,這裡還得警告「留著的可能是別的 section 的清單」;
                 // 3.0 起預設檔名帶 section,留著的就是這個 section 先前探到的
-                Console.Error.WriteLine(File.Exists(outFile)
+                var kept = File.Exists(outFile);
+                Console.Error.WriteLine(kept
                     ? $"warning: {outFile} was left as it was (it holds an earlier probe's list)."
                     : $"warning: {outFile} was not written; an empty list would read as \"no orphan pages\".");
+                // 排程的 log 多半只收 stdout:結論那一行照樣印,並講明這次沒有寫清單
+                Console.WriteLine($"Probe done: 0 orphan slugs (no usable answers; {outFile} {(kept ? "left as it was" : "not written")})");
                 return Finish(2);
             }
 

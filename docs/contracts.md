@@ -231,7 +231,8 @@ exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_p
 一行一個 slug,依探測順序;UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**;每次探測跑完整份覆寫。
 例外:**一個回答都沒拿到**(每個候選都是連線錯誤、逾時、重試後仍 409,或 401/403/429/5xx 這類
 不是「有/沒有」的狀態)時不寫——既有檔原樣保留,沒有檔也不建空檔(空清單會被讀成「沒有孤兒頁」),
-stderr 印 `error:` 並列出原因,**exit 2**(2.3.1 以前是 0)。部分候選沒拿到回答時照寫,stderr 警告清單可能不完整並列出原因,
+stderr 印 `error:` 並列出原因,stdout 照樣印結論行 `Probe done: 0 orphan slugs (no usable answers; <file> left as it was | not written)`,
+**exit 2**(2.3.1 以前是 0)。部分候選沒拿到回答時照寫,stderr 警告清單可能不完整並列出原因,
 **exit 1**(有 warning、輸出仍可用;2.3.1 以前是 0)。
 「確定沒有」的回答是 404、410、其他 2xx,以及 3xx(probe 不跟轉址,轉址頁不算命中)。
 **2.x 的 `<root>/orphan_slugs.txt`**(各 section 共用一份)3.0 起不讀、不寫、不刪。用到預設檔名而它還在時,

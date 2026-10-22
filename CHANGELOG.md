@@ -34,7 +34,8 @@
 
 - **`probe-orphans` 一個回答都沒拿到時 exit 2**(2.x:0)。每個候選都是連線錯誤、逾時、重試後仍 409,或 401/403/429/5xx 這類
   不是「有/沒有」的回答時——伺服器掛了、被 WAF 擋、`site.base_url` 打錯——2.x 只印警告、exit 0,只看 exit code 的排程會讀成
-  「沒有孤兒頁」。清單照舊不寫(既有檔原樣保留,沒有檔也不建空檔),stderr 第一行改成 `error:` 並列出原因(例如 `HTTP 503: 732`)。
+  「沒有孤兒頁」。清單照舊不寫(既有檔原樣保留,沒有檔也不建空檔),stderr 第一行改成 `error:` 並列出原因(例如 `HTTP 503: 732`);
+  stdout 照樣印結論行 `Probe done: 0 orphan slugs (no usable answers; … left as it was)`(或 `not written`),排程的 log 看得出結論。
   **遷移**:把 2 當成「這次沒問到,稍後重跑」,不要當成清單已經更新。
 - **`probe-orphans` 有部分候選沒拿到回答時 exit 1**(2.x:0)。清單照寫(命中的都是真的),stderr 照舊警告清單可能不完整、
   列出原因與筆數——2.x 印了 `warning:` 卻回 0,只看 exit code 的排程看不出這次漏了一段(例如 12 月整個月被限流)。

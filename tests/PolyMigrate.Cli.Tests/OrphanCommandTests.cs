@@ -186,7 +186,8 @@ public class OrphanCommandTests : CliTestBase
             + " Check site.base_url, site.user_agent, site.auth_workaround (cookies) and site.polite.delay_ms, then rerun.\n"
             + $"warning: {slugFile} was left as it was (it holds an earlier probe's list).\n",
             r.Err);
-        Assert.DoesNotContain("Probe done", r.Out);   // 失敗了:stdout 不印「完成」
+        // 排程的 log 多半只收 stdout:結論那一行要在,並講明這次沒有寫清單(審查可接受項;95b4310 一度拿掉)
+        Assert.Contains($"Probe done: 0 orphan slugs (no usable answers; {slugFile} left as it was)\n", r.Out);
     }
 
     [Fact]
@@ -310,6 +311,7 @@ public class OrphanCommandTests : CliTestBase
         Assert.False(File.Exists(PathOf("site/orphan_slugs.news.txt")));
         Assert.StartsWith("error: none of the 732 probes got a usable answer (HTTP 403: 732)", r.Err);
         Assert.EndsWith($"warning: {PathOf("site/orphan_slugs.news.txt")} was not written; an empty list would read as \"no orphan pages\".\n", r.Err);
+        Assert.Contains($"Probe done: 0 orphan slugs (no usable answers; {PathOf("site/orphan_slugs.news.txt")} not written)\n", r.Out);
         // 先拿掉暫存路徑再檢查:TEMP 含非 ASCII 的開發機(例如中文使用者名稱)上,路徑本身就不是 ASCII
         Assert.True(r.Err.Replace(Root, "").All(char.IsAscii), "警告要是純 ASCII:cp437 等 console 印不出 × 與 —");
     }
