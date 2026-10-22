@@ -560,6 +560,24 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Fact]
+    public void DataSrcToMedia_IsStillCheckedForMissingFiles()
+    {
+        // 最終驗證 I2(r4-c):data-* 指向 /media/ 的引用原本(9d17071)照樣檢查 missing_media、算進 media refs;
+        // ac4c010 一併略過了。lazy-load 的圖在 JS 跑完後確實會被載入,缺檔就是新站上的破圖,不能從報告消失。
+        // 只有「站內頁」的 data-* 引用不檢查壞連結(它們不會被改寫,指著舊網址是常態)
+        AddMedia("present.jpg");
+        AddPage("ch/a.md", body: "<img data-src=\"/media/missing1.jpg\" src=\"/media/present.jpg\">"
+            + "<iframe data-src=\"/media/missing2.pdf\" src=\"about:blank\"></iframe>");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Equal(3, report.MediaChecked);
+        Assert.Equal(
+            ["/media/missing1.jpg", "/media/missing2.pdf"],
+            report.Issues.Where(i => i.Kind == "missing_media").Select(i => i.Detail).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void SrcInsideADataAttributeValue_IsNeitherCheckedNorAnEntry()
     {
         // 最終驗證 I3(r4-d):data-* 屬性的值裡含有 src='…' 時,有邊界的比對會在值的中間找到它——

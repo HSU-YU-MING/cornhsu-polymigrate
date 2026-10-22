@@ -121,8 +121,9 @@ public sealed partial class OutputVerifier
                 page == "index.md" || page.EndsWith("/index.md", StringComparison.Ordinal)));
 
             // frontmatter images[].local 也要驗(相簿頁型的圖不在內文)
-            var (htmlChecked, htmlEntryOnly) = HtmlRefs(body);
-            var refs = new List<string>(MarkdownRefs(body).Concat(htmlChecked));
+            // 順序與 9d17071 相同:Markdown、內嵌 HTML(依出現順序)、frontmatter 相簿;
+            // LinkCheck = false 的是 data-* 這類,見下面的迴圈與 HtmlRefs
+            var refs = new List<(string Value, bool LinkCheck)>(MarkdownRefs(body).Select(r => (r, true)).Concat(HtmlRefs(body)));
             if (fm?.GetValueOrDefault("images") is IEnumerable<object> images)
             {
                 foreach (var img in images)
@@ -130,13 +131,15 @@ public sealed partial class OutputVerifier
                     if (img is IDictionary<object, object> d && d.TryGetValue("local", out var local)
                         && local is string localStr)
                     {
-                        refs.Add(localStr);   // 手改壞的 frontmatter 可能讓 local 非字串,略過而非崩潰
+                        refs.Add((localStr, true));   // 手改壞的 frontmatter 可能讓 local 非字串,略過而非崩潰
                     }
                 }
             }
 
-            foreach (var reference in refs)
+            foreach (var (reference, linkCheck) in refs)
             {
+                // 媒體引用一律檢查,data-* 也一樣:lazy-load 的圖在 JS 跑完後確實會被載入,缺檔就是新站上的破圖,
+                // 不能從報告消失(與 9d17071 相同;最終驗證 I2)
                 if (reference.StartsWith(mediaPrefix, StringComparison.Ordinal))
                 {
                     if (!checkMedia)
@@ -152,6 +155,17 @@ public sealed partial class OutputVerifier
                         issues.Add(knownMissing.Contains(clean)
                             ? new VerifyIssue(Severity.Warning, page, "known_missing_media", reference)
                             : new VerifyIssue(Severity.Error, page, "missing_media", reference));
+                    }
+                }
+                else if (!linkCheck)
+                {
+                    // data-src / data-href 這類指向站內頁的:不檢查壞連結(它們不會被改寫,指著舊網址是常態),
+                    // 但照樣算入口——只被 lazy-load iframe 指到的頁,在新站上(沿用那段 JS 時)訪客還是到得了;
+                    // 不算的話它會開始報 unlinked_page,verify 由 0 變 1(第三輪審查 B3)
+                    var route = ResolveRoute(reference, routes);
+                    if (route != selfRoute)
+                    {
+                        referenced.Add(route);
                     }
                 }
                 else
@@ -172,21 +186,6 @@ public sealed partial class OutputVerifier
                 }
             }
 
-            // data-src / data-href 這類:不檢查壞連結(不是瀏覽器會載入的網址),但照樣算入口——
-            // 只被 lazy-load iframe 指到的頁,在新站上(沿用那段 JS 時)訪客還是到得了;
-            // 不算的話它會開始報 unlinked_page,verify 由 0 變 1(第三輪審查 B3)
-            foreach (var reference in htmlEntryOnly)
-            {
-                if (reference.StartsWith(mediaPrefix, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                var route = ResolveRoute(reference, routes);
-                if (route != selfRoute)
-                {
-                    referenced.Add(route);
-                }
-            }
         }
 
         issues.AddRange(FindOrphans(pageRoutes, referenced, allowUnlinked));
@@ -325,30 +324,27 @@ public sealed partial class OutputVerifier
     }
 
     /// <summary>
-    /// 內嵌 HTML 的站內引用(只留 "/" 開頭者),分成兩組,兩組的聯集恰好是 9d17071 看得到的那一份:
+    /// 內嵌 HTML 的站內引用(只留 "/" 開頭者),依出現順序;集合恰好是 9d17071 看得到的那一份。
     /// <list type="bullet">
-    /// <item><b>Checked</b>:真正的 <c>href</c> / <c>src</c> 屬性——檢查壞連結與缺圖,也算入口。</item>
-    /// <item><b>EntryOnly</b>:屬性名只是以 href / src 結尾(<c>data-src</c>、<c>data-href</c>、<c>xsrc</c>)——
-    /// 算入口,站內頁不檢查壞連結(見 Run)。</item>
+    /// <item><b>LinkCheck = true</b>:真正的 <c>href</c> / <c>src</c> 屬性——檢查壞連結與缺圖,也算入口。</item>
+    /// <item><b>LinkCheck = false</b>:屬性名只是以 href / src 結尾(<c>data-src</c>、<c>data-href</c>、<c>xsrc</c>)——
+    /// 算入口、媒體照樣檢查缺檔,只有站內頁不檢查壞連結(見 Run)。</item>
     /// </list>
     /// 一律以 9d17071 那條沒有邊界的比對(<see cref="AnyHrefOrSrcAttribute"/>)為準,只用有邊界的比對
     /// (<see cref="HtmlTarget"/>)判斷「這個起點是不是真正的屬性」。有邊界的比對若單獨跑,會在 <c>data-src</c>
     /// 的值中間找到 <c>src='…'</c>——9d17071 從來不會看到那裡,檢查集合就比 9d 大(最終驗證 I3:r4-d 由 0 變 2)。
     /// </summary>
-    private static (List<string> Checked, List<string> EntryOnly) HtmlRefs(string body)
+    private static IEnumerable<(string Value, bool LinkCheck)> HtmlRefs(string body)
     {
         var attributeStarts = HtmlTarget().Matches(body).Select(m => m.Index).ToHashSet();
-        var checkedRefs = new List<string>();
-        var entryOnly = new List<string>();
         foreach (Match m in AnyHrefOrSrcAttribute().Matches(body))
         {
             var value = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
             if (value is ['/', not '/', ..])
             {
-                (attributeStarts.Contains(m.Index) ? checkedRefs : entryOnly).Add(value);
+                yield return (value, attributeStarts.Contains(m.Index));
             }
         }
-        return (checkedRefs, entryOnly);
     }
 
     private static HashSet<string> LoadKnownMissing(string outDir)

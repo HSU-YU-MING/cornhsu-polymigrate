@@ -17,7 +17,7 @@ exit code 一覽:
 - **只會變綠**(既有情境的 exit code 往下降,原本的非零是誤報或修正前的錯誤):
   - `verify`:某頁只被保留下來的 iframe 嵌入(沒有任何 `<a>` 連到它)時,iframe 的 `src` 算進入口,
     `unlinked_page` 消失,可能由 1 變 0(要不要這樣算列入待裁定)。
-  - `verify`:`data-src` / `data-href` 不再檢查壞連結(仍算入口);同 host、指向非鏡像頁的 `ftp://` 等連結
+  - `verify`:`data-src` / `data-href` 指向站內頁的不再檢查壞連結(仍算入口;指向 `/media/` 的照樣檢查缺檔);同 host、指向非鏡像頁的 `ftp://` 等連結
     不再被改寫成站內路由去檢查——兩者都只會減少 `broken_link`,入口集合(`unlinked_page`)不變,可能由 2 變 0/1。
   - `fetch-orphans`:`lang_map` key 為 `""` 的站、伺服器不合併斜線時,原本請求 `//news/…` 全部 404(exit 1),
     現在請求正確網址,可能由 1 變 0。
@@ -53,8 +53,9 @@ exit code 一覽:
   `broken_link`,**`verify` 因此可能由 exit 0/1 變成 2**——原本那個嵌入在 Markdown 裡根本不存在,
   現在它在新站上確實是壞的。這是既有情境的 exit code 改變,semver 判讀(patch 或留到 major)待維護者裁定。
   另外 `verify` 掃內嵌 HTML 時原本連 `data-src` / `data-href` 也當成連結(lazy-load 的 iframe 指向已搬好的頁
-  也會報 `broken_link`);現在只檢查真正的 `href` / `src` 屬性;`data-src` 這類仍算入口(否則只被 lazy-load iframe 指到的頁
+  也會報 `broken_link`);現在站內頁只檢查真正的 `href` / `src` 屬性;`data-src` 這類仍算入口(否則只被 lazy-load iframe 指到的頁
   會開始報 `unlinked_page`)——這一項只會讓 issue 變少。`verify` 摘要的 `links checked` 也不再計入這類引用,數字可能變小。
+  `data-*` 指向 `/media/` 的引用與修正前一樣檢查缺檔、算進 `media refs`(lazy-load 的圖在 JS 跑完後確實會被載入)。
 - **修正(patch):npm 啟動腳本自己失敗時,訊息改英文並明講 PolyMigrate 沒有執行。**
   平台不在支援表、平台包沒裝(`--no-optional` / `--omit=optional` 或安裝中斷)、執行檔起不來這三種情況,
   原本印繁體中文(CLI 其他輸出都是英文),也沒說工具根本沒跑。現在 stderr 以 `error:` 開頭、
