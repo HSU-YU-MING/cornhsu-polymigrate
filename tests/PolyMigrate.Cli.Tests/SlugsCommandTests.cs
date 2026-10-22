@@ -108,6 +108,18 @@ public class SlugsCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task OldPhpExtensions_AreStripped_LikeBefore()
+    {
+        // 第三輪審查 B4 的重現(review3 的 site-php5):9f41339 得到 20260301,e0a8e6f 之後得到 20260301.php5
+        AddMirrored("raw/ch/news", "20260301.php5.html", "20260302.php3.html", "20260303.php.html", "v1.2-release.php5.html");
+
+        var r = await Run("slugs", Root, "--section", "news");
+
+        Assert.Equal(0, r.Exit);
+        Assert.Equal("20260301\n20260302\n20260303\nv1.2-release\n", r.Out);
+    }
+
+    [Fact]
     public async Task UnknownLang_ExitsTwo_NamingTheLang()
     {
         AddMirrored("raw/ch/news", "20260101.php.html");

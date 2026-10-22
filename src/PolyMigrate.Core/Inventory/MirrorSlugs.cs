@@ -35,18 +35,24 @@ internal static class MirrorSlugs
     /// <c>2019.05.01.php.html</c> → <c>2019</c>),餵給 <c>fetch-orphans --slugs</c> 就去抓不存在的網址。</para>
     ///
     /// <para><c>slugs</c> 與函式庫的 <c>MirrorSlugs</c> 不帶 config、不知道 <c>strip_extensions</c>,
-    /// 所以「動態副檔名」只認全是 ASCII 字母的那一段(<c>.php</c>、<c>.asp</c>、<c>.aspx</c>、<c>.jsp</c>…):
-    /// 沒有動態副檔名的乾淨網址站(<c>2019.05.01.html</c>、<c>v1.2-release.html</c>)不會被多剝一段。
-    /// <b>它仍是啟發式</b>,有兩種情況與 extract(<see cref="Extraction.RawPageParser"/>)不一致:
-    /// 乾淨網址站的 <c>jane.doe.html</c>(會被剝成 <c>jane</c>)、<c>strip_extensions: []</c> 的站上的
-    /// <c>foo.php.html</c>(extract 的 slug 是 <c>foo.php</c>)。手上有 config 的呼叫端改傳
+    /// 所以「動態副檔名」認的是:點之後 1～8 個 ASCII 英數字、至少一個字母(<c>.php</c>、<c>.php5</c>、<c>.php3</c>、
+    /// <c>.asp</c>、<c>.aspx</c>、<c>.jsp</c>…;e0a8e6f 一度只認全是字母的,老 PHP 站的 <c>.php5</c> 因此退化,第三輪審查)。
+    /// 沒有動態副檔名的乾淨網址站(<c>2019.05.01.html</c>、<c>v1.2-release.html</c>)不會被多剝一段。</para>
+    ///
+    /// <para><b>它仍是啟發式</b>,下列情況與 extract(<see cref="Extraction.RawPageParser"/>,依 config 剝尾綴、分大小寫)
+    /// 不一致:乾淨網址站的 <c>jane.doe.html</c>(這裡得到 <c>jane</c>,extract 是 <c>jane.doe</c>);
+    /// <c>strip_extensions: []</c> 的 <c>foo.php.html</c>(<c>foo</c> 對 <c>foo.php</c>);副檔名不在 <c>strip_extensions</c>
+    /// 裡的,例如只列 <c>.php</c> 時的 <c>a.asp.html</c>、<c>a.php5.html</c>(<c>a</c> 對 <c>a.asp</c>、<c>a.php5</c>);
+    /// 大小寫不符的,例如 <c>A.PHP.html</c>(<c>A</c> 對 <c>A.PHP</c>)。手上有 config 的呼叫端改傳
     /// <c>stripExtensions</c>,走與 extract 完全相同的規則。</para>
     /// </summary>
     internal static string SlugOf(string fileName)
     {
         var name = fileName.EndsWith(".html", StringComparison.Ordinal) ? fileName[..^".html".Length] : fileName;
         var extension = Path.GetExtension(name);
-        return extension.Length > 1 && extension.Skip(1).All(char.IsAsciiLetter)
+        return extension.Length is >= 2 and <= 9
+            && extension.Skip(1).All(char.IsAsciiLetterOrDigit)
+            && extension.Skip(1).Any(char.IsAsciiLetter)
             ? name[..^extension.Length]
             : name;
     }

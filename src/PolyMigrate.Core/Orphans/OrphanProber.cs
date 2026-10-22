@@ -49,11 +49,13 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
 
     /// <summary>
     /// 已抓到的 slug(<c>raw/{lang}/{section}/</c> 的檔名),探測時跳過。
-    /// <para>這個多載不帶 config,所以檔名 → slug 用的是啟發式:去掉結尾的 <c>.html</c>,再去掉一段全是 ASCII 字母的副檔名
-    /// (2.3.1 以前是取第一個點之前)。它與 <c>extract</c> 的 slug 在兩種情況不一致:乾淨網址站的 <c>jane.doe.html</c>
-    /// (這裡得到 <c>jane</c>)、<c>strip_extensions: []</c> 的站上的 <c>foo.php.html</c>(這裡得到 <c>foo</c>)。
+    /// <para>這個多載不帶 config,所以檔名 → slug 用的是啟發式:去掉結尾的 <c>.html</c>,再去掉一段 1～8 個 ASCII 英數字、
+    /// 至少一個字母的副檔名(<c>.php</c>、<c>.php5</c>、<c>.asp</c>…;2.3.1 以前是取第一個點之前)。它與 <c>extract</c>
+    /// 的 slug 在這些情況不一致:乾淨網址站的 <c>jane.doe.html</c>(這裡得到 <c>jane</c>);<c>strip_extensions: []</c> 的
+    /// <c>foo.php.html</c>(這裡得到 <c>foo</c>);副檔名不在 <c>strip_extensions</c> 裡的(只列 <c>.php</c> 時的
+    /// <c>a.php5.html</c>、<c>a.asp.html</c>,這裡得到 <c>a</c>);大小寫不符的(<c>A.PHP.html</c>,這裡得到 <c>A</c>)。
     /// CLI 的 <c>probe-orphans</c> 改用依 <c>url_pattern.strip_extensions</c> 的規則,與 <c>extract</c> 完全一致,
-    /// 所以這兩種情況下此方法的結果會與 CLI 不同。</para>
+    /// 所以在這些情況下此方法的結果會與 CLI 不同。</para>
     /// </summary>
     public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section) =>
         Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section);

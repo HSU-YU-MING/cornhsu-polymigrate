@@ -56,6 +56,11 @@ public class MirrorSlugsTests : IDisposable
     [InlineData("v1.2-release.html", "v1.2-release")]
     [InlineData("about.asp.html", "about")]
     [InlineData("20260101.html", "20260101")]
+    // 第三輪審查 B4:老 PHP 站的 .php5 / .php3。e0a8e6f 只剝「全是字母」的副檔名,這兩種退化成 20260301.php5
+    // (9f41339 取第一個點之前,得到的是 20260301)。改成 1～8 個英數字、至少一個字母
+    [InlineData("20260301.php5.html", "20260301")]
+    [InlineData("20260302.php3.html", "20260302")]
+    [InlineData("v1.2-release.php5.html", "v1.2-release")]
     public void DottedSlug_StripsOnlyHtmlAndOneDynamicExtension_LikeExtract(string fileName, string slug)
     {
         // 與 extract 的 slug 同一把尺(RawPageParser 只剝 strip_extensions + .html):含點的 slug 原本被截在

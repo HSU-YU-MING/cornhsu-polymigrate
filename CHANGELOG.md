@@ -92,12 +92,16 @@ exit code 一覽:
   而鏡像是 `20260301.PHP.html`)時,這個檔原本被當成已知的 `20260301`、現在不算(`extract` 也一直把它當成另一頁
   `20260301.PHP`),所以那個日期會被探測,`orphan_slugs.txt` 可能多出這類 slug。
   `slugs` 與 `PolyMigrator.MirrorSlugs` 不帶 config、不知道 `strip_extensions`,改成去掉結尾的 `.html`
-  再去掉一個全是 ASCII 字母的副檔名(`.php`、`.asp`、`.aspx`…),`2019.05.01.html` 這類乾淨網址不會被多剝——
-  **這仍是啟發式,大多數站與 `extract` 一致,但不是全部**:乾淨網址站的 `jane.doe.html` 會印成 `jane`,
-  `strip_extensions: []` 的站上 `foo.php.html` 會印成 `foo`(`extract` 的 slug 分別是 `jane.doe`、`foo.php`)。
-  **升級注意:含點的 slug 輸出會改變**(原本的截斷值本來就無法回餵 `fetch-orphans`)。列表頁 `index` 照舊列出。
+  再去掉一個 1～8 個 ASCII 英數字、至少一個字母的副檔名(`.php`、`.php5`、`.php3`、`.asp`、`.aspx`…),
+  `2019.05.01.html` 這類乾淨網址不會被多剝——**這仍是啟發式,大多數站與 `extract` 一致,但不是全部**:
+  乾淨網址站的 `jane.doe.html` 會印成 `jane`;`strip_extensions: []` 的站上 `foo.php.html` 會印成 `foo`;
+  副檔名不在 `strip_extensions` 裡(只列 `.php` 時的 `a.php5.html`)或大小寫不符(`A.PHP.html`)的,
+  會剝成 `a`、`A`(`extract` 的 slug 分別是 `jane.doe`、`foo.php`、`a.php5`、`A.PHP`)。
+  **升級注意:含點的 slug 輸出會改變**:`v1.2-release.php.html` 這類「第一個點之後還是 slug」的,原本被截斷成
+  無法回餵 `fetch-orphans` 的 `v1`,現在是完整的 slug;`20260301.php5.html` 這類「點之後只是副檔名」的,
+  結果與原本相同(`20260301`)。列表頁 `index` 照舊列出。
   **函式庫:public 的 `OrphanProber.KnownSlugs(rawDir, langPrefix, section)` 也隨之改變**(由「第一個點之前」改成
-  上述啟發式);它不帶 config,所以上面兩種情況下與 CLI 的 `probe-orphans`(改用 `strip_extensions`)結果不同。
+  上述啟發式);它不帶 config,所以上面那幾種情況下與 CLI 的 `probe-orphans`(改用 `strip_extensions`)結果不同。
   要不要加一個帶 `strip_extensions` 的 public 多載(minor)留待決定。
 - **修正(patch):Windows 上 `slugs` 導成檔案時跟著 console 碼頁,回餵 `fetch-orphans` 變成亂碼網址。**
   2.2.0 與 `docs/搬完之後你還要做的事.md` 教的就是 `slugs … > local.txt` 這條管線;在 zh-TW Windows(cp950)
