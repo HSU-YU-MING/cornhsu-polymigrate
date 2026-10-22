@@ -544,6 +544,20 @@ public class OutputVerifierTests : IDisposable
         Assert.Empty(report.Issues);
     }
 
+    [Fact]
+    public void PageOnlyEmbeddedByAnIframe_CountsAsLinked()
+    {
+        // 現況(待維護者裁定,見決策紀錄「被 iframe 嵌入算不算有入口」):iframe 的 src 與 <a href> 一樣
+        // 算進入口。修 H3 之前保留的 iframe 根本不在 Markdown 裡,這種頁原本報 unlinked_page(exit 1),
+        // 現在不報(exit 0)。改判的話這條要一起改
+        AddPage("ch/index.md", body: "<iframe src=\"/ch/forms/signup\"></iframe>", pageType: "page");
+        AddPage("ch/forms/signup.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
     [Theory]
     // extract 改寫內文連結時刻意保留 query 與 fragment(LinkRewriterTests.QueryAndFragment_Preserved),
     // 所以 verify 一定會看到這種連結:它們連到的是那一頁,不是壞連結,那一頁也不是孤島

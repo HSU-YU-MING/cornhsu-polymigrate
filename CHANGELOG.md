@@ -14,6 +14,13 @@ exit code 一覽:
 - **既有情境的 exit code 改變,semver 判讀待裁定**:
   - 同步指令(`extract` / `thumbs` / `verify` / `slugs`)按一次 Ctrl-C:原本照常跑完回 0/1/2,現在回 130。
   - `verify`:`extract` 現在保留其他 iframe,指向沒搬過來的站內頁時 `verify` 報 `broken_link`,可能由 0/1 變 2。
+- **只會變綠**(既有情境的 exit code 往下降,原本的非零是誤報或修正前的錯誤):
+  - `verify`:某頁只被保留下來的 iframe 嵌入(沒有任何 `<a>` 連到它)時,iframe 的 `src` 算進入口,
+    `unlinked_page` 消失,可能由 1 變 0(要不要這樣算列入待裁定)。
+  - `verify`:`data-src` / `data-href` 不再被當成連結;同 host 的 `ftp://` 連結不再被改寫成站內路由去檢查——
+    兩者都只會減少 `broken_link`,可能由 2 變 0/1。
+  - `fetch-orphans`:`lang_map` key 為 `""` 的站、伺服器不合併斜線時,原本請求 `//news/…` 全部 404(exit 1),
+    現在請求正確網址,可能由 1 變 0。
 - **刻意沒動、留給維護者裁定**:`probe-orphans` 一個回答都沒拿到時要不要非零結束、npm 啟動腳本失敗時要不要回 2。
 
 - **修正(patch):config 的 CSS selector 寫壞時,`extract` 與 `fetch-orphans` 以未處理例外崩潰。**
