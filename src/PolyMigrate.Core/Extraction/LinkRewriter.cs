@@ -37,7 +37,7 @@ internal sealed class LinkRewriter
         {
             return href;
         }
-        if (!string.Equals(resolved.Host, _host, StringComparison.OrdinalIgnoreCase))
+        if (!IsWebPage(resolved) || !string.Equals(resolved.Host, _host, StringComparison.OrdinalIgnoreCase))
         {
             return href;
         }
@@ -55,6 +55,7 @@ internal sealed class LinkRewriter
     /// </summary>
     public string? RouteForUrl(string absoluteUrl) =>
         Uri.TryCreate(absoluteUrl, UriKind.Absolute, out var uri)
+        && IsWebPage(uri)
         && string.Equals(uri.Host, _host, StringComparison.OrdinalIgnoreCase)
             ? RouteForPath(uri.AbsolutePath)
             : null;
@@ -83,8 +84,32 @@ internal sealed class LinkRewriter
         return parts.Length switch
         {
             0 => "/",
-            1 => $"/{parts[0]}/",   // 只剩語言前綴 → 該語首頁
+            // 只剩一段:語言首頁(/ch/index.php → /ch/)或無語言前綴的根層頁(/about.php → /about/)加尾斜線;
+            // 剝完 strip_extensions 還帶副檔名的是檔案(/embed.swf、/calendar.html、/brochure.pdf),
+            // 加了尾斜線就壞了(第二輪審查)
+            1 when LooksLikeFileName(parts[0]) => $"/{parts[0]}",
+            1 => $"/{parts[0]}/",
             _ => "/" + string.Join('/', parts),
         };
+    }
+
+    /// <summary>只有 http(s) 才是網站的頁;同 host 的 ftp:// 等不可改寫成站內路由(第二輪審查)。</summary>
+    private static bool IsWebPage(Uri uri) => uri.Scheme is "http" or "https";
+
+    /// <summary>
+    /// 最後一段有沒有副檔名:點之後 1～8 個 ASCII 英數字、至少一個字母(.swf、.html、.pdf、.mp4)。
+    /// <c>v1.2-release</c> 的 <c>.2-release</c>、<c>2019.05.01</c> 的 <c>.01</c> 不算——那是 slug 裡的點。
+    /// </summary>
+    private static bool LooksLikeFileName(string segment)
+    {
+        var dot = segment.LastIndexOf('.');
+        if (dot <= 0)
+        {
+            return false;
+        }
+        var extension = segment[(dot + 1)..];
+        return extension.Length is >= 1 and <= 8
+            && extension.All(char.IsAsciiLetterOrDigit)
+            && extension.Any(char.IsAsciiLetter);
     }
 }

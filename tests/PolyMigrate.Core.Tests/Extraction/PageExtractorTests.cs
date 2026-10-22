@@ -227,6 +227,8 @@ public class PageExtractorTests : IDisposable
     [InlineData("https://www.ibps-austin.org/ch/news/x.php", "https://www.ibps-austin.org/ch/news/x.php")]   // 完整網址與 <a href> 一樣不動
     [InlineData("map.php", "/ch/news/map")]                                                    // 相對路徑:以頁面網址解析
     [InlineData("https://calendar.google.com/x.php", "https://calendar.google.com/x.php")]     // 外站不動
+    [InlineData("/embed.swf", "/embed.swf")]                                               // 根層的檔案不加尾斜線
+    [InlineData("ftp://www.ibps-austin.org/ch/file.php", "ftp://www.ibps-austin.org/ch/file.php")]   // 同 host 的非 http(s) 不動
     public void KeptIframe_SameSiteSrc_IsRewrittenLikeLinks(string src, string rewritten)
     {
         // 原樣保留的 iframe 若留著舊站網址,同一頁的 <a href> 已改成新路由、iframe 卻還是 .php,

@@ -43,6 +43,29 @@ public class LinkRewriterTests
         Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
 
     [Theory]
+    // 第二輪審查:同 host 的非 http(s) 網址原本被當成站內路徑改寫(ftp://同站/ch/file.php → /ch/file)。
+    // 只有 http(s) 才是網站的頁;其他 scheme 原樣保留
+    [InlineData("ftp://www.ibps-austin.org/ch/file.php")]
+    [InlineData("FTP://WWW.IBPS-AUSTIN.ORG/ch/file.php")]
+    public void SameHostNonHttpScheme_Untouched(string href) =>
+        Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
+
+    [Theory]
+    // 第二輪審查:只剩一段的路徑一律加尾斜線(「只剩語言前綴 → 該語首頁」),連帶把檔案也改壞了:
+    // /embed.swf → /embed.swf/、/calendar.html → /calendar.html/。剝完 strip_extensions 還帶副檔名的
+    // 是檔案,不是頁,不加尾斜線;語言首頁與無前綴的根層頁照舊
+    [InlineData("/embed.swf", "/embed.swf")]
+    [InlineData("/calendar.html", "/calendar.html")]
+    [InlineData("/brochure.pdf", "/brochure.pdf")]
+    [InlineData("/clip.mp4", "/clip.mp4")]
+    [InlineData("/ch/index.php", "/ch/")]              // 語言首頁:照舊
+    [InlineData("/about.php", "/about/")]              // 無語言前綴的根層頁:照舊(盤點 §3.7)
+    [InlineData("/v1.2-release.php", "/v1.2-release/")]   // .2-release 不是副檔名:仍是頁
+    [InlineData("/2019.05.01.php", "/2019.05.01/")]       // .01 不是副檔名
+    public void SingleSegment_TrailingSlashOnlyForPages(string href, string expected) =>
+        Assert.Equal(expected, Rewriter.Rewrite(href, PageUrl));
+
+    [Theory]
     // 絕對 http(s) 連結一律原樣保留(只改寫相對連結),同站的也一樣;scheme 的大小寫不影響這個判斷。
     // 測資必須是「同站」:別站的網址就算前綴比對改成分大小寫,也會在後面的 host 檢查被原樣傳回,守不住前綴這一關
     [InlineData("https://www.ibps-austin.org/ch/news/a.php")]
