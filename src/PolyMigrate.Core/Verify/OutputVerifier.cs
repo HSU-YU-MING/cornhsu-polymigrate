@@ -54,12 +54,12 @@ public sealed partial class OutputVerifier
         Run(outDir, mediaDir, mediaPrefix, allowUnlinked, CancellationToken.None);
 
     /// <summary>
-    /// 同上,可取消(CLI 接 Ctrl-C 用;取消時擲 <see cref="OperationCanceledException"/>,CLI 回 130)。
-    /// 逐頁檢查、寫報告前再檢查一次:被中斷時不寫半份 verify_report.csv。不加進 public 簽章的理由同
-    /// <c>ExtractionPipeline.Run</c> 的可取消版(2.2.0 替這個方法加選用參數就已經是一次二進位破壞,見盤點 §7.6)。
+    /// 同上,可取消(取消時擲 <see cref="OperationCanceledException"/>;CLI 接 Ctrl-C 後回 130)。
+    /// 逐頁檢查、寫報告前再檢查一次:被中斷時不寫半份 verify_report.csv。3.0 起 public,以新增 overload 的方式加
+    /// (2.2.0 替上一個方法加選用參數就已經是一次二進位破壞,見盤點 §7.6)。
     /// <para>方法開頭刻意不另外檢查:第一頁之前就是一個檢查點(<c>content/</c> 不存在時什麼都不做、立刻結束)。</para>
     /// </summary>
-    internal VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix,
+    public VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix,
         IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct)
     {
         var contentDir = Path.Combine(outDir, "content");

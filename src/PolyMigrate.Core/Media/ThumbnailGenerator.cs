@@ -29,11 +29,10 @@ public sealed class ThumbnailGenerator(SiteConfig config)
         Run(mediaDir, outDir, progress, CancellationToken.None);
 
     /// <summary>
-    /// 同上,可取消(CLI 接 Ctrl-C 用;取消時擲 <see cref="OperationCanceledException"/>,CLI 回 130)。
-    /// 逐張檢查;每張縮圖本來就是原子寫入,中斷不會留下半截檔。不加進 public 簽章的理由同
-    /// <c>ExtractionPipeline.Run</c> 的可取消版。
+    /// 同上,可取消(取消時擲 <see cref="OperationCanceledException"/>;CLI 接 Ctrl-C 後回 130)。
+    /// 逐張檢查;每張縮圖本來就是原子寫入,中斷不會留下半截檔。3.0 起 public(2.x 只有 CLI 用得到)。
     /// </summary>
-    internal ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress, CancellationToken ct)
+    public ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress, CancellationToken ct)
     {
         var thumbs = config.Media.Thumbnails ?? new ThumbnailSection();
         var report = new ThumbnailReport();

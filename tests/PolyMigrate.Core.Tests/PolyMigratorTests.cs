@@ -148,6 +148,52 @@ public class PolyMigratorTests : IDisposable
         Assert.Equal((400u, 200u), (thumb.Width, thumb.Height));   // config 的 max_width 有傳到底
     }
 
+    // ── 可取消的 overload(3.0):2.x 只有 CLI 接得到 Ctrl-C,函式庫呼叫端取消不了 ─────────────────
+    // 用預先取消的 token:facade 若沒把 token 傳到底(例如傳 CancellationToken.None),這幾條會照常跑完而變紅。
+    // 「半途取消、逐頁檢查」那一層在 CancellationTests 以內部的檢查點掛勾測過。
+
+    private static CancellationToken Cancelled()
+    {
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+        return cts.Token;
+    }
+
+    [Fact]
+    public void Extract_Cancellable_StopsBeforeWritingAnything()
+    {
+        var migrator = PolyMigrator.FromConfigFile(Path.Combine(FixtureDir, "config.yaml"));
+        CopyDirectory(Path.Combine(FixtureDir, "raw"), Path.Combine(_out, "raw"));   // root 版用預設佈局 root/raw
+
+        Assert.ThrowsAny<OperationCanceledException>(() => migrator.Extract(Paths(), dryRun: false, Cancelled()));
+        Assert.ThrowsAny<OperationCanceledException>(() => migrator.Extract(_out, dryRun: false, Cancelled()));
+
+        Assert.False(Directory.Exists(Path.Combine(_out, "content")));
+        Assert.False(File.Exists(Path.Combine(_out, "content_inventory.csv")));
+    }
+
+    [Fact]
+    public void Verify_Cancellable_DoesNotWriteAHalfReport()
+    {
+        PolyMigrator.FromConfigFile(Path.Combine(FixtureDir, "config.yaml")).Extract(Paths());
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            PolyMigrator.Verify(_out, Path.Combine(FixtureDir, "media"), "/media/", null, Cancelled()));
+
+        Assert.False(File.Exists(Path.Combine(_out, "verify_report.csv")));
+    }
+
+    [Fact]
+    public void GenerateThumbnails_Cancellable_StopsBeforeTheFirstImage()
+    {
+        var migrator = PolyMigrator.FromConfigFile(Path.Combine(FixtureDir, "config.yaml"));
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            migrator.GenerateThumbnails(Path.Combine(FixtureDir, "media"), Path.Combine(_out, "thumbs"), Cancelled()));
+
+        Assert.False(Directory.Exists(Path.Combine(_out, "thumbs")));
+    }
+
     private static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;

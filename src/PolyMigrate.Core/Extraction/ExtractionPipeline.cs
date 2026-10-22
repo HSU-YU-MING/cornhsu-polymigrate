@@ -96,13 +96,13 @@ public sealed class ExtractionPipeline(SiteConfig config)
     internal Action<string>? OnCheckpoint { get; init; }
 
     /// <summary>
-    /// 同上,可取消(CLI 接 Ctrl-C 用;取消時擲 <see cref="OperationCanceledException"/>,CLI 回 130)。
-    /// 逐頁檢查一次、寫清單之前再檢查一次:已寫出的 .md 保留(只寫不刪,重跑會覆寫),清單檔要嘛整組寫出、
-    /// 要嘛一份都不寫。刻意不加進 public 簽章:替既有方法加選用參數是二進位不相容(major),
-    /// 新增 public overload 則是 minor——這只是 CLI 需要的細節。
+    /// 同上,可取消(取消時擲 <see cref="OperationCanceledException"/>;CLI 接 Ctrl-C 後回 130)。
+    /// 逐頁檢查一次、媒體檔算 sha1 前逐檔檢查、寫清單之前再檢查一次:已寫出的 .md 保留(只寫不刪,重跑會覆寫),
+    /// 清單檔要嘛整組寫出、要嘛一份都不寫。3.0 起 public:以新增 overload 的方式加,不替既有方法加選用參數
+    /// (那是二進位不相容)。
     /// <para>方法開頭刻意不另外檢查:第一頁之前就是一個檢查點,0 頁時則由寫清單前那一個接住。</para>
     /// </summary>
-    internal ExtractionReport Run(ExtractionPaths paths, bool dryRun, CancellationToken ct)
+    public ExtractionReport Run(ExtractionPaths paths, bool dryRun, CancellationToken ct)
     {
         var parser = new RawPageParser(config.Site, config.UrlPattern);
         var links = new LinkRewriter(config.Site, config.UrlPattern);
