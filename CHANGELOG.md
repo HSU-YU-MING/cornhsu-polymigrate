@@ -132,15 +132,21 @@ exit code 一覽:
 - **修正(patch):`content/` 不存在時,`verify` 的摘要印出一個從未寫出的報告路徑,媒體列也印 `media refs : 0`。**
   exit 2 與 `[error] no_content` 明細本來就對,只有摘要誤導。現在印 `report : (not written)` 與
   `media checks : skipped (content directory not found)`。
-- **修正(patch):站內連結改寫把根層的檔案加上尾斜線、把同 host 的 `ftp://` 當成站內頁。**
+- **修正(patch):連結指向「不是鏡像頁」的根層檔案時被加上尾斜線、同 host 的 `ftp://` 被改寫成站內路由。**
   第二輪審查發現,修 H3 讓 iframe 也走 `<a href>` 的路由規則後,常見的嵌入目標會被改壞——而這兩個怪癖
   `<a href>` 在 2.3.1 就有:只剩一段的路徑一律加尾斜線(本意是語言首頁 `/ch/` 與根層頁 `/about/`),
-  於是 `/brochure.pdf` 變成 `/brochure.pdf/`、`/calendar.html` 變成 `/calendar.html/`;同 host 的
-  `ftp://…/ch/file.php` 被改寫成 `/ch/file`。現在剝完 `strip_extensions` 還帶副檔名的單段路徑視為檔案、
-  不加尾斜線(`.2-release`、`.01` 這種 slug 裡的點不算副檔名);只有 http(s) 才改寫成站內路由。
-  **升級注意:內文連結、iframe 與 `redirect_map.csv` 的 `new_path` 在這兩種情況會改變**;根層頁的 URL 若帶
-  沒被剝掉的副檔名(例如 `strip_extensions` 沒列 `.html` 時的 `/about.html`),新路由等於舊路徑,
-  `redirects.nginx.conf` / `_redirects` 依「相同路徑不出 301」不再為它產生一條。
+  於是 `/brochure.pdf` 變成 `/brochure.pdf/`;同 host 的 `ftp://…/ch/file.php` 被改寫成 `/ch/file`。
+  **頁的路由一律不變**:`redirect_map.csv`、`redirects.nginx.conf`、`_redirects`、`hreflang_map.csv`,
+  以及內文裡指向鏡像頁的連結,對任何輸入都與修正前逐位元相同(第三輪審查的原則;一度改壞過,見下)。
+  只有連結目標**不是鏡像裡的頁**時才另外判斷:
+  - 單段路徑若看起來是檔案(點檔案如 `/.htaccess`,或副檔名是 1～16 個英數字、至少一個字母,
+    如 `/embed.swf`、`/brochure.pdf`、`/site.webmanifest`),不加尾斜線。剝掉了 `strip_extensions`、拿掉了 `index`、
+    原本以 `/` 結尾、或那一段是語言前綴的,仍當頁、照舊加尾斜線;`.2-rc`、`.01` 這種 slug 裡的點不算副檔名。
+  - 同 host、scheme 不是 http(s) 的網址(`ftp://`、`file://`、`ws://`…)原樣保留,不再改寫成站內路由。
+    指向鏡像頁的仍照舊改寫。
+  **升級注意:內文連結與 iframe 在上述兩種情況會改變;頁的路由與 301 檔不變。** 開發過程中 `9254591` 曾把
+  判斷套在頁的路由上(`/jane.doe.php`、`/CONTACT.PHP`、`/calendar.html` 頁、key 為 `zh.tw` 的語言首頁等的
+  路由與 301 都變了),已在發版前修正,不影響任何已發行版本。
 - **文件(none):hreflang 讀的是整份文件的 `<link rel="alternate" hreflang>`,不只 `<head>`。**
   程式註解與 `docs/hreflang_量測與決策.md` 原本寫「`<head>` 裡的」,與實作不符;現在照實寫,並以測試釘住。
   行為沒有改:舊站的 `<head>` 常被 include 檔的 BOM 提早截斷、`<link>` 落進 body,只讀 head 會讓這類站的

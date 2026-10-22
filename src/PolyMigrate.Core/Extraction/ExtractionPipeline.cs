@@ -105,7 +105,6 @@ public sealed class ExtractionPipeline(SiteConfig config)
     internal ExtractionReport Run(ExtractionPaths paths, bool dryRun, CancellationToken ct)
     {
         var parser = new RawPageParser(config.Site, config.UrlPattern);
-        var extractor = new PageExtractor(config);
         var links = new LinkRewriter(config.Site, config.UrlPattern);
         var encoding = TextEncodings.Resolve(config.Site.Encoding);
         var locales = config.UrlPattern.LangMap.Values.Distinct().ToList();
@@ -114,6 +113,11 @@ public sealed class ExtractionPipeline(SiteConfig config)
             .OrderBy(f => Path.GetRelativePath(paths.RawDir, f).Replace('\\', '/'), StringComparer.Ordinal)
             .Select(f => parser.Parse(paths.RawDir, f))
             .ToList();
+        // 鏡像頁的路由集:內文連結指到這些頁時一律照頁的規則改寫,只有不是鏡像頁的目標才判斷「是不是檔案」
+        var pageRoutes = pages
+            .Select(p => links.RouteForPath(new Uri(p.SourceUrl).AbsolutePath))
+            .ToHashSet(StringComparer.Ordinal);
+        var extractor = new PageExtractor(config, pageRoutes);
         // config selector 寫壞的話在寫任何檔之前就停(ConfigException),不要半途崩潰留下半套輸出
         extractor.EnsureSelectorsValid(pages);
 

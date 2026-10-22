@@ -30,11 +30,12 @@ internal sealed partial class PageExtractor
         Formatting = { RemoveComments = true },
     });
 
-    public PageExtractor(SiteConfig config)
+    /// <param name="pageRoutes">鏡像裡每一頁的路由,見 <see cref="LinkRewriter"/>;null = 不知道(單元測試)。</param>
+    public PageExtractor(SiteConfig config, IReadOnlySet<string>? pageRoutes = null)
     {
         _config = config;
         _titles = new TitleCleaner(config.Extract);
-        _links = new LinkRewriter(config.Site, config.UrlPattern);
+        _links = new LinkRewriter(config.Site, config.UrlPattern, pageRoutes);
         _classifier = new PageClassifier(config.Extract);
         _mediaPaths = new MediaPaths(config.Media);
     }

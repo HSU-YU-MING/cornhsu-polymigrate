@@ -13,11 +13,20 @@ internal sealed class LinkRewriter
 
     private readonly string _host;
     private readonly string[] _stripExtensions;
+    private readonly HashSet<string> _langPrefixes;
+    private readonly IReadOnlySet<string>? _pageRoutes;
 
-    public LinkRewriter(SiteSection site, UrlPatternSection urlPattern)
+    /// <param name="pageRoutes">
+    /// 鏡像裡每一頁的路由(<see cref="RouteForPath"/> 算出來的)。連結目標是鏡像頁時一律照頁的規則改寫;
+    /// 只有目標不是鏡像頁,才考慮「它其實是個檔案」(見 <see cref="Rewrite"/>)。null = 不知道鏡像有哪些頁,
+    /// 一律當成不是鏡像頁(單元測試用;管線一定會傳)。
+    /// </param>
+    public LinkRewriter(SiteSection site, UrlPatternSection urlPattern, IReadOnlySet<string>? pageRoutes = null)
     {
         _host = new Uri(site.BaseUrl).Host;
         _stripExtensions = [.. urlPattern.StripExtensions];
+        _langPrefixes = new HashSet<string>(urlPattern.LangMap.Keys.Where(k => k.Length > 0), StringComparer.Ordinal);
+        _pageRoutes = pageRoutes;
     }
 
     public string Rewrite(string? href, string pageUrl)
@@ -37,12 +46,23 @@ internal sealed class LinkRewriter
         {
             return href;
         }
-        if (!IsWebPage(resolved) || !string.Equals(resolved.Host, _host, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(resolved.Host, _host, StringComparison.OrdinalIgnoreCase))
         {
             return href;
         }
+        var route = RouteForPath(resolved.AbsolutePath);
+        // 指向鏡像頁的連結一律照頁的規則(與 9d17071 逐位元相同,第三輪審查的原則);
+        // 不是鏡像頁的目標才另外判斷:同 host 的非 http(s)(ftp:// 等)原樣保留,看起來是檔案的不加尾斜線
+        if (_pageRoutes?.Contains(route) != true)
+        {
+            if (resolved.Scheme is not ("http" or "https"))
+            {
+                return href;
+            }
+            route = FileRoute(resolved.AbsolutePath) ?? route;
+        }
         // 保留 query 與 fragment:news.php?id=5 與 #team 不能在改寫時被丟掉
-        return RouteForPath(resolved.AbsolutePath) + resolved.Query + resolved.Fragment;
+        return route + resolved.Query + resolved.Fragment;
     }
 
     /// <summary>
@@ -55,14 +75,16 @@ internal sealed class LinkRewriter
     /// </summary>
     public string? RouteForUrl(string absoluteUrl) =>
         Uri.TryCreate(absoluteUrl, UriKind.Absolute, out var uri)
-        && IsWebPage(uri)
         && string.Equals(uri.Host, _host, StringComparison.OrdinalIgnoreCase)
             ? RouteForPath(uri.AbsolutePath)
             : null;
 
     /// <summary>
-    /// 站內路徑 → 新路由:去動態副檔名、收攏 index。
-    /// 內文連結改寫與 redirect_map 的 new_path 共用同一套規則(兩者不同步 = 301 打到破頁)。
+    /// 站內路徑 → 頁的路由:去動態副檔名、收攏 index。
+    /// 內文連結改寫與 redirect_map 的 new_path、hreflang 的目標共用同一套規則(兩者不同步 = 301 打到破頁)。
+    /// <para><b>這是頁的路由,不做任何「檔案」判斷</b>:redirect_map 的每一列都來自真的頁,在這裡猜「像不像檔案」
+    /// 只會誤判(9254591 曾讓 /jane.doe.php、/CONTACT.PHP、/calendar.html 的路由與 301 改變,第三輪審查)。
+    /// 必須與 9d17071 逐位元相同,PageRouteStabilityTests 釘住。</para>
     /// </summary>
     public string RouteForPath(string absolutePath)
     {
@@ -84,31 +106,46 @@ internal sealed class LinkRewriter
         return parts.Length switch
         {
             0 => "/",
-            // 只剩一段:語言首頁(/ch/index.php → /ch/)或無語言前綴的根層頁(/about.php → /about/)加尾斜線;
-            // 剝完 strip_extensions 還帶副檔名的是檔案(/embed.swf、/calendar.html、/brochure.pdf),
-            // 加了尾斜線就壞了(第二輪審查)
-            1 when LooksLikeFileName(parts[0]) => $"/{parts[0]}",
+            // 只剩一段:語言首頁(/ch/index.php → /ch/)或無語言前綴的根層頁(/about.php → /about/),加尾斜線
             1 => $"/{parts[0]}/",
             _ => "/" + string.Join('/', parts),
         };
     }
 
-    /// <summary>只有 http(s) 才是網站的頁;同 host 的 ftp:// 等不可改寫成站內路由(第二輪審查)。</summary>
-    private static bool IsWebPage(Uri uri) => uri.Scheme is "http" or "https";
-
     /// <summary>
-    /// 最後一段有沒有副檔名:點之後 1～8 個 ASCII 英數字、至少一個字母(.swf、.html、.pdf、.mp4)。
-    /// <c>v1.2-release</c> 的 <c>.2-release</c>、<c>2019.05.01</c> 的 <c>.01</c> 不算——那是 slug 裡的點。
+    /// 不是鏡像頁的連結目標,是不是「檔案」:是的話回傳不加尾斜線的路由,否則 null(照頁的規則)。
+    /// 只有單段路徑會因此不同(多段本來就不加尾斜線)。下列一律當頁,不做判斷:剝掉了 strip_extensions、
+    /// 拿掉了 index、原本以 / 結尾、或那一段是語言前綴。剩下的才看名字:點檔案(.htaccess),或副檔名是
+    /// 1～16 個 ASCII 英數字、至少一個字母(.swf、.pdf、.mp4、.webmanifest)——
+    /// <c>v1.2-rc</c> 的 <c>.2-rc</c>、<c>2019.05.01</c> 的 <c>.01</c> 不算。
     /// </summary>
+    private string? FileRoute(string absolutePath)
+    {
+        if (absolutePath.EndsWith('/') || _stripExtensions.Any(e => absolutePath.EndsWith(e, StringComparison.Ordinal)))
+        {
+            return null;
+        }
+        var parts = absolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 1 || parts[0] == "index" || _langPrefixes.Contains(parts[0]) || !LooksLikeFileName(parts[0]))
+        {
+            return null;
+        }
+        return "/" + parts[0];
+    }
+
     private static bool LooksLikeFileName(string segment)
     {
         var dot = segment.LastIndexOf('.');
-        if (dot <= 0)
+        if (dot == 0)
+        {
+            return segment.Length > 1;   // 點檔案:.htaccess
+        }
+        if (dot < 0)
         {
             return false;
         }
         var extension = segment[(dot + 1)..];
-        return extension.Length is >= 1 and <= 8
+        return extension.Length is >= 1 and <= 16
             && extension.All(char.IsAsciiLetterOrDigit)
             && extension.Any(char.IsAsciiLetter);
     }
