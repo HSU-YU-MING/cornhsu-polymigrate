@@ -28,6 +28,9 @@ public class NpmLauncherTests : CliTestBase
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
+            // node 寫的是 UTF-8;不指定的話會依 console 碼頁解讀,訊息裡路徑的中日韓字元會變亂碼
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var arg in args)
         {
@@ -65,9 +68,10 @@ public class NpmLauncherTests : CliTestBase
 
     private static string Quote(string path) => "'" + path.Replace("\\", "\\\\").Replace("'", "\\'") + "'";
 
-    private static void AssertLauncherFailure(string stderr)
+    private void AssertLauncherFailure(string stderr)
     {
-        Assert.DoesNotMatch(new Regex(@"\p{IsCJKUnifiedIdeographs}"), stderr);   // CLI 其他輸出都是英文
+        // 先拿掉暫存路徑再檢查:訊息裡的執行檔路徑在 TEMP 底下,TEMP 含中文的開發機上路徑本身就有中日韓字元
+        Assert.DoesNotMatch(new Regex(@"\p{IsCJKUnifiedIdeographs}"), stderr.Replace(Root, ""));   // CLI 其他輸出都是英文
         Assert.StartsWith("error: ", stderr);
         Assert.Contains("PolyMigrate did not run.", stderr);
         Assert.Contains("exit code 1 comes from the npm launcher, not a PolyMigrate warning", stderr);

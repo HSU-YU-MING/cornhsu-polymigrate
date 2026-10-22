@@ -203,7 +203,8 @@ public class OrphanCommandTests : CliTestBase
         Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
         Assert.StartsWith("warning: none of the 732 probes got a usable answer (HTTP 403: 732)", r.Err);
         Assert.EndsWith($"warning: {PathOf("site/orphan_slugs.txt")} was not written; an empty list would read as \"no orphan pages\".\n", r.Err);
-        Assert.True(r.Err.All(char.IsAscii), "警告要是純 ASCII:cp437 等 console 印不出 × 與 —");
+        // 先拿掉暫存路徑再檢查:TEMP 含非 ASCII 的開發機(例如中文使用者名稱)上,路徑本身就不是 ASCII
+        Assert.True(r.Err.Replace(Root, "").All(char.IsAscii), "警告要是純 ASCII:cp437 等 console 印不出 × 與 —");
     }
 
     [Fact]
