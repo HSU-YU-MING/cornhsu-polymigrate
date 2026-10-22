@@ -160,6 +160,34 @@ public class CancellationTests : IDisposable
     }
 
     [Fact]
+    public void CacheSaveFails_TheExistingCacheFileIsKept()
+    {
+        // 最終驗證 C4:存不了的時候只清自己的暫存檔,不可以順手刪掉上一次存好的正式快取檔
+        WriteTwoPagesWithMedia();
+        new ExtractionPipeline(TestConfigs.IbpsLike()).Run(ExtractionPaths.ForRoot(_root));
+        var saved = File.ReadAllText(P(".polymigrate/media_sha1_cache.csv"));
+        File.WriteAllText(P("media/ch/news/images/a.jpg"), "changed");   // 讓快取有新東西要存
+        Directory.CreateDirectory(P(".polymigrate/media_sha1_cache.csv.tmp"));   // 暫存檔寫不出去
+
+        new ExtractionPipeline(TestConfigs.IbpsLike()).Run(ExtractionPaths.ForRoot(_root));
+
+        Assert.Equal(saved, File.ReadAllText(P(".polymigrate/media_sha1_cache.csv")));
+    }
+
+    [Fact]
+    public void CacheSaveFails_AfterTheTempFileWasWritten_TheTempFileIsRemoved()
+    {
+        // 最終驗證 C3:暫存檔寫好了、改名失敗(正式檔名被目錄佔住)時,要把寫好的暫存檔清掉
+        WriteTwoPagesWithMedia();
+        Directory.CreateDirectory(P(".polymigrate/media_sha1_cache.csv"));
+
+        new ExtractionPipeline(TestConfigs.IbpsLike()).Run(ExtractionPaths.ForRoot(_root));
+
+        Assert.False(File.Exists(P(".polymigrate/media_sha1_cache.csv.tmp")));
+        Assert.True(File.Exists(P("media_manifest.csv")));
+    }
+
+    [Fact]
     public void Extract_CancelledWhileHashingMedia_CacheCannotBeSaved_StillCancelled()
     {
         // 存快取失敗(這裡用一個「檔案」佔住 .polymigrate 目錄)不可以把取消蓋掉:CLI 要回 130,不是 2

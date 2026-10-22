@@ -560,6 +560,29 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Fact]
+    public void EntryOnlyReference_IsPercentDecodedLikeLinks()
+    {
+        // 最終驗證 B4:只算入口的引用也要做百分號解碼——中日韓頁只經編碼過的 data-src 進入時,不可誤報孤島
+        AddPage("ch/index.md", body: "<iframe data-src=\"/ch/news/%E7%A6%AA%E4%BF%AE\"></iframe>", pageType: "page");
+        AddPage("ch/news/禪修.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void EntryOnlySelfReference_IsNotAnEntry()
+    {
+        // 最終驗證 B3:只算入口的引用指向自己,與 <a href> 一樣不算入口
+        AddPage("ch/news/p.md", body: "<iframe data-src=\"/ch/news/p\"></iframe>");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Contains(report.Issues, i => i.Kind == "unlinked_page" && i.Page == "ch/news/p.md");
+    }
+
+    [Fact]
     public void DataSrcToMedia_IsStillCheckedForMissingFiles()
     {
         // 最終驗證 I2(r4-c):data-* 指向 /media/ 的引用原本(9d17071)照樣檢查 missing_media、算進 media refs;

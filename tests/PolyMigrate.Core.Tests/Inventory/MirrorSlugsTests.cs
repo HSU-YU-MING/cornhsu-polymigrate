@@ -58,6 +58,8 @@ public class MirrorSlugsTests : IDisposable
     [InlineData("20260101.html", "20260101")]
     // 第三輪審查 B4:老 PHP 站的 .php5 / .php3。e0a8e6f 只剝「全是字母」的副檔名,這兩種退化成 20260301.php5
     // (9f41339 取第一個點之前,得到的是 20260301)。改成 1～8 個英數字、至少一個字母
+    [InlineData("a.abcdefgh.html", "a")]                    // 8 字以內:副檔名(最終驗證 D3)
+    [InlineData("a.abcdefghi.html", "a.abcdefghi")]         // 9 字:超過上限,當成 slug 的一部分
     [InlineData("20260301.php5.html", "20260301")]
     [InlineData("20260302.php3.html", "20260302")]
     [InlineData("v1.2-release.php5.html", "v1.2-release")]
