@@ -449,6 +449,32 @@ public class ThumbnailGeneratorTests : IDisposable
     }
 
     [Fact]
+    public void AnimationWithACorruptMiddleFrame_FallsBackToTheFirstFrame_NotAFailure()
+    {
+        // Ping 只讀影格的標頭,中間某格的 LZW 壞掉照樣讀得到格數;完整讀取才擲例外。ReadFrames 要接住、退回單張路徑
+        // (與 2.3.1 一樣的第一格)——審查 mutation D1(ReadFrames 不再接例外)原本存活
+        var path = MediaPath("broken.gif");
+        File.WriteAllBytes(path, RawGif.Build((400, 200), [(400, 200), (400, 200), (400, 200)], corruptFrame: 1));
+        using (var ping = new MagickImageCollection())
+        {
+            ping.Ping(path);
+            Assert.Equal(3, ping.Count);                                            // 前提:Ping 讀得到三格
+            Assert.ThrowsAny<MagickException>(() => new MagickImageCollection(path));   // 前提:完整讀取會擲例外
+        }
+
+        var report = Run();
+
+        Assert.Equal(0, report.Failed);
+        Assert.Equal(1, report.Created);
+        Assert.Equal(0, report.AnimationsKept);
+        var (file, reason) = Assert.Single(report.AnimationsAsFirstFrame);
+        Assert.Equal("broken.gif", file);
+        Assert.Equal("not every frame could be decoded", reason);
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, "broken.gif"));
+        Assert.Equal(400u, Assert.Single(thumb).Width);
+    }
+
+    [Fact]
     public void AnimationWithinTheBudget_IsKept_AndCounted()
     {
         WriteAnimation("small.gif", MagickFormat.Gif, 2000, 500);

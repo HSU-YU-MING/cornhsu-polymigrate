@@ -205,7 +205,14 @@ public sealed class ThumbnailGenerator(SiteConfig config)
             }
         }
         using var frames = ReadFrames(file);
-        if (frames is not { Count: >= 2 })
+        if (frames is null)
+        {
+            // Ping 讀得到多格(只讀標頭),完整解碼卻失敗:中間某格壞掉、或檔案被截斷。改用第一格(與 2.3.1 相同),
+            // 並在摘要講明——它確實是動畫,只是沒辦法保留
+            firstFrameReason = "not every frame could be decoded";
+            return false;
+        }
+        if (frames.Count < 2)
         {
             return false;
         }
