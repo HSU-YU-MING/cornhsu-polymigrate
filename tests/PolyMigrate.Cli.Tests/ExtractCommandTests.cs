@@ -122,6 +122,22 @@ public class ExtractCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task InternalHashCacheCannotBeSaved_ExitCodeIsUnchanged()
+    {
+        // 內部加速檔(.polymigrate/media_sha1_cache.csv)存不了只會讓下次變慢,不可以讓 exit 由 0 變 2
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/news/a.php.html", Page("<p>夠長的文字讓這頁不會被標成資訊鎖在圖裡的頁面。</p><img src=\"/img/a.jpg\">"));
+        Write("site/media/img/a.jpg", "jpeg");
+        Write("site/.polymigrate", "a file where the cache directory should be");
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Empty(r.Err);
+        Assert.True(File.Exists(PathOf("site/need_fetch_media.txt")));
+    }
+
+    [Fact]
     public async Task DryRun_ReportsButWritesNothing()
     {
         var config = Write("site/site.yaml", Config());

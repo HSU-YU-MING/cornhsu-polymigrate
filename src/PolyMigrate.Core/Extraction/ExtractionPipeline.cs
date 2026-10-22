@@ -163,19 +163,29 @@ public sealed class ExtractionPipeline(SiteConfig config)
         // media_manifest 的 sha1 是收尾階段最慢的一段(大媒體目錄可達數十秒):先逐檔算完(每檔一個檢查點),
         // 再開始寫清單——中斷時清單仍是「一份都不寫」,而不是寫了一半
         var manifest = dryRun ? null : BuildMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs, ct);
-        Checkpoint("write", ct);
+        try
+        {
+            Checkpoint("write", ct);
+        }
+        catch (OperationCanceledException)
+        {
+            manifest?.Cache.TrySave();   // 雜湊已全部算完:照樣存進快取,重跑不必重讀
+            throw;
+        }
         if (!dryRun)
         {
             WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions);
             WriteHreflangMap(paths.OutDir, hreflang);
             Csv.Write(Path.Combine(paths.OutDir, "media_manifest.csv"), manifest!.Rows);
-            manifest.Cache.Save();
             WriteRedirectMap(paths.OutDir, aggregator.Redirects);
             WriteRedirectExports(paths.OutDir, aggregator.Redirects);
             WriteMissingImages(paths.OutDir, aggregator.Missing);
             WritePathIssues(paths.OutDir, pathIssues);
             File.WriteAllText(Path.Combine(paths.OutDir, "need_fetch_media.txt"),
                 string.Join('\n', aggregator.NeedFetch), Utf8NoBom);
+            // 內部快取最後才存、而且存不了就算了:原本夾在 media_manifest.csv 與 redirect_map.csv 之間,
+            // 擲 IO 錯誤時清單只寫一半、exit 2(第三輪審查)
+            manifest.Cache.TrySave();
         }
 
         return BuildReport(aggregator.Inventory, locales, pagesWritten, aggregator.MediaRefs.Count,
@@ -351,13 +361,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             {
                 // 已經算好的雜湊照樣存進快取(內部加速檔,不是交付物):中斷後重跑不必從頭重讀數 GB。
                 // 存不了就算了——不可以讓 IO 錯誤蓋掉取消(CLI 要回 130,不是 2)
-                try
-                {
-                    cache.Save();
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                }
+                cache.TrySave();
                 throw;
             }
             var localAbs = MediaPaths.LocalPath(mediaDir, relative);

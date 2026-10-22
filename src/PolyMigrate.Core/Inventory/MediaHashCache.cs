@@ -62,6 +62,33 @@ internal sealed class MediaHashCache
         }
     }
 
+    /// <summary>
+    /// 盡量存:失敗(目錄被佔住、唯讀、磁碟滿)就算了,回傳 false。這是內部加速檔,存不了只會讓下次變慢,
+    /// 不可以影響交付的清單與 exit code(第三輪審查)。失敗時順手清掉寫到一半的暫存檔。
+    /// </summary>
+    public bool TrySave()
+    {
+        try
+        {
+            Save();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                if (File.Exists(_path + ".tmp"))
+                {
+                    File.Delete(_path + ".tmp");
+                }
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+            }
+            return false;
+        }
+    }
+
     public void Save()
     {
         if (!_dirty)

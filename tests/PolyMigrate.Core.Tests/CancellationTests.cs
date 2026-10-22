@@ -115,6 +115,51 @@ public class CancellationTests : IDisposable
     }
 
     [Fact]
+    public void Extract_CancelledAtTheWriteCheckpoint_KeepsAllComputedHashes()
+    {
+        // 第三輪審查 minor 2:雜湊已全部算完、在「開始寫清單」那個檢查點取消時,原本快取不會存
+        WriteTwoPagesWithMedia();
+
+        RunExtract("write");
+
+        Assert.Equal(3, File.ReadAllLines(P(".polymigrate/media_sha1_cache.csv")).Length);   // 表頭 + a + b
+        Assert.Empty(Directory.GetFiles(_root, "*.csv"));
+    }
+
+    [Fact]
+    public void Extract_CacheCannotBeSaved_OutputsAreStillComplete()
+    {
+        // 第三輪審查 minor 2:正常路徑的快取存檔原本夾在 media_manifest.csv 與 redirect_map.csv 之間、沒有保護——
+        // 存不了就擲 IOException,清單只寫一半、exit 2。內部快取只是加速檔:最後才存,存不了不影響輸出
+        WriteTwoPagesWithMedia();
+        File.WriteAllText(P(".polymigrate"), "not a directory");
+
+        var report = new ExtractionPipeline(TestConfigs.IbpsLike()).Run(ExtractionPaths.ForRoot(_root));
+
+        Assert.Equal(2, report.PagesWritten);
+        foreach (var name in (string[])["content_inventory.csv", "hreflang_map.csv", "media_manifest.csv",
+                     "redirect_map.csv", "missing_images.csv", "path_issues.csv", "need_fetch_media.txt",
+                     "redirects.nginx.conf", "_redirects"])
+        {
+            Assert.True(File.Exists(P(name)), name);
+        }
+    }
+
+    [Fact]
+    public void Extract_CacheIsWrittenThroughATempFile()
+    {
+        // 第三輪審查 C5:存快取要「先寫暫存檔再改名」(連按兩下 Ctrl-C 時才不會留下被截斷的快取檔)。
+        // 暫存檔的位置被目錄佔住時存不成,快取檔就不該出現——直接寫入最終檔名的實作會照樣寫出來
+        WriteTwoPagesWithMedia();
+        Directory.CreateDirectory(P(".polymigrate/media_sha1_cache.csv.tmp"));
+
+        new ExtractionPipeline(TestConfigs.IbpsLike()).Run(ExtractionPaths.ForRoot(_root));
+
+        Assert.False(File.Exists(P(".polymigrate/media_sha1_cache.csv")));
+        Assert.True(File.Exists(P("media_manifest.csv")));   // 輸出不受影響
+    }
+
+    [Fact]
     public void Extract_CancelledWhileHashingMedia_CacheCannotBeSaved_StillCancelled()
     {
         // 存快取失敗(這裡用一個「檔案」佔住 .polymigrate 目錄)不可以把取消蓋掉:CLI 要回 130,不是 2
