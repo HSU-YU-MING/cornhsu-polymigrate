@@ -137,6 +137,8 @@
 
 ## sealed class PolyMigrate.Core.Media.ThumbnailReport
    public ctor()
+   public List<(string Path, string Reason)> AnimationsAsFirstFrame { get; }
+   public int AnimationsKept { get; set; }
    public int Created { get; set; }
    public int Failed { get; set; }
    public List<(string Path, string Error)> Failures { get; }

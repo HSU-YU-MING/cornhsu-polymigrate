@@ -13,6 +13,15 @@ public sealed class ThumbnailReport
 
     /// <summary>(相對路徑, 錯誤訊息);縮圖失敗不阻斷(原圖可能截斷/損壞)。</summary>
     public List<(string Path, string Error)> Failures { get; } = [];
+
+    /// <summary>保留動畫(逐格縮放)的多格 GIF / WebP 數。這些也算在 <see cref="Created"/> 裡。</summary>
+    public int AnimationsKept { get; set; }
+
+    /// <summary>
+    /// 多格的 GIF / WebP 改用第一格的縮圖(與 2.3.1 的結果相同):(相對路徑, 原因)。原因是超過像素預算,
+    /// 或保留動畫的縮圖會比原檔大。這些也算在 <see cref="Created"/> 裡,不是失敗,不影響 exit code。
+    /// </summary>
+    public List<(string Path, string Reason)> AnimationsAsFirstFrame { get; } = [];
 }
 
 /// <summary>
@@ -24,6 +33,18 @@ public sealed class ThumbnailReport
 public sealed class ThumbnailGenerator(SiteConfig config)
 {
     private static readonly string[] Extensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+
+    /// <summary>
+    /// 動畫縮圖的像素預算預設值:格數 × 畫布寬 × 畫布高 = 5,000 萬像素。
+    /// <para>逐格縮放要先把每一格補成完整畫面(Coalesce),記憶體與時間都跟「格數 × 畫布」成正比。審查實測:
+    /// 400 格 1300x900(4.68 億像素)要 39 秒、峰值 3.2 GB,約每百萬像素 7 MB、0.08～0.2 秒;298 格 800x408 的真實錄影
+    /// (9,700 萬像素)要 21 秒,縮圖 4.18 MB 比原檔 1.8 MB 還大。5,000 萬像素讓最壞情況停在約 350 MB、10 秒以內,
+    /// 而一般的小動畫(480x270 × 100 格約 1,300 萬)照樣保留。超過的退回第一格(與 2.3.1 相同),摘要會列出。</para>
+    /// </summary>
+    internal const long DefaultAnimationPixelBudget = 50_000_000;
+
+    /// <summary>超過就退回第一格的像素預算;測試用小值才不必真的產生 5,000 萬像素的動畫。</summary>
+    internal long AnimationPixelBudget { get; init; } = DefaultAnimationPixelBudget;
 
     public ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress = null) =>
         Run(mediaDir, outDir, progress, CancellationToken.None);
@@ -58,8 +79,16 @@ public sealed class ThumbnailGenerator(SiteConfig config)
                 // 否則重跑會因「檔案已存在」把壞縮圖當成已完成。暫存名沒有副檔名,
                 // 故寫出時明確指定格式(否則 Magick 會依 .tmp 推測格式而寫錯)。
                 var tmp = target + ".tmp";
-                if (!TryWriteAnimated(file, tmp, thumbs))
+                if (TryWriteAnimated(file, tmp, thumbs, out var firstFrameReason))
                 {
+                    report.AnimationsKept++;
+                }
+                else
+                {
+                    if (firstFrameReason is not null)
+                    {
+                        report.AnimationsAsFirstFrame.Add((relative.Replace('\\', '/'), firstFrameReason));
+                    }
                     using var image = new MagickImage(file);
                     image.AutoOrient();   // EXIF 轉正,必須在縮放前
                     Downscale(image, thumbs);
@@ -112,19 +141,55 @@ public sealed class ThumbnailGenerator(SiteConfig config)
     }
 
     /// <summary>
+    /// 多格讀取但只讀中繼資料(Ping:格數與畫布大小,不解碼像素),先決定要不要保留動畫——
+    /// 不先 Ping 的話,超過預算的大動畫光是讀進來就要好幾 GB。讀不起來回 null(改走單張路徑)。
+    /// </summary>
+    private static MagickImageCollection? PingFrames(string file)
+    {
+        try
+        {
+            var frames = new MagickImageCollection();
+            frames.Ping(file);
+            return frames;
+        }
+        catch (MagickException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// 多格的 GIF / WebP:逐格縮放、保留動畫(格數、每格的延遲與循環次數),寫到 <paramref name="tmp"/>。
-    /// 單格(或其他格式)回 false,由呼叫端走一般的單張路徑。
+    /// 單格(或其他格式、讀不起來的)回 false、<paramref name="firstFrameReason"/> 為 null,由呼叫端走一般的單張路徑。
+    /// 確定是多格、但決定不保留動畫時也回 false,並在 <paramref name="firstFrameReason"/> 寫明原因(呼叫端改用第一格):
+    /// 格數 × 畫布超過 <see cref="AnimationPixelBudget"/>(審查實測 400 格要 39 秒、3.2 GB),
+    /// 或保留動畫的縮圖比原檔大(縮圖的意義是更小;審查實測 298 格的錄影 1.8 MB → 4.18 MB)。
     /// <para>2.3.1 以前一律 <c>new MagickImage(file)</c>,只讀第一格:動畫縮圖變成靜止的第一格,而且沒有任何提示
     /// (決策檔 L4 選項 A)。先 <c>Coalesce</c>:GIF 的後續格常只存「跟上一格不同的那一塊」,不補成完整畫面就縮,
     /// 各格的位置與大小會對不上(Coalesce 之後每格的畫布都從 (0,0) 起,AutoOrient 與 Resize 會跟著轉、跟著縮,
     /// 所以不必再 ResetPage——實測加不加輸出逐位元相同)。GIF 寫出前再 <c>Optimize</c> 回格間差異,檔案才不會因為每格都是全畫面而暴增;
     /// WebP 的編碼器自己處理格間差異,不另外做。</para>
     /// </summary>
-    private static bool TryWriteAnimated(string file, string tmp, ThumbnailSection thumbs)
+    private bool TryWriteAnimated(string file, string tmp, ThumbnailSection thumbs, out string? firstFrameReason)
     {
+        firstFrameReason = null;
         if (Path.GetExtension(file).ToLowerInvariant() is not (".gif" or ".webp"))
         {
             return false;
+        }
+        using (var info = PingFrames(file))
+        {
+            if (info is not { Count: >= 2 })
+            {
+                return false;
+            }
+            var page = info[0].Page;
+            var (width, height) = page.Width > 0 && page.Height > 0 ? (page.Width, page.Height) : (info[0].Width, info[0].Height);
+            if ((long)info.Count * width * height > AnimationPixelBudget)
+            {
+                firstFrameReason = $"{info.Count} frames of {width}x{height} exceed the animation budget of {AnimationPixelBudget} pixels";
+                return false;
+            }
         }
         using var frames = ReadFrames(file);
         if (frames is not { Count: >= 2 })
@@ -143,6 +208,14 @@ public sealed class ThumbnailGenerator(SiteConfig config)
             frames.Optimize();
         }
         frames.Write(tmp, format);
+        var animatedBytes = new FileInfo(tmp).Length;
+        var originalBytes = new FileInfo(file).Length;
+        if (animatedBytes > originalBytes)
+        {
+            File.Delete(tmp);
+            firstFrameReason = $"the animated thumbnail ({animatedBytes} bytes) would be larger than the original ({originalBytes} bytes)";
+            return false;
+        }
         return true;
     }
 }

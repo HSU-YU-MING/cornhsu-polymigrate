@@ -356,6 +356,73 @@ public class ThumbnailGeneratorTests : IDisposable
         }
     }
 
+    // ── 動畫的上限(審查建議 5)────────────────────────────────────────────────────
+    // 實測:400 格 1300x900 要 39 秒、3.2 GB;298 格的真實錄影要 21 秒,縮圖 4.18 MB,原檔才 1.8 MB
+
+    [Fact]
+    public void AnimationOverThePixelBudget_GetsAFirstFrameThumbnail_AndIsCounted()
+    {
+        WriteAnimation("big.gif", MagickFormat.Gif, 2000, 500);   // 3 格 × 2000 × 500 = 300 萬像素
+        var generator = new ThumbnailGenerator(TestConfigs.IbpsLike()) { AnimationPixelBudget = 2_000_000 };
+
+        var report = generator.Run(MediaDir, OutDir);
+
+        Assert.Equal(1, report.Created);
+        Assert.Equal(0, report.AnimationsKept);
+        var (path, reason) = Assert.Single(report.AnimationsAsFirstFrame);
+        Assert.Equal("big.gif", path);
+        Assert.Equal("3 frames of 2000x500 exceed the animation budget of 2000000 pixels", reason);
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, "big.gif"));
+        Assert.Equal(1000u, Assert.Single(thumb).Width);   // 與 2.3.1 相同:第一格
+    }
+
+    [Fact]
+    public void AnimationWithinTheBudget_IsKept_AndCounted()
+    {
+        WriteAnimation("small.gif", MagickFormat.Gif, 2000, 500);
+
+        var report = Run();
+
+        Assert.Equal(1, report.AnimationsKept);
+        Assert.Empty(report.AnimationsAsFirstFrame);
+    }
+
+    [Fact]
+    public void DefaultBudget_IsFiftyMegapixels()
+    {
+        // 上限值與理由寫在 CHANGELOG 3.0.0 與 README:改它要一起改
+        Assert.Equal(50_000_000, new ThumbnailGenerator(TestConfigs.IbpsLike()).AnimationPixelBudget);
+    }
+
+    [Fact]
+    public void AnimatedThumbnailLargerThanTheOriginal_FallsBackToTheFirstFrame()
+    {
+        // 無損 WebP 的純色長條動畫壓得極小;重新編碼的縮圖反而比原檔大(審查實測 anim-lossless.webp:1910 → 3474 bytes)。
+        // 縮圖比原檔還大就失去縮圖的意義:改成第一格
+        using (var animation = new MagickImageCollection())
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                var frame = new MagickImage(MagickColors.White, 800, 400) { AnimationDelay = (uint)(10 + i) };
+                frame.Draw(new ImageMagick.Drawing.Drawables().FillColor(MagickColors.Black).Rectangle(i * 36, 40, i * 36 + 24, 360));
+                frame.Settings.SetDefine(MagickFormat.WebP, "lossless", true);
+                animation.Add(frame);
+            }
+            animation.Write(MediaPath("bars.webp"), MagickFormat.WebP);
+        }
+        var original = new FileInfo(MediaPath("bars.webp")).Length;
+
+        var report = RunWith(maxWidth: 200);
+
+        var (path, reason) = Assert.Single(report.AnimationsAsFirstFrame);
+        Assert.Equal("bars.webp", path);
+        Assert.StartsWith("the animated thumbnail (", reason);
+        Assert.EndsWith($" bytes) would be larger than the original ({original} bytes)", reason);
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, "bars.webp"));
+        Assert.Equal(200u, Assert.Single(thumb).Width);
+        Assert.False(File.Exists(Path.Combine(OutDir, "bars.webp.tmp")));
+    }
+
     [Fact]
     public void TruncatedAnimatedGif_StillGetsAFirstFrameThumbnail_LikeBefore()
     {

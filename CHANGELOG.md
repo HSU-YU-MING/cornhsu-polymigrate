@@ -156,12 +156,21 @@ IO 錯誤一律 2;未知指令 2。
   只有 CLI 用得到)。以新增 overload 的方式加,既有呼叫端原始碼與二進位都相容;檢查點與 CLI 的 Ctrl-C 相同。
 - **函式庫:`OrphanProber.KnownSlugs(rawDir, langPrefix, section, stripExtensions)`**:依 `url_pattern.strip_extensions` 判定已鏡像的 slug,
   與 `extract` 及 CLI 的 `probe-orphans` 一致(2.x 只有 internal 版)。
+- **函式庫:`ThumbnailReport.AnimationsKept` 與 `AnimationsAsFirstFrame`**:保留動畫的數量,以及改用第一格的
+  (相對路徑, 原因)清單(見下面 `thumbs` 那一條)。
 
 ### 修正
 
 - **`thumbs` 把動畫 GIF / 動畫 WebP 縮成只剩第一格。** 原本以單張讀檔,動畫縮圖變成靜止的第一格,照樣計入 `created`、沒有任何提示。
   現在多格的 GIF / WebP 逐格縮放、保留動畫(格數、每格延遲、循環次數):先補成完整畫面再縮,GIF 寫出前再壓回格間差異。
   單格的圖照舊;截斷的多格 GIF(舊站鏡像裡下載到一半的)多格讀不起來時退回單張讀取,與 2.3.1 一樣產出第一格縮圖、不算 failed。相依沒有變(同一個 Magick.NET,WebP 動畫的編碼器本來就在 Magick.Native 裡),授權通知不受影響。
+  **有上限**:逐格縮放的記憶體與時間跟「格數 × 畫布寬 × 高」成正比(實測 400 格 1300x900 要 39 秒、峰值 3.2 GB;
+  298 格 800x408 的真實錄影要 21 秒,縮圖 4.18 MB 比原檔 1.8 MB 還大)。所以兩種情況改用第一格(與 2.3.1 的結果相同):
+  - 格數 × 畫布超過 **5,000 萬像素**(只讀中繼資料就判斷,不解碼像素)。剛好在上限的 100 格 1000x500 實測約 6.4 秒、
+    峰值 250 MB;一般的小動畫(480x270 × 100 格約 1,300 萬像素)照樣保留。
+  - 保留動畫的縮圖比原檔大(縮圖的意義是更小;例如無損 WebP 的動畫重新編碼後反而變大)。
+  兩者都不是失敗、不影響 exit code;`thumbs` 的摘要多一行 `animated: N kept, M as first frame`,並以
+  `[first frame] <路徑> :: <原因>` 列出前 10 個。上述兩個實測檔在 3.0 分別約 0.2 秒、峰值約 170 MB 就完成。
   **升級注意**:見「升級必做」第 3 條。
 - **YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說其他 iframe「保留原樣」,實際上它們留在 DOM 裡
   交給 ReverseMarkdown,而未知標籤的處理是只輸出子節點——iframe 沒有子節點,於是 Google 地圖、行事曆、表單、Vimeo 等嵌入

@@ -155,6 +155,13 @@ polymigrate fetch-orphans site.yaml --section news                      # reads 
 polymigrate slugs . --section news          # slugs already mirrored under ./raw (pipeable)
 ```
 
+> **Animated GIF/WebP thumbnails keep every frame — within limits.** Scaling an animation frame by
+> frame costs memory and time in proportion to frames × width × height (measured: a 400-frame
+> 1300×900 GIF took 39 s and 3.2 GB). So an animation over **50 megapixels** in total, or one whose
+> animated thumbnail would be larger than the original, gets a first-frame thumbnail instead — the
+> same result as before 3.0. At the limit it takes about 6 s and 250 MB. The `thumbs` summary lists
+> which files got a first frame and why; neither case is a failure or changes the exit code.
+
 > **`raw/` is the one thing you cannot regenerate.** Re-crawling a site takes hours at a
 > polite request rate, and the source site may be switched off the moment you finish
 > migrating — at which point your mirror is the only copy left. No PolyMigrate command

@@ -62,6 +62,41 @@ public class ThumbsCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task AnimationSummary_CountsKeptAndFirstFrame_AndListsWhy_WithoutChangingTheExitCode()
+    {
+        // 動畫退回第一格不是失敗(與 2.3.1 的結果相同),不算 warning、不影響 exit code;但摘要要講出來
+        var config = Write("site/site.yaml", Config(extraTop: "media:\n  thumbnails: { max_width: 200 }"));
+        var kept = PathOf("site/media/anim.gif");
+        Directory.CreateDirectory(Path.GetDirectoryName(kept)!);
+        using (var animation = new MagickImageCollection())
+        {
+            foreach (var color in new[] { MagickColors.Red, MagickColors.Lime, MagickColors.Blue })
+            {
+                animation.Add(new MagickImage(color, 800, 400) { AnimationDelay = 20 });
+            }
+            animation.Write(kept, MagickFormat.Gif);
+        }
+        using (var bars = new MagickImageCollection())
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                var frame = new MagickImage(MagickColors.White, 800, 400) { AnimationDelay = (uint)(10 + i) };
+                frame.Draw(new ImageMagick.Drawing.Drawables().FillColor(MagickColors.Black).Rectangle(i * 36, 40, i * 36 + 24, 360));
+                frame.Settings.SetDefine(MagickFormat.WebP, "lossless", true);
+                bars.Add(frame);
+            }
+            bars.Write(PathOf("site/media/bars.webp"), MagickFormat.WebP);
+        }
+
+        var r = await Run("thumbs", config);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("  created : 2\n", r.Out);
+        Assert.Contains("  animated: 1 kept, 1 as first frame\n", r.Out);
+        Assert.Contains("  [first frame] bars.webp :: the animated thumbnail (", r.Out);
+    }
+
+    [Fact]
     public async Task CorruptImage_ExitsOne_OthersStillDone()
     {
         var config = Write("site/site.yaml", Config());
