@@ -22,7 +22,10 @@ internal sealed class MediaHashCache
         {
             foreach (var row in Csv.ReadRows(path).Skip(1))
             {
-                if (row.Count == 4 && long.TryParse(row[1], out var size) && long.TryParse(row[2], out var ticks))
+                // sha1 也要驗:檔案被截斷時最後一列可能只剩半截 sha1,大小與 mtime 卻對得上 → 會被當成命中,
+                // 把錯的值寫進 media_manifest.csv。不是 40 位小寫十六進位就當成壞列丟掉(只會變慢)
+                if (row.Count == 4 && long.TryParse(row[1], out var size) && long.TryParse(row[2], out var ticks)
+                    && row[3].Length == 40 && row[3].All(char.IsAsciiHexDigitLower))
                 {
                     cache._entries[row[0]] = (size, ticks, row[3]);
                 }
@@ -69,6 +72,9 @@ internal sealed class MediaHashCache
         var rows = new List<IReadOnlyList<string>> { new[] { "path", "size", "mtime_ticks", "sha1" } };
         rows.AddRange(_entries.OrderBy(e => e.Key, StringComparer.Ordinal)
             .Select(e => new[] { e.Key, e.Value.Size.ToString(), e.Value.MtimeTicks.ToString(), e.Value.Sha1 }));
-        Csv.Write(_path, rows, guardFormulas: false);   // 內部快取本工具自己讀回,不可加公式防護前綴
+        // 先寫暫存檔再原子改名:存檔途中被終止(例如連按兩下 Ctrl-C)不會留下被截斷的快取檔
+        var tmp = _path + ".tmp";
+        Csv.Write(tmp, rows, guardFormulas: false);   // 內部快取本工具自己讀回,不可加公式防護前綴
+        File.Move(tmp, _path, overwrite: true);
     }
 }

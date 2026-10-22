@@ -273,7 +273,7 @@ PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編
 `media_manifest.csv` 每個媒體檔算 sha1 之前、開始寫清單之前;`verify` 每一頁之前、寫報告之前;`thumbs` 每張圖之前;
 `probe-orphans` / `fetch-orphans` 隨時(等待中的延遲與進行中的請求都會被打斷);`slugs` 印出第一行之前。
 檢查點之間的單一步驟(一頁的抽取、一張圖的縮放、`extract` 的配對計算)會先做完。
-已寫出的 `.md`、縮圖、`raw/` 頁與資產保留(只寫不刪;縮圖與孤兒頁是原子寫入,不會留半截檔),已算好的媒體雜湊存進內部快取;
+已寫出的 `.md`、縮圖、`raw/` 頁與資產保留(只寫不刪;縮圖與孤兒頁是原子寫入,不會留半截檔),已算好的媒體雜湊盡量存進內部快取(存不了不影響 130;快取以暫存檔改名寫入,讀回時 sha1 不完整的列一律重算);
 `extract` 的清單檔、`verify_report.csv`、`orphan_slugs.txt` 被中斷時一份都不寫,`slugs` 的 stdout 一行都不印。
 第二次 Ctrl-C 不再攔截,由 runtime 直接終止行程(給單一步驟本身就很久時的逃生門),不經 PolyMigrate 收尾,
 結束碼由作業系統決定。(2.3.1 以前只有 `probe-orphans` / `fetch-orphans` 接取消訊號,其餘指令要第二次才停、

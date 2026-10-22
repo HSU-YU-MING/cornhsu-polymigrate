@@ -50,19 +50,21 @@ public class MediaHashCacheAndRedirectTests : IDisposable
         Run();
         Assert.True(File.Exists(CachePath));
 
-        // 竄改快取的 sha 值:第二跑若讀快取,哨兵值會出現在 manifest(證明沒重算)
+        // 竄改快取的 sha 值:第二跑若讀快取,哨兵值會出現在 manifest(證明沒重算)。
+        // 哨兵必須是合法的 40 位十六進位——不合法的 sha1 會被當成壞列丟掉(見 TruncatedSha1InCache_IsRecomputed)
+        const string sentinel = "cafebabecafebabecafebabecafebabecafebabe";
         var cacheRows = File.ReadAllLines(CachePath);
-        cacheRows[1] = cacheRows[1].Replace(cacheRows[1].Split(',')[3], "cachedsentinel");
+        cacheRows[1] = cacheRows[1].Replace(cacheRows[1].Split(',')[3], sentinel);
         File.WriteAllLines(CachePath, cacheRows);
 
         Run();
-        Assert.Contains("cachedsentinel", File.ReadAllText(Path.Combine(_root, "media_manifest.csv")));
+        Assert.Contains(sentinel, File.ReadAllText(Path.Combine(_root, "media_manifest.csv")));
 
         // 檔案內容改變(大小/時間變)→ 快取失效,重算真雜湊
         AddMedia("img/x.jpg", "v2-changed");
         Run();
         var manifest3 = File.ReadAllText(Path.Combine(_root, "media_manifest.csv"));
-        Assert.DoesNotContain("cachedsentinel", manifest3);
+        Assert.DoesNotContain(sentinel, manifest3);
     }
 
     [Fact]
@@ -102,6 +104,28 @@ public class MediaHashCacheAndRedirectTests : IDisposable
         Assert.DoesNotContain("bogus", manifest);
         // SHA1("v1") 的小寫十六進位,與 manifest 的 sha1 欄一致
         Assert.Contains(",5a6df720540c20d95d530d3fd6885511223d5d20,2\r\n", manifest);
+    }
+
+    [Fact]
+    public void TruncatedSha1InCache_IsRecomputed()
+    {
+        // 第二輪審查:快取檔被截斷(例如存檔時又按了一次 Ctrl-C)時,最後一列的 sha1 可能只剩半截,
+        // 而 Load 原本只檢查欄數與數字欄——大小與 mtime 都對得上,半截的 sha1 就被當成命中,
+        // 寫進凍結的 media_manifest.csv。sha1 必須是 40 位十六進位才算數
+        AddRaw("ch/news/a.php.html", "<img src=\"/img/x.jpg\">");
+        AddMedia("img/x.jpg", "v1");
+        var media = new FileInfo(Path.Combine(MediaDir, "img", "x.jpg"));
+        Directory.CreateDirectory(Path.GetDirectoryName(CachePath)!);
+        File.WriteAllLines(CachePath,
+        [
+            "path,size,mtime_ticks,sha1",
+            $"img/x.jpg,{media.Length},{media.LastWriteTimeUtc.Ticks},5a6df720",
+        ]);
+
+        Run();
+
+        // SHA1("v1") 的完整值,而不是快取裡的半截
+        Assert.Contains(",5a6df720540c20d95d530d3fd6885511223d5d20,2", File.ReadAllText(Path.Combine(_root, "media_manifest.csv")));
     }
 
     [Fact]

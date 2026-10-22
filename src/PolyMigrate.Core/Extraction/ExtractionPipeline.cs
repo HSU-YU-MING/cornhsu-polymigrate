@@ -345,8 +345,15 @@ public sealed class ExtractionPipeline(SiteConfig config)
             }
             catch (OperationCanceledException)
             {
-                // 已經算好的雜湊照樣存進快取(內部加速檔,不是交付物):中斷後重跑不必從頭重讀數 GB
-                cache.Save();
+                // 已經算好的雜湊照樣存進快取(內部加速檔,不是交付物):中斷後重跑不必從頭重讀數 GB。
+                // 存不了就算了——不可以讓 IO 錯誤蓋掉取消(CLI 要回 130,不是 2)
+                try
+                {
+                    cache.Save();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
                 throw;
             }
             var localAbs = MediaPaths.LocalPath(mediaDir, relative);

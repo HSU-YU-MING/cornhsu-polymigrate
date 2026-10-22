@@ -90,6 +90,40 @@ public class CancellationTests : IDisposable
         Assert.Empty(Directory.GetFiles(_root, "*.csv"));
     }
 
+    private void WriteTwoPagesWithMedia()
+    {
+        foreach (var name in (string[])["a", "b"])
+        {
+            WriteRaw($"ch/news/{name}.php.html", $"<p>內文</p><img src=\"images/{name}.jpg\">");
+            Directory.CreateDirectory(P("media/ch/news/images"));
+            File.WriteAllText(P($"media/ch/news/images/{name}.jpg"), name);
+        }
+    }
+
+    [Fact]
+    public void Extract_CancelledWhileHashingMedia_KeepsTheHashesAlreadyComputed()
+    {
+        // contracts.md:中斷時「已算好的媒體雜湊存進內部快取」——第二輪審查:拿掉那個 Save() 測試照樣全綠
+        WriteTwoPagesWithMedia();
+
+        RunExtract("media:ch/news/images/b.jpg");   // a.jpg 算完了、b.jpg 還沒
+
+        var cache = File.ReadAllLines(P(".polymigrate/media_sha1_cache.csv"));
+        Assert.Equal(2, cache.Length);   // 表頭 + a.jpg
+        Assert.StartsWith("ch/news/images/a.jpg,", cache[1]);
+        Assert.Empty(Directory.GetFiles(P(".polymigrate"), "*.tmp"));   // 先寫暫存再改名,不留半截檔
+    }
+
+    [Fact]
+    public void Extract_CancelledWhileHashingMedia_CacheCannotBeSaved_StillCancelled()
+    {
+        // 存快取失敗(這裡用一個「檔案」佔住 .polymigrate 目錄)不可以把取消蓋掉:CLI 要回 130,不是 2
+        WriteTwoPagesWithMedia();
+        File.WriteAllText(P(".polymigrate"), "not a directory");
+
+        RunExtract("media:ch/news/images/b.jpg");   // RunExtract 斷言擲的是 OperationCanceledException
+    }
+
     [Fact]
     public void Extract_NoPages_AlreadyCancelled_WritesNoInventories()
     {
