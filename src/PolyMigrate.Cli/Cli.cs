@@ -182,7 +182,7 @@ public static class Cli
 
         try
         {
-            var config = SiteConfigLoader.LoadFile(configPath);
+            var config = LoadConfig(configPath);
             var root = Path.GetFullPath(
                 options.GetValueOrDefault("--root", Path.GetDirectoryName(Path.GetFullPath(configPath))!));
             var defaults = ExtractionPaths.ForRoot(root);
@@ -409,7 +409,7 @@ public static class Cli
         }
         try
         {
-            var config = SiteConfigLoader.LoadFile(configPath);
+            var config = LoadConfig(configPath);
             var root = ResolveRoot(configPath, options);
             var mediaDir = Path.GetFullPath(options.GetValueOrDefault("--media", Path.Combine(root, "media")));
             var outDir = Path.GetFullPath(options.GetValueOrDefault("--out", Path.Combine(root, "media_thumb")));
@@ -469,7 +469,7 @@ public static class Cli
 
         try
         {
-            var config = SiteConfigLoader.LoadFile(configPath);
+            var config = LoadConfig(configPath);
             var langPrefix = options.GetValueOrDefault("--lang", config.UrlPattern.LangMap.Keys.First());
             var root = ResolveRoot(configPath, options);
             string outFile;
@@ -567,7 +567,7 @@ public static class Cli
 
         try
         {
-            var config = SiteConfigLoader.LoadFile(configPath);
+            var config = LoadConfig(configPath);
             var root = ResolveRoot(configPath, options);
             string slugsFile;
             if (options.TryGetValue("--slugs", out var slugsOption))
@@ -693,6 +693,21 @@ public static class Cli
         {
             File.Delete(file);
         }
+    }
+
+    /// <summary>
+    /// 載入 config;載入時的 warning(用不到、但不是寫壞的設定,例如 lang_map 裡沒有的 pdf_labels)照既有慣例
+    /// 以「warning: …」印在 stderr,不算指令的 warning、不影響 exit code。
+    /// </summary>
+    private static SiteConfig LoadConfig(string configPath)
+    {
+        var warnings = new List<string>();
+        var config = SiteConfigLoader.LoadFile(configPath, warnings);
+        foreach (var warning in warnings)
+        {
+            Console.Error.WriteLine($"warning: {configPath}: {warning}");
+        }
+        return config;
     }
 
     /// <summary>豁免清單:一行一頁(content 相對路徑或路由),空行與 # 開頭略過。</summary>

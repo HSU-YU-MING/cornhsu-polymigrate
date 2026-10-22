@@ -263,6 +263,8 @@ stderr 印一則 `note:` 說明怎麼遷移:新檔還不存在時,它是哪個 s
 欄位與預設值見 README 與 [examples/ibps-austin.yaml](../examples/ibps-austin.yaml)。**任何指令載入 config 時**就驗下列各項,
 寫壞的一律 `ConfigException` → exit 2,訊息為 `<config>: config is invalid:` 之後每個問題一行、點名欄位;
 不論這次會不會用到那個欄位(`thumbs` / `probe-orphans` 讀到只有 `extract` 才用的欄位也一樣)。
+用不到、但不是寫壞的設定(目前只有 `media.pdf_labels` 裡 `lang_map` 沒有的語言)只警告:`warning: <config>: …` 印在 stderr,
+不影響 exit code。函式庫的 `SiteConfigLoader.Load` / `LoadFile` 不回報這類 warning。
 
 | 欄位 | 載入時驗證 |
 |---|---|
@@ -287,7 +289,7 @@ stderr 印一則 `note:` 說明怎麼遷移:新檔還不存在時,它是哪個 s
 | `extract.text_in_image_max_length` | ≥ 0 |
 | `pairing.fallback` | 已知的啟發式名稱,不重複 |
 | `media.web_prefix` | 以 `/` 開頭的根相對路徑或絕對 http(s) 網址,不含空白、引號、`<` `>` `?` `#` |
-| `media.pdf_labels` | key 是 `lang_map` 的 locale;值不可空 |
+| `media.pdf_labels` | key 是形狀正確的 BCP-47 標記;不在 `lang_map` 裡的(含大小寫不同)只**警告**——查表是精確比對,那條用不到;值不可空 |
 | `media.thumbnails` | `max_width` ≥ 1;`quality` 1～100 |
 
 用到時另有一道檢查(第二道防線,擋函式庫呼叫端不經 loader、直接在程式裡組的 `SiteConfig`):selector 在處理任何頁之前、

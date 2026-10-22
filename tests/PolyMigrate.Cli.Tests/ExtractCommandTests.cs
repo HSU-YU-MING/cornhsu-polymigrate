@@ -265,6 +265,19 @@ public class ExtractCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task ConfigWarning_IsPrintedOnStderr_WithoutChangingTheExitCode()
+    {
+        // 載入時的 warning(例如用不到的 pdf_labels)走既有的 stderr 慣例「warning: …」,不算 extract 的 warning、不影響 exit code
+        var config = Write("site/site.yaml", Config(extraTop: "media:\n  pdf_labels: { ja: PDF を表示 }"));
+        Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Equal($"warning: {config}: media.pdf_labels key 'ja' is not one of the lang_map locales (zh-Hant); that label is never used.\n", r.Err);
+    }
+
+    [Fact]
     public async Task ConfigKeyWithNoValue_ExitsTwo_InsteadOfCrashing()
     {
         // YAML 寫了 key 卻沒給值 → null。2.x 在載入或使用時 NullReferenceException:未處理例外,exit code 不在契約內

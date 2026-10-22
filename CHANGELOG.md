@@ -101,7 +101,9 @@
     flag 不可空、不可含 `;`(`content_inventory.csv` 以 `;` 分隔 flags)。
   - `pairing.fallback`:不可重複(2.x 同一種證據加兩次權重、`pair_evidence` 寫兩次)。
   - `media.web_prefix`:根相對路徑(`/media/`)或絕對 http(s) 網址,不含空白、引號、`<` `>` `?` `#`(相對路徑在巢狀頁上指錯地方)。
-  - `media.pdf_labels`:key 必須是 `lang_map` 的 locale(依頁面 locale 精確查表,打錯的那條 2.x 安靜地退回 `View PDF`);值不可空。
+  - `media.pdf_labels`:key 必須是形狀正確的 BCP-47 標記;值不可空。key 不在 `lang_map` 裡(含大小寫不同)只**警告**:依頁面 locale
+    精確查表,那條用不到(2.x 安靜地退回 `View PDF`),但共用模板帶來的多語言標籤不是寫壞。載入時的 warning 照既有慣例
+    以 `warning: <config>: …` 印在 stderr,不影響 exit code。
   一律 `ConfigException` → exit 2,與 selector 的錯誤一起在同一則訊息裡逐行列出、點名欄位。用到時的檢查保留為第二道防線
   (標題清理器照樣編譯 regex,而且改成容忍 `title_noise` / `title_markers` 的 null 項目)。
   **遷移**:照訊息修好或拿掉那些值(見「升級必做」第 6 條)。`examples/ibps-austin.yaml` 與測試用的 config 都不受影響。

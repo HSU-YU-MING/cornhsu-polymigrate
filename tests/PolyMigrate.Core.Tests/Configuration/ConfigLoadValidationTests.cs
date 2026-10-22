@@ -111,8 +111,8 @@ public class ConfigLoadValidationTests
         { Yaml(extract: "  section_flags: { support: \"needs_rebuild;urgent\" }\n"),
           "extract.section_flags.support: flag 'needs_rebuild;urgent' must be non-empty and contain no ';' (content_inventory.csv separates flags with ';')." },
         { Yaml(tail: "pairing:\n  fallback: [date, hreflang, date]\n"), "pairing.fallback lists 'date' more than once." },
-        { Yaml(tail: "media:\n  pdf_labels: { zh-hant: 下載 PDF }\n"),
-          "media.pdf_labels key 'zh-hant' is not one of the lang_map locales (zh-Hant, en)." },
+        { Yaml(tail: "media:\n  pdf_labels: { zh_Hant: 下載 PDF }\n"),
+          "media.pdf_labels key 'zh_Hant' is not a well-formed BCP-47 language tag (e.g. en, zh-Hant, pt-BR)." },
         { Yaml(tail: "media:\n  pdf_labels: { en: \"\" }\n"), "media.pdf_labels.en is empty." },
     };
 
@@ -215,6 +215,34 @@ public class ConfigLoadValidationTests
 
         Assert.Equal("article", new PolyMigrate.Core.Extraction.PageClassifier(config.Extract).Classify("", "about"));
         Assert.Equal("needs_rebuild", config.Extract.SectionFlags[""]);
+    }
+
+    [Fact]
+    public void PdfLabelForALocaleOutsideLangMap_LoadsWithAWarning()
+    {
+        // 共用模板常帶好幾種語言的標籤(zh-Hant、ja…),這個站的 lang_map 只有其中幾種:用不到,但不是寫壞——
+        // 606e01b 把它當成錯誤擋掉。形狀合法的 BCP-47 放行,載入時警告點名(大小寫不同的 zh-hant 也一樣:查表是精確比對,用不到)
+        var warnings = new List<string>();
+
+        var config = SiteConfigLoader.Load(
+            Yaml(tail: "media:\n  pdf_labels: { zh-Hant: 下載 PDF, ja: PDF を表示, zh-hant: 下載 }\n"), "site.yaml", warnings);
+
+        Assert.Equal(3, config.Media.PdfLabels.Count);
+        Assert.Equal(
+        [
+            "media.pdf_labels key 'ja' is not one of the lang_map locales (zh-Hant, en); that label is never used.",
+            "media.pdf_labels key 'zh-hant' is not one of the lang_map locales (zh-Hant, en); that label is never used.",
+        ], warnings);
+    }
+
+    [Fact]
+    public void ValidConfig_HasNoWarnings()
+    {
+        var warnings = new List<string>();
+
+        SiteConfigLoader.Load(Yaml(tail: "media:\n  pdf_labels: { zh-Hant: 下載 PDF, en: View PDF }\n"), "site.yaml", warnings);
+
+        Assert.Empty(warnings);
     }
 
     [Fact]

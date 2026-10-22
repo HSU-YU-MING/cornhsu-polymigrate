@@ -28,16 +28,25 @@ public static class SiteConfigLoader
     /// <summary>BCP-47 的語法形狀(RFC 5646:主語言 2～8 字母或 x / i 開頭的私用與舊式標記,之後每段 1～8 個英數字)。</summary>
     private static readonly Regex Bcp47 = new(@"^(?:[A-Za-z]{2,8}|[xXiI])(?:-[A-Za-z0-9]{1,8})*$", RegexOptions.CultureInvariant);
 
-    public static SiteConfig LoadFile(string path)
+    public static SiteConfig LoadFile(string path) => LoadFile(path, []);
+
+    /// <summary>
+    /// 同上,另把載入時的 warning(用不到、但不是寫壞的設定,例如 lang_map 裡沒有的 pdf_labels)收進
+    /// <paramref name="warnings"/>。CLI 用這個,照既有慣例印在 stderr、不影響 exit code。
+    /// </summary>
+    internal static SiteConfig LoadFile(string path, List<string> warnings)
     {
         if (!File.Exists(path))
         {
             throw new ConfigException($"Config file not found: {path}");
         }
-        return Load(File.ReadAllText(path), path);
+        return Load(File.ReadAllText(path), path, warnings);
     }
 
-    public static SiteConfig Load(string yaml, string sourceName = "<string>")
+    public static SiteConfig Load(string yaml, string sourceName = "<string>") => Load(yaml, sourceName, []);
+
+    /// <summary>同上,另收集載入時的 warning(見 <see cref="LoadFile(string, List{string})"/>)。</summary>
+    internal static SiteConfig Load(string yaml, string sourceName, List<string> warnings)
     {
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
@@ -57,7 +66,7 @@ public static class SiteConfigLoader
             throw new ConfigException($"{sourceName}: invalid config — {ex.InnerException?.Message ?? ex.Message}", ex);
         }
 
-        Validate(config, sourceName, duplicates);
+        Validate(config, sourceName, duplicates, warnings);
         return config;
     }
 
@@ -143,7 +152,7 @@ public static class SiteConfigLoader
         }
     }
 
-    private static void Validate(SiteConfig c, string src, List<string> duplicates)
+    private static void Validate(SiteConfig c, string src, List<string> duplicates, List<string> warnings)
     {
         var errors = new List<string>(duplicates);
 
@@ -179,7 +188,7 @@ public static class SiteConfigLoader
         }
         if (Present(errors, c.Media, "media") is { } media)
         {
-            ValidateMedia(errors, media, c.UrlPattern?.LangMap);
+            ValidateMedia(errors, warnings, media, c.UrlPattern?.LangMap);
         }
 
         if (errors.Count > 0)
@@ -386,22 +395,28 @@ public static class SiteConfigLoader
         }
     }
 
-    private static void ValidateMedia(List<string> errors, MediaSection media, Dictionary<string, string>? langMap)
+    private static void ValidateMedia(List<string> errors, List<string> warnings, MediaSection media, Dictionary<string, string>? langMap)
     {
         // 寫進 Markdown 的媒體網址前綴:相對路徑在巢狀頁上會指錯地方,引號、角括號會弄壞內嵌 HTML
         if (Present(errors, media.WebPrefix, "media.web_prefix") is { } webPrefix && !IsWebPrefix(webPrefix))
         {
             errors.Add($"media.web_prefix must be a root-relative path starting with '/' (e.g. /media/) or an absolute http(s) URL, without whitespace, quotes, '<', '>', '?' or '#', got '{media.WebPrefix}'.");
         }
-        // 依頁面的 locale 精確查表:key 打錯(大小寫不同、不在 lang_map 裡)的那一條永遠用不到,2.x 安靜地退回 "View PDF"
+        // 依頁面的 locale 精確查表:key 不在 lang_map 裡(或大小寫不同)的那一條永遠用不到,2.x 安靜地退回 "View PDF"。
+        // 形狀不對的 key 是寫壞(error);形狀合法、只是這個站沒有那個語言的,多半是共用模板帶來的(zh-Hant、ja…),
+        // 只警告點名,不擋(審查可接受項;606e01b 一度當成錯誤)
         if (Map(errors, media.PdfLabels, "media.pdf_labels") is { } labels)
         {
             var locales = langMap?.Values.Where(v => v is not null).Distinct().ToList() ?? [];
             foreach (var (locale, label) in labels)
             {
-                if (locales.Count > 0 && !locales.Contains(locale, StringComparer.Ordinal))
+                if (!Bcp47.IsMatch(locale))
                 {
-                    errors.Add($"media.pdf_labels key '{locale}' is not one of the lang_map locales ({string.Join(", ", locales)}).");
+                    errors.Add($"media.pdf_labels key '{locale}' is not a well-formed BCP-47 language tag (e.g. en, zh-Hant, pt-BR).");
+                }
+                else if (locales.Count > 0 && !locales.Contains(locale, StringComparer.Ordinal))
+                {
+                    warnings.Add($"media.pdf_labels key '{locale}' is not one of the lang_map locales ({string.Join(", ", locales)}); that label is never used.");
                 }
                 if (string.IsNullOrEmpty(label))
                 {
