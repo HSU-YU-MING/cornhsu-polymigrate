@@ -497,7 +497,7 @@ public static class Cli
             // 一個回答都沒拿到(伺服器掛了、被 WAF 擋、base_url 打錯):空清單會被讀成「沒有孤兒頁」,
             // 還會蓋掉先前探好的清單——所以不寫,既有檔原樣保留。而且是 error(exit 2,3.0 起):
             // 2.x 回 0,只看 exit code 的排程分不出「真的沒有」與「根本沒問到」(決策檔 H2 選項 B)
-            if (result.Checks > 0 && result.UnansweredCount == result.Checks)
+            if (result.NoUsableAnswers)
             {
                 Console.Error.WriteLine(
                     $"error: none of the {result.Checks} probes got a usable answer ({unanswered})."
@@ -585,9 +585,9 @@ public static class Cli
             var slugs = File.ReadAllLines(slugsFile).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
             Console.WriteLine($"Fetching {slugs.Count} orphan slugs × {config.UrlPattern.LangMap.Count} langs...");
 
-            using var http = PolyMigrate.Core.Orphans.OrphanProber.CreateHttpClient(config, allowRedirects: true);
-            var report = await new PolyMigrate.Core.Orphans.OrphanFetcher(config, http)
-                .FetchAsync(slugs, section, Path.Combine(root, "raw"), Path.Combine(root, "media"), Console.WriteLine, ct);
+            // 與函式庫的 facade 同一條路(root/raw、root/media、跟轉址的 HttpClient),兩邊不會各自演化
+            var report = await new PolyMigrate.Core.PolyMigrator(config)
+                .FetchOrphansAsync(root, section, slugs, Console.WriteLine, ct);
 
             Console.WriteLine(new string('=', 50));
             Console.WriteLine("Fetch done.");

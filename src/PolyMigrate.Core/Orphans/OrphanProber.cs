@@ -3,19 +3,42 @@ using PolyMigrate.Core.Configuration;
 
 namespace PolyMigrate.Core.Orphans;
 
-/// <summary><see cref="OrphanProber.ProbeDetailedAsync"/> 的結果。</summary>
-internal sealed class ProbeResult
+/// <summary>
+/// 探測孤兒頁的結果(<see cref="OrphanProber.ProbeDetailedAsync"/>、<see cref="PolyMigrator.ProbeOrphansAsync(string, string, int, int, string?, Action{string}?, CancellationToken)"/>)。
+/// 分開統計「確定沒有」與「沒拿到回答」:伺服器掛了、被 WAF 擋、<c>base_url</c> 打錯時,<see cref="Found"/> 一樣是空的,
+/// 但那不代表沒有孤兒頁——看 <see cref="NoUsableAnswers"/>。3.0 起 public(2.x 是 internal 的 ProbeResult)。
+/// </summary>
+public sealed class ProbeReport
 {
+    /// <summary>只由探測產生;呼叫端拿到的都是填好的結果。</summary>
+    internal ProbeReport()
+    {
+    }
+
+    internal List<string> FoundList { get; } = [];
+
+    internal SortedDictionary<string, int> UnansweredByReason { get; } = new(StringComparer.Ordinal);
+
     /// <summary>命中的 slug,依探測順序(= <see cref="OrphanProber.ProbeAsync"/> 的回傳值)。</summary>
-    public List<string> Found { get; } = [];
+    public IReadOnlyList<string> Found => FoundList;
 
     /// <summary>探過的候選數(含後綴變體;每個候選最多兩次 HTTP 請求,這裡只算一次)。</summary>
-    public int Checks { get; set; }
+    public int Checks { get; internal set; }
 
-    /// <summary>沒拿到回答的候選,依原因計數(<c>HTTP 503</c>、<c>connection error</c>、<c>timeout</c>)。</summary>
-    public SortedDictionary<string, int> Unanswered { get; } = new(StringComparer.Ordinal);
+    /// <summary>
+    /// 沒拿到「有/沒有」回答的候選,依原因計數(<c>HTTP 503</c>、<c>connection error</c>、<c>timeout</c>…),鍵依 ordinal 排序。
+    /// 「確定沒有」的回答是 404、410、其他 2xx 與 3xx(不跟轉址);401/403/429/5xx、重試後仍 409、連線錯誤與逾時算沒拿到回答。
+    /// </summary>
+    public IReadOnlyDictionary<string, int> Unanswered => UnansweredByReason;
 
-    public int UnansweredCount => Unanswered.Values.Sum();
+    /// <summary><see cref="Unanswered"/> 的總數。</summary>
+    public int UnansweredCount => UnansweredByReason.Values.Sum();
+
+    /// <summary>
+    /// 一個回答都沒拿到(探了至少一個候選,而且全部沒拿到回答)。這時 <see cref="Found"/> 是空的,但不可讀成
+    /// 「沒有孤兒頁」:CLI 的 <c>probe-orphans</c> 在這個情況 exit 2、不覆寫既有清單。
+    /// </summary>
+    public bool NoUsableAnswers => Checks > 0 && UnansweredCount == Checks;
 }
 
 /// <summary>
@@ -69,19 +92,19 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
     public async Task<List<string>> ProbeAsync(
         string langPrefix, string section, int yearFrom, int yearTo,
         IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default) =>
-        (await ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known, progress, ct)).Found;
+        (await ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known, progress, ct)).FoundList;
 
     /// <summary>
     /// 同 <see cref="ProbeAsync"/>,另外分開統計「確定沒有」與「沒拿到回答」。
     /// 兩者原本一律當成「不存在」:伺服器掛了、被 WAF 擋、base_url 打錯時,探測照樣「跑完、0 筆」,
-    /// 而空清單會被讀成「沒有孤兒頁」。CLI 靠這份統計決定清單能不能信、要不要寫。
+    /// 而空清單會被讀成「沒有孤兒頁」。CLI 靠這份統計決定清單能不能信、要不要寫(3.0 起 public)。
     /// </summary>
-    internal async Task<ProbeResult> ProbeDetailedAsync(
+    public async Task<ProbeReport> ProbeDetailedAsync(
         string langPrefix, string section, int yearFrom, int yearTo,
         IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default)
     {
-        var result = new ProbeResult();
-        var found = result.Found;
+        var result = new ProbeReport();
+        var found = result.FoundList;
         var probed = 0;
 
         async Task<bool> Exists(string slug)
@@ -90,7 +113,7 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
             result.Checks++;
             if (answer == Answer.None)
             {
-                result.Unanswered[reason!] = result.Unanswered.GetValueOrDefault(reason!) + 1;
+                result.UnansweredByReason[reason!] = result.UnansweredByReason.GetValueOrDefault(reason!) + 1;
             }
             return answer == Answer.Exists;
         }

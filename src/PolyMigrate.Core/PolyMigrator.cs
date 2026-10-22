@@ -1,18 +1,17 @@
 using PolyMigrate.Core.Configuration;
 using PolyMigrate.Core.Extraction;
 using PolyMigrate.Core.Media;
+using PolyMigrate.Core.Orphans;
 using PolyMigrate.Core.Verify;
 
 namespace PolyMigrate.Core;
 
 /// <summary>
 /// PolyMigrate 函式庫的進入點(<c>Cornhsu.PolyMigrate.Core</c>)。
-/// polymigrate CLI 是這層之上的殼;要在自己的 .NET 程式裡驅動抽取、縮圖、巡檢與列出已鏡像的 slug,
-/// 用這個型別即可。
+/// polymigrate CLI 是這層之上的殼;要在自己的 .NET 程式裡驅動抽取、縮圖、巡檢、列出已鏡像的 slug、
+/// 探測與抓回孤兒頁,用這個型別即可(probe / fetch 入口與各方法的可取消 overload 自 3.0 起)。
 /// <para>其餘 public 型別(ExtractionPipeline、OutputVerifier、ThumbnailGenerator、OrphanProber、
-/// OrphanFetcher 等)是較底層的進階用途:它們同樣屬於公開面、受 semver 約束,只是沒有這一層的便利。
-/// 探測與抓回孤兒頁(CLI 的 probe-orphans / fetch-orphans)目前沒有 facade 入口,
-/// 要直接用 OrphanProber / OrphanFetcher。</para>
+/// OrphanFetcher 等)是較底層的進階用途:它們同樣屬於公開面、受 semver 約束,只是沒有這一層的便利。</para>
 /// </summary>
 /// <example>
 /// <code>
@@ -89,4 +88,73 @@ public sealed class PolyMigrator(SiteConfig config)
     /// <returns>找不到任何對應目錄時為 null(通常是 section 名打錯)——與「有目錄但沒有頁」不同。</returns>
     public static IReadOnlyList<string>? MirrorSlugs(string rawDir, string section, string? langPrefix = null) =>
         Inventory.MirrorSlugs.List(rawDir, section, langPrefix);
+
+    /// <summary>
+    /// 探測孤兒頁(CLI 的 <c>probe-orphans</c>;索引移除但頁面還在的舊文章):逐日期候選 slug(YYYYMMDD 與 MMDDYYYY),
+    /// 命中再探 A～D 後綴。與 CLI 同一套規則:已鏡像的 slug 取自 <c>root/raw/{lang}/{section}/</c>、依
+    /// <c>url_pattern.strip_extensions</c> 判定(與 extract 一致;本身不探、後綴照探),禮貌延遲 <c>site.polite.delay_ms</c>,
+    /// 送 <c>site.auth_workaround</c> 的 cookie,不跟轉址(轉址頁不算命中)。
+    /// <para><b>不寫任何檔案</b>:清單在 <see cref="ProbeReport.Found"/>,要不要寫成 <c>orphan_slugs.&lt;section&gt;.txt</c>
+    /// 由呼叫端決定。<see cref="ProbeReport.NoUsableAnswers"/> 為 true 時不要把空清單當成「沒有孤兒頁」
+    /// (CLI 在這個情況 exit 2、不覆寫既有清單)。</para>
+    /// </summary>
+    /// <param name="root">站的工作根目錄(讀 <c>root/raw</c> 判斷哪些 slug 已鏡像)。</param>
+    /// <param name="section">section 目錄名(如 news)。</param>
+    /// <param name="yearFrom">起始年(含)。</param>
+    /// <param name="yearTo">結束年(含)。</param>
+    /// <param name="langPrefix">探哪個語言的網址;null = <c>url_pattern.lang_map</c> 的第一個 key(同 CLI 的 <c>--lang</c> 預設)。</param>
+    /// <param name="progress">進度訊息(命中、每 100 個候選一次)。</param>
+    /// <param name="ct">取消時擲 <see cref="OperationCanceledException"/>(等待中的延遲與進行中的請求都會被打斷)。</param>
+    /// <exception cref="ArgumentOutOfRangeException">年份不在 1～9999,或 <paramref name="yearFrom"/> 大於 <paramref name="yearTo"/>。</exception>
+    public async Task<ProbeReport> ProbeOrphansAsync(string root, string section, int yearFrom, int yearTo,
+        string? langPrefix = null, Action<string>? progress = null, CancellationToken ct = default)
+    {
+        EnsureYears(yearFrom, yearTo);   // 在建 HttpClient 與發任何請求之前
+        using var http = OrphanProber.CreateHttpClient(config);
+        return await ProbeOrphansAsync(http, root, section, yearFrom, yearTo, langPrefix, progress, ct);
+    }
+
+    /// <summary>同上,HttpClient 由呼叫端提供(測試注入用;public 版自己建、自己釋放)。</summary>
+    internal Task<ProbeReport> ProbeOrphansAsync(HttpClient http, string root, string section, int yearFrom, int yearTo,
+        string? langPrefix, Action<string>? progress, CancellationToken ct)
+    {
+        EnsureYears(yearFrom, yearTo);
+        var lang = langPrefix ?? config.UrlPattern.LangMap.Keys.First();
+        var known = OrphanProber.KnownSlugs(Path.Combine(root, "raw"), lang, section, config.UrlPattern.StripExtensions);
+        return new OrphanProber(config, http).ProbeDetailedAsync(lang, section, yearFrom, yearTo, known, progress, ct);
+    }
+
+    /// <summary>
+    /// 抓回孤兒頁(CLI 的 <c>fetch-orphans</c>):每個 slug 抓 <c>url_pattern.lang_map</c> 的每一種語言版,
+    /// 頁面存進 <c>root/raw/</c>(原始 bytes)、正文引用的圖片與資產存進 <c>root/media/</c>(路徑鏡像、解碼檔名)。
+    /// 已鏡像的頁跳過(只寫不刪);跟轉址(頁面可能在 301 之後),存檔名仍是要求的 slug。
+    /// 單頁失敗(非 200、非 HTML、連線失敗、逾時)記進 <see cref="FetchReport.Errors"/>、不中止整批(CLI 在這個情況 exit 1)。
+    /// </summary>
+    /// <param name="root">站的工作根目錄(寫進 <c>root/raw</c> 與 <c>root/media</c>)。</param>
+    /// <param name="section">section 目錄名(如 news)。</param>
+    /// <param name="slugs">要抓的 slug(通常是 <see cref="ProbeOrphansAsync(string, string, int, int, string?, Action{string}?, CancellationToken)"/> 的 <see cref="ProbeReport.Found"/>)。</param>
+    /// <param name="progress">進度訊息(每抓到一頁一則)。</param>
+    /// <param name="ct">取消時擲 <see cref="OperationCanceledException"/>;已寫出的頁與資產保留(原子寫入,不會留半截檔)。</param>
+    /// <exception cref="ConfigException"><c>extract.content</c> 不是合法的 CSS selector(在寫入抓到的頁之前就擲)。</exception>
+    public async Task<FetchReport> FetchOrphansAsync(string root, string section, IReadOnlyList<string> slugs,
+        Action<string>? progress = null, CancellationToken ct = default)
+    {
+        using var http = OrphanProber.CreateHttpClient(config, allowRedirects: true);
+        return await FetchOrphansAsync(http, root, section, slugs, progress, ct);
+    }
+
+    /// <summary>同上,HttpClient 由呼叫端提供(測試注入用;public 版自己建、自己釋放)。</summary>
+    internal Task<FetchReport> FetchOrphansAsync(HttpClient http, string root, string section, IReadOnlyList<string> slugs,
+        Action<string>? progress, CancellationToken ct) =>
+        new OrphanFetcher(config, http).FetchAsync(
+            slugs, section, Path.Combine(root, "raw"), Path.Combine(root, "media"), progress, ct);
+
+    private static void EnsureYears(int yearFrom, int yearTo)
+    {
+        if (yearFrom is < 1 or > 9999 || yearTo is < 1 or > 9999 || yearFrom > yearTo)
+        {
+            throw new ArgumentOutOfRangeException(nameof(yearFrom),
+                $"Years must be within 1-9999 with yearFrom <= yearTo, got {yearFrom}-{yearTo}.");
+        }
+    }
 }

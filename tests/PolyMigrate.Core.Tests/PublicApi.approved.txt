@@ -160,6 +160,14 @@
    public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section)
    public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section, IReadOnlyList<string> stripExtensions)
    public Task<List<string>> ProbeAsync(string langPrefix, string section, int yearFrom, int yearTo, IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default)
+   public Task<PolyMigrate.Core.Orphans.ProbeReport> ProbeDetailedAsync(string langPrefix, string section, int yearFrom, int yearTo, IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default)
+
+## sealed class PolyMigrate.Core.Orphans.ProbeReport
+   public int Checks { get; }
+   public IReadOnlyList<string> Found { get; }
+   public bool NoUsableAnswers { get; }
+   public IReadOnlyDictionary<string, int> Unanswered { get; }
+   public int UnansweredCount { get; }
 
 ## sealed class PolyMigrate.Core.PolyMigrator
    public ctor(PolyMigrate.Core.Configuration.SiteConfig config)
@@ -167,10 +175,12 @@
    public PolyMigrate.Core.Extraction.ExtractionReport Extract(PolyMigrate.Core.Extraction.ExtractionPaths paths, bool dryRun, CancellationToken ct)
    public PolyMigrate.Core.Extraction.ExtractionReport Extract(string root, bool dryRun = false)
    public PolyMigrate.Core.Extraction.ExtractionReport Extract(string root, bool dryRun, CancellationToken ct)
+   public Task<PolyMigrate.Core.Orphans.FetchReport> FetchOrphansAsync(string root, string section, IReadOnlyList<string> slugs, Action<string>? progress = null, CancellationToken ct = default)
    public static PolyMigrate.Core.PolyMigrator FromConfigFile(string configPath)
    public PolyMigrate.Core.Media.ThumbnailReport GenerateThumbnails(string mediaDir, string thumbnailDir)
    public PolyMigrate.Core.Media.ThumbnailReport GenerateThumbnails(string mediaDir, string thumbnailDir, CancellationToken ct)
    public static IReadOnlyList<string>? MirrorSlugs(string rawDir, string section, string? langPrefix = null)
+   public Task<PolyMigrate.Core.Orphans.ProbeReport> ProbeOrphansAsync(string root, string section, int yearFrom, int yearTo, string? langPrefix = null, Action<string>? progress = null, CancellationToken ct = default)
    public static PolyMigrate.Core.Verify.VerifyReport Verify(string outputDir, string? mediaDir = null, string mediaPrefix = "/media/", IReadOnlyCollection<string>? allowUnlinked = null)
    public static PolyMigrate.Core.Verify.VerifyReport Verify(string outputDir, string? mediaDir, string mediaPrefix, IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct)
 
