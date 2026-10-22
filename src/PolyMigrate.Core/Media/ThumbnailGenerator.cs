@@ -96,6 +96,10 @@ public sealed class ThumbnailGenerator(SiteConfig config)
                     {
                         image.Quality = (uint)thumbs.Quality;
                     }
+                    // 決定性輸出:Magick 寫 PNG 時預設帶 tIME(寫出的時間)與 date:create / date:modify(取自輸入檔的
+                    // 修改時間)、date:timestamp(現在時間)文字 chunk,同一張圖跑兩次位元組就不一樣。這個 define 只有
+                    // PNG 編碼器會讀,所以一律設——檔名是 .gif、內容其實是 PNG 的也照樣生效。JPEG / WebP / GIF 本來就是決定性的
+                    image.Settings.SetDefine(MagickFormat.Png, "exclude-chunks", "date,time");
                     image.Write(tmp, image.Format);
                 }
                 File.Move(tmp, target, overwrite: true);

@@ -182,6 +182,11 @@ IO 錯誤一律 2;未知指令 2。
   兩者都不是失敗、不影響 exit code;`thumbs` 的摘要多一行 `animated: N kept, M as first frame`,並以
   `[first frame] <路徑> :: <原因>` 列出前 10 個。上述兩個實測檔在 3.0 分別約 0.2 秒、峰值約 170 MB 就完成。
   **升級注意**:見「升級必做」第 3 條。
+- **PNG 縮圖每次跑出來的位元組都不一樣。** Magick 寫 PNG 時預設帶 `tIME`(寫出的時間)與 `date:create` / `date:modify`
+  (取自輸入檔的修改時間)、`date:timestamp`(現在時間)三種文字 chunk:同一張圖跑兩次、或輸入檔被複製過(修改時間變了),
+  縮圖就不一樣,重跑與版控比對都會冒出假的變更。現在寫 PNG 時不寫這些 chunk,同一張輸入、同樣的設定,輸出逐位元組相同;
+  像素與尺寸不變(實測只少了那幾個 chunk)。JPEG、WebP、GIF 本來就是決定性的。
+  **升級注意**:既有的 PNG 縮圖不會自動重產(`thumbs` 跳過已存在的縮圖);要統一成新的位元組,先刪掉 `media_thumb/` 裡的 `.png` 再跑。
 - **YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說其他 iframe「保留原樣」,實際上它們留在 DOM 裡
   交給 ReverseMarkdown,而未知標籤的處理是只輸出子節點——iframe 沒有子節點,於是 Google 地圖、行事曆、表單、Vimeo 等嵌入
   靜默消失,沒有任何清單或 warning 記得。現在以原始 HTML 保留在內文原位置(不進 `videos` / `documents`,不猜型別),

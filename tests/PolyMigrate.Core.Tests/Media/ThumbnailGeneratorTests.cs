@@ -131,6 +131,54 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(low, high);
     }
 
+    /// <summary>PNG 的 chunk 型別與(文字 chunk 的)關鍵字,依出現順序。</summary>
+    private static List<string> PngChunks(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var chunks = new List<string>();
+        for (var i = 8; i + 8 <= bytes.Length;)
+        {
+            var length = (bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
+            var type = System.Text.Encoding.ASCII.GetString(bytes, i + 4, 4);
+            if (type == "tEXt")
+            {
+                var keyword = System.Text.Encoding.Latin1.GetString(bytes, i + 8, length);
+                type += ":" + keyword[..keyword.IndexOf('\0')];
+            }
+            chunks.Add(type);
+            i += 12 + length;
+        }
+        return chunks;
+    }
+
+    [Theory]
+    [InlineData("chart.png", MagickFormat.Png)]
+    [InlineData("chart.jpg", MagickFormat.Jpeg)]
+    [InlineData("chart.webp", MagickFormat.WebP)]
+    [InlineData("chart.gif", MagickFormat.Gif)]
+    public void SameInput_SameSettings_SameBytes(string name, MagickFormat format)
+    {
+        // 縮圖要是決定性輸出:同一張輸入、同樣的設定,位元組必須相同(重跑、換機器、版控比對都靠這一點)。
+        // Magick 寫 PNG 時預設帶 tIME(寫出的時間)與 date:create / date:modify(取自輸入檔的修改時間)、
+        // date:timestamp(現在時間)三種文字 chunk:同一張圖跑兩次就不一樣,複製過的輸入(修改時間變了)也不一樣
+        WriteNoisy(name, format);
+        var source = MediaPath(name);
+        var thumbPath = Path.Combine(OutDir, name);
+
+        File.SetLastWriteTimeUtc(source, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        Run();
+        var first = File.ReadAllBytes(thumbPath);
+        File.Delete(thumbPath);
+        File.SetLastWriteTimeUtc(source, new DateTime(2024, 6, 1, 12, 0, 0, DateTimeKind.Utc));   // 內容不變、只有修改時間變
+        Run();
+
+        Assert.Equal(first, File.ReadAllBytes(thumbPath));
+        if (format == MagickFormat.Png)
+        {
+            Assert.DoesNotContain(PngChunks(thumbPath), c => c is "tIME" || c.StartsWith("tEXt:date:", StringComparison.Ordinal));
+        }
+    }
+
     [Fact]
     public void ConfiguredMaxWidth_IsTheCap()
     {
