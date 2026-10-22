@@ -115,7 +115,7 @@ internal sealed class LinkRewriter
     /// <summary>
     /// 不是鏡像頁的連結目標,是不是「檔案」:是的話回傳不加尾斜線的路由,否則 null(照頁的規則)。
     /// 只有單段路徑會因此不同(多段本來就不加尾斜線)。下列一律當頁,不做判斷:剝掉了 strip_extensions、
-    /// 拿掉了 index、原本以 / 結尾、或那一段是語言前綴。剩下的才看名字:點檔案(.htaccess),或副檔名是
+    /// 原本以 / 結尾、或那一段是語言前綴(<c>/index</c> 沒有副檔名,本來就不會被當成檔案)。剩下的才看名字:點檔案(.htaccess),或副檔名是
     /// 1～16 個 ASCII 英數字、至少一個字母(.swf、.pdf、.mp4、.webmanifest)——
     /// <c>v1.2-rc</c> 的 <c>.2-rc</c>、<c>2019.05.01</c> 的 <c>.01</c> 不算。
     /// </summary>
@@ -126,7 +126,7 @@ internal sealed class LinkRewriter
             return null;
         }
         var parts = absolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length != 1 || parts[0] == "index" || _langPrefixes.Contains(parts[0]) || !LooksLikeFileName(parts[0]))
+        if (parts.Length != 1 || _langPrefixes.Contains(parts[0]) || !LooksLikeFileName(parts[0]))
         {
             return null;
         }
