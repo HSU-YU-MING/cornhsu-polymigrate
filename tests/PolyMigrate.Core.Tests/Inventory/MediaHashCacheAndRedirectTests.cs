@@ -106,6 +106,22 @@ public class MediaHashCacheAndRedirectTests : IDisposable
         Assert.Contains(",5a6df720540c20d95d530d3fd6885511223d5d20,2\r\n", manifest);
     }
 
+    [Theory]
+    [InlineData("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")]   // 長度對、不是十六進位(第三輪審查 C8)
+    [InlineData("5A6DF720540C20D95D530D3FD6885511223D5D20")]   // 大寫:本工具只寫小寫,讀到大寫就是被改過
+    public void NonHexSha1InCache_IsRecomputed(string sha1)
+    {
+        AddRaw("ch/news/a.php.html", "<img src=\"/img/x.jpg\">");
+        AddMedia("img/x.jpg", "v1");
+        var media = new FileInfo(Path.Combine(MediaDir, "img", "x.jpg"));
+        Directory.CreateDirectory(Path.GetDirectoryName(CachePath)!);
+        File.WriteAllLines(CachePath, ["path,size,mtime_ticks,sha1", $"img/x.jpg,{media.Length},{media.LastWriteTimeUtc.Ticks},{sha1}"]);
+
+        Run();
+
+        Assert.Contains(",5a6df720540c20d95d530d3fd6885511223d5d20,2", File.ReadAllText(Path.Combine(_root, "media_manifest.csv")));
+    }
+
     [Fact]
     public void TruncatedSha1InCache_IsRecomputed()
     {

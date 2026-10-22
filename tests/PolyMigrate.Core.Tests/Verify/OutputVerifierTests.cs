@@ -181,6 +181,21 @@ public class OutputVerifierTests : IDisposable
     }
 
     [Theory]
+    // 第三輪審查 V3:邊界只排除「前面連著字或 -」,不要求前面有空白——緊接在引號後、在內文開頭、
+    // 換行之後的 href/src 都要照樣檢查(要求空白的版本會漏掉前兩種)
+    [InlineData("src='/ch/news/gone' <p>x</p>")]                          // 內文開頭
+    [InlineData("<iframe title=\"t\"src=\"/ch/news/gone\"></iframe>")]   // 緊接在引號後
+    [InlineData("<img\nsrc=\"/ch/news/gone\">")]                          // 換行之後
+    public void HrefOrSrc_AfterAQuoteOrAtTheStart_IsStillChecked(string body)
+    {
+        AddPage("ch/a.md", body: body);
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/gone");
+    }
+
+    [Theory]
     [InlineData("data-src")]        // lazy-load 的 iframe / img
     [InlineData("data-href")]
     [InlineData("xsrc")]
