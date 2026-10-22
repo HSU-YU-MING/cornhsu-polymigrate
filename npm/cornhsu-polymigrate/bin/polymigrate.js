@@ -34,17 +34,16 @@ const TARGETS = {
 const key = `${process.platform} ${process.arch}`;
 const target = TARGETS[key];
 
-// 啟動腳本自己失敗 = PolyMigrate 根本沒有執行。exit code 目前是 1,和 CLI 契約的「1 = 只有 warning」
-// 撞號(依「0/1 放行」的 CI 會把它當成通過);改成 2 屬既有情境的 exit code 改變,待維護者裁定。
-// 在那之前至少把話講清楚:訊息用英文(與 CLI 其他輸出一致),明講工具沒有執行、這個 1 不是 warning。
-const LAUNCHER_FAILURE_EXIT = 1;
+// 啟動腳本自己失敗 = PolyMigrate 根本沒有執行 = error,所以是 2(3.0 起)。
+// 2.3.1 以前是 1,和 CLI 契約的「1 = 只有 warning」撞號:依「0/1 放行」的 CI 會把「工具沒跑」當成通過
+// (2.1.0~2.3.0 的 arm64 事故走的就是這條路)。訊息用英文(與 CLI 其他輸出一致),明講工具沒有執行。
+const LAUNCHER_FAILURE_EXIT = 2;
 
 function fail(...lines) {
   console.error(
     [
       `error: ${lines[0]} PolyMigrate did not run.`,
       ...lines.slice(1),
-      "(This exit code 1 comes from the npm launcher, not a PolyMigrate warning.)",
     ].join("\n")
   );
   process.exit(LAUNCHER_FAILURE_EXIT);

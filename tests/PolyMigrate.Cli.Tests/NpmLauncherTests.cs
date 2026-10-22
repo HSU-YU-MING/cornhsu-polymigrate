@@ -7,11 +7,9 @@ namespace PolyMigrate.Cli.Tests;
 /// <summary>
 /// npm 啟動腳本 <c>bin/polymigrate.js</c> 自己失敗時(工具根本沒有執行)的三條路徑。
 ///
-/// <para>exit code 目前是 1,和 CLI 契約的「1 = 只有 warning」撞號——依「0/1 放行」的 CI 會把
-/// 「工具根本沒跑」當成通過(2.1.0～2.3.0 的 arm64 事故走的就是這條路)。改成 2 屬既有情境的
-/// exit code 改變,待維護者裁定;在那之前,至少訊息要用英文(與 CLI 其他輸出一致)講明
-/// <b>PolyMigrate 沒有執行</b>,也講明這個 1 不是 warning。這裡釘住訊息,並把現行的 1 記下來——
-/// 哪天裁定改成 2,這幾條測試會提醒要一起改 CHANGELOG 與 docs/contracts.md。</para>
+/// <para>3.0 起 exit code 是 2(工具沒有執行 = error)。2.3.1 以前是 1,和 CLI 契約的「1 = 只有 warning」撞號——
+/// 依「0/1 放行」的 CI 會把「工具根本沒跑」當成通過(2.1.0～2.3.0 的 arm64 事故走的就是這條路)。
+/// 訊息用英文(與 CLI 其他輸出一致)講明 <b>PolyMigrate 沒有執行</b>。這裡釘住訊息與 2。</para>
 ///
 /// <para>需要 PATH 上有 node(GitHub Actions 的三種 runner 都預裝)。</para>
 /// </summary>
@@ -74,7 +72,7 @@ public class NpmLauncherTests : CliTestBase
         Assert.DoesNotMatch(new Regex(@"\p{IsCJKUnifiedIdeographs}"), stderr.Replace(Root, ""));   // CLI 其他輸出都是英文
         Assert.StartsWith("error: ", stderr);
         Assert.Contains("PolyMigrate did not run.", stderr);
-        Assert.Contains("exit code 1 comes from the npm launcher, not a PolyMigrate warning", stderr);
+        Assert.DoesNotContain("exit code 1", stderr);   // 2.x 的「這個 1 不是 warning」說明已不適用
     }
 
     [Fact]
@@ -82,7 +80,7 @@ public class NpmLauncherTests : CliTestBase
     {
         var (exit, stdout, stderr) = await WithPlatform("aix");
 
-        Assert.Equal(1, exit);
+        Assert.Equal(2, exit);
         Assert.Empty(stdout);
         AssertLauncherFailure(stderr);
         Assert.Contains("no prebuilt binary for aix ", stderr);
@@ -96,7 +94,7 @@ public class NpmLauncherTests : CliTestBase
         var (exit, stdout, stderr) = await Node(new Dictionary<string, string> { ["NODE_PATH"] = Root },
             Launcher, "--version");
 
-        Assert.Equal(1, exit);
+        Assert.Equal(2, exit);
         Assert.Empty(stdout);
         AssertLauncherFailure(stderr);
         Assert.Contains("is not installed", stderr);
@@ -116,7 +114,7 @@ public class NpmLauncherTests : CliTestBase
         var (exit, stdout, stderr) = await Node(
             new Dictionary<string, string> { ["NODE_PATH"] = PathOf("node_modules") }, Launcher, "--version");
 
-        Assert.Equal(1, exit);
+        Assert.Equal(2, exit);
         Assert.Empty(stdout);
         AssertLauncherFailure(stderr);
         Assert.Contains("could not start ", stderr);

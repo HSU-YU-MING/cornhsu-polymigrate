@@ -268,8 +268,8 @@ config 的 CSS selector(`extract.content`、`type_rules.*.title_selector` / `rem
 經 npm(`npx cornhsu-polymigrate`、全域安裝的 `polymigrate`)執行時,中間多一層啟動腳本 `bin/polymigrate.js`:
 PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編號(SIGINT → 130)。
 **啟動腳本自己失敗**(平台不在支援表、平台包沒裝、執行檔起不來)時 PolyMigrate 根本沒有執行,
-目前回 **1**,stderr 以 `error:` 開頭並註明 `PolyMigrate did not run.` 與「這個 1 不是 warning」——
-這個 1 與上表的「1 = 只有 warning」撞號,要不要改成 2 待維護者裁定(既有情境的 exit code 改變屬 major)。
+回 **2**,stderr 以 `error:` 開頭並註明 `PolyMigrate did not run.`。
+(2.3.1 以前回 1,與上表的「1 = 只有 warning」撞號;3.0 改成 2。)
 
 第一次 Ctrl-C:每個指令都在下一個檢查點停下,stderr 印 `cancelled.`、回 130。檢查點:`extract` 每一頁之前、
 `media_manifest.csv` 每個媒體檔算 sha1 之前、開始寫清單之前;`verify` 每一頁之前、寫報告之前;`thumbs` 每張圖之前;
