@@ -183,7 +183,7 @@ public class OrphanCommandTests : CliTestBase
         // 「可能是別的 section 的」,那段話已經不需要
         Assert.Equal(
             "error: none of the 732 probes got a usable answer (HTTP 503: 732)."
-            + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.\n"
+            + " Check site.base_url, site.user_agent, site.auth_workaround (cookies) and site.polite.delay_ms, then rerun.\n"
             + $"warning: {slugFile} was left as it was (it holds an earlier probe's list).\n",
             r.Err);
         Assert.DoesNotContain("Probe done", r.Out);   // 失敗了:stdout 不印「完成」

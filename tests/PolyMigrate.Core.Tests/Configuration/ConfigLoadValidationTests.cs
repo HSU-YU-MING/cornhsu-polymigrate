@@ -73,12 +73,14 @@ public class ConfigLoadValidationTests
           "site.base_url must not have a query or fragment (URLs are built as <base_url>/<path>), got 'https://www.example.org/#top'." },
 
         // ── HTTP 標頭:換行會讓請求送不出去,probe 會把它算成「連線錯誤」,一路錯到 exit 2「沒拿到回答」──
-        { Yaml(site: "  user_agent: \"Bot/1.0\\r\\nX-Evil: 1\"\n"),
-          "site.user_agent must not contain control characters (line breaks would break the HTTP header)." },
-        { Yaml(site: "  auth_workaround:\n    type: cookie\n    set: { \"a b\": \"1\" }\n"),
-          "site.auth_workaround.set: cookie name 'a b' must be non-empty and contain no '=', ';', whitespace or control characters." },
-        { Yaml(site: "  auth_workaround:\n    type: cookie\n    set: { k: \"1; admin=1\" }\n"),
-          "site.auth_workaround.set.k: cookie value must not contain ';' or control characters." },
+        { Yaml(site: "  user_agent: \"Bot/1.0\\r\\nX-Evil: 1\"\n"), "site.user_agent must contain only printable ASCII (HTTP headers can't carry line breaks, control characters or non-ASCII text)." },
+        // 非 ASCII:載入時 2.x / 606e01b 都放行,但 .NET 送請求時拒絕非 ASCII 的標頭值——每一個請求都送不出去,
+        // probe 全部算成連線錯誤(審查建議 3)
+        { Yaml(site: "  user_agent: \"MigrationBot/1.0 (café)\"\n"), "site.user_agent must contain only printable ASCII (HTTP headers can't carry line breaks, control characters or non-ASCII text)." },
+        { Yaml(site: "  auth_workaround:\n    type: cookie\n    set: { \"a b\": \"1\" }\n"), "site.auth_workaround.set: cookie name 'a b' must be non-empty printable ASCII without '=', ';' or whitespace." },
+        { Yaml(site: "  auth_workaround:\n    type: cookie\n    set: { \"ü\": \"1\" }\n"), "site.auth_workaround.set: cookie name 'ü' must be non-empty printable ASCII without '=', ';' or whitespace." },
+        { Yaml(site: "  auth_workaround:\n    type: cookie\n    set: { k: \"1; admin=1\" }\n"), "site.auth_workaround.set.k: cookie value must be printable ASCII without ';' (HTTP headers can't carry control characters or non-ASCII text)." },
+        { Yaml(site: "  auth_workaround:\n    type: cookie\n    set: { lang: \"中文\" }\n"), "site.auth_workaround.set.lang: cookie value must be printable ASCII without ';' (HTTP headers can't carry control characters or non-ASCII text)." },
 
         // ── 數值範圍:409 後的重試等兩倍,超過 int 一半時 Task.Delay 在探測當下才擲例外 ──
         { Yaml(polite: "    delay_ms: 2000000000\n"),

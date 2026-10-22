@@ -269,8 +269,8 @@ stderr 印一則 `note:` 說明怎麼遷移(它是哪個 section 的清單,就�
 | `site.base_url` | 絕對 http(s) 網址,不帶 query 或 fragment(可以帶路徑) |
 | `site.encoding` | 已知的編碼名 |
 | `site.polite.delay_ms` | 0～1073741823 |
-| `site.user_agent` | 不含控制字元 |
-| `site.auth_workaround` | `type` 只能是 `cookie`;cookie 名不可空、不含 `=` `;` 空白與控制字元,值不含 `;` 與控制字元 |
+| `site.user_agent` | 只收可列印的 ASCII(0x20～0x7E):HTTP 標頭帶不了換行、控制字元與非 ASCII |
+| `site.auth_workaround` | `type` 只能是 `cookie`;cookie 名不可空、只收可列印的 ASCII 且不含 `=` `;` 空白,值只收可列印的 ASCII 且不含 `;` |
 | `url_pattern.lang_map` | 至少一組;key 是 `""` 或單一路徑段(不含 `/` `\` `:`,不是 `.` `..`);值是形狀正確的 BCP-47 標記 |
 | `url_pattern.default_lang` | 必填,而且是 `lang_map` 的值之一 |
 | `url_pattern.strip_extensions` | 每一項以 `.` 開頭、至少兩個字元,不含 `/` `\` `?` `#` 與空白 |

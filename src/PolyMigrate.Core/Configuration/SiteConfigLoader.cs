@@ -137,11 +137,12 @@ public static class SiteConfigLoader
                 errors.Add($"site.polite.delay_ms must be <= {MaxDelayMs} (a retry after HTTP 409 waits twice as long), got {polite.DelayMs}.");
             }
         }
-        // User-Agent 與 Cookie 以 TryAddWithoutValidation 放進標頭:換行會讓請求送不出去,
-        // probe 把它算成「連線錯誤」,一路錯到「一個回答都沒拿到」
-        if (Present(errors, site.UserAgent, "site.user_agent") is { } userAgent && userAgent.Any(char.IsControl))
+        // User-Agent 與 Cookie 以 TryAddWithoutValidation 放進標頭:換行、控制字元與非 ASCII(.NET 送請求時拒絕
+        // 非 ASCII 的標頭值)都會讓每一個請求送不出去,probe 把它算成「連線錯誤」,一路錯到「一個回答都沒拿到」。
+        // 只收可列印的 ASCII(0x20～0x7E;審查建議 3)
+        if (Present(errors, site.UserAgent, "site.user_agent") is { } userAgent && !userAgent.All(IsPrintableAscii))
         {
-            errors.Add("site.user_agent must not contain control characters (line breaks would break the HTTP header).");
+            errors.Add("site.user_agent must contain only printable ASCII (HTTP headers can't carry line breaks, control characters or non-ASCII text).");
         }
         if (site.AuthWorkaround is { } auth)
         {
@@ -153,13 +154,13 @@ public static class SiteConfigLoader
             {
                 foreach (var (name, value) in cookies)
                 {
-                    if (name.Length == 0 || name.Any(ch => ch is '=' or ';' || char.IsWhiteSpace(ch) || char.IsControl(ch)))
+                    if (name.Length == 0 || !name.All(ch => IsPrintableAscii(ch) && ch is not ('=' or ';' or ' ')))
                     {
-                        errors.Add($"site.auth_workaround.set: cookie name '{name}' must be non-empty and contain no '=', ';', whitespace or control characters.");
+                        errors.Add($"site.auth_workaround.set: cookie name '{name}' must be non-empty printable ASCII without '=', ';' or whitespace.");
                     }
-                    if (value is not null && value.Any(ch => ch == ';' || char.IsControl(ch)))
+                    if (value is not null && !value.All(ch => IsPrintableAscii(ch) && ch != ';'))
                     {
-                        errors.Add($"site.auth_workaround.set.{name}: cookie value must not contain ';' or control characters.");
+                        errors.Add($"site.auth_workaround.set.{name}: cookie value must be printable ASCII without ';' (HTTP headers can't carry control characters or non-ASCII text).");
                     }
                 }
             }
@@ -376,6 +377,9 @@ public static class SiteConfigLoader
         (prefix.StartsWith('/')
          || (Uri.TryCreate(prefix, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)))
         && !prefix.Any(ch => ch is '"' or '\'' or '<' or '>' or '?' or '#' || char.IsWhiteSpace(ch) || char.IsControl(ch));
+
+    /// <summary>可列印的 ASCII(0x20 空白～0x7E <c>~</c>):HTTP 標頭值唯一安全的範圍。</summary>
+    private static bool IsPrintableAscii(char ch) => ch is >= ' ' and <= '~';
 
     private const string SectionKeyRule =
         "\"\" (root-level pages) or a single directory name (no '/', '\\' or ':', not '.' or '..')";

@@ -86,8 +86,9 @@
   - `extract.strip_title_prefix`:用與標題清理相同的選項編譯 regex(2.x 要到 `extract` 建標題清理器時才 exit 2,
     訊息是 .NET 的 `Invalid pattern …`、沒點名欄位;`thumbs` / `probe-orphans` 永遠不報)。
   - `site.base_url`:不可帶 query 或 fragment(網址一律組成 `<base_url>/<路徑>`,2.x 照樣把路徑接在 `?…` 後面發出去)。
-  - `site.user_agent`、`site.auth_workaround.set`:不可含控制字元(換行會讓請求送不出去,probe 把它算成連線錯誤);
-    cookie 名不可空、不可含 `=` `;` 空白,值不可含 `;`。
+  - `site.user_agent`、`site.auth_workaround.set`:只收可列印的 ASCII(0x20～0x7E)。換行、控制字元與非 ASCII(`café`、中文 cookie 值)
+    會讓每一個請求送不出去(.NET 拒絕非 ASCII 的標頭值),probe 把它算成連線錯誤、一路錯到「一個回答都沒拿到」;
+    cookie 名另外不可空、不可含 `=` `;` 空白,值不可含 `;`。probe 一個回答都沒拿到時的訊息也把 `site.user_agent` 與 cookie 列進「請檢查」。
   - `site.polite.delay_ms`:上限 1073741823(409 後的重試等兩倍,超過時 `Task.Delay` 要到探測當下才擲例外)。
   - `url_pattern.lang_map`:key 必須是 `""` 或單一路徑段(含斜線的永遠對不上任何鏡像頁,`..` 會讓 probe 讀到 `raw/` 以外);
     值必須是形狀正確的 BCP-47 標記(`zh_Hant` 這類底線寫法 2.x 照收)。

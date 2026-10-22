@@ -502,7 +502,7 @@ public static class Cli
             {
                 Console.Error.WriteLine(
                     $"error: none of the {result.Checks} probes got a usable answer ({unanswered})."
-                    + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.");
+                    + " Check site.base_url, site.user_agent, site.auth_workaround (cookies) and site.polite.delay_ms, then rerun.");
                 // 2.x 的預設 --out 是各 section 共用的同一個檔,這裡還得警告「留著的可能是別的 section 的清單」;
                 // 3.0 起預設檔名帶 section,留著的就是這個 section 先前探到的
                 Console.Error.WriteLine(File.Exists(outFile)
