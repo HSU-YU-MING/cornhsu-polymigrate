@@ -165,29 +165,30 @@ public class OrphanCommandTests : CliTestBase
     }
 
     [Fact]
-    public async Task Probe_NoUsableAnswerAtAll_KeepsThePreviousSlugFile_AndWarns()
+    public async Task Probe_NoUsableAnswerAtAll_KeepsThePreviousSlugFile_AndExitsTwo()
     {
-        // 全部請求都沒拿到有效回應(伺服器掛了、被 WAF 擋、base_url 打錯…):原本照樣把既有清單
+        // 全部請求都沒拿到有效回應(伺服器掛了、被 WAF 擋、base_url 打錯…):2.3.1 以前照樣把既有清單
         // 覆寫成空檔並 exit 0——空清單會被讀成「沒有孤兒頁」,先前探好的清單(預設延遲下一年約
-        // 36 分鐘)也沒了。exit code 不動(那要維護者裁定),但不覆寫、並在 stderr 講清楚
+        // 36 分鐘)也沒了。現在不覆寫,而且 exit 2(3.0,決策檔 H2 選項 B):只看 exit code 的排程也分得出
+        // 「真的沒有」與「根本沒問到」
         await using var server = new LoopbackHttpServer((_, _) => new LoopbackHttpServer.Response(503));
         var config = SiteConfig(server.BaseUrl);
         var slugFile = Write("site/orphan_slugs.txt", "20190101\n20190102");
 
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
-        Assert.Equal(0, r.Exit);
+        Assert.Equal(2, r.Exit);
         Assert.Equal("20190101\n20190102", File.ReadAllText(slugFile));
         // 審查 minor 6:預設的 --out 是各 section 共用的 <root>/orphan_slugs.txt,保留下來的可能是另一個
-        // section 的清單——接著跑 fetch-orphans --section news 就會拿別人的 slug 去抓。警告要講明這一點
+        // section 的清單——接著跑 fetch-orphans --section news 就會拿別人的 slug 去抓。訊息要講明這一點
         Assert.Equal(
-            "warning: none of the 732 probes got a usable answer (HTTP 503: 732)."
+            "error: none of the 732 probes got a usable answer (HTTP 503: 732)."
             + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.\n"
             + $"warning: {slugFile} was left as it was: it holds an earlier probe's list, possibly for another"
             + " --section (the default --out is shared by all sections). Don't feed it to"
             + " 'fetch-orphans --section news' until a probe of news succeeds; give each section its own --out.\n",
             r.Err);
-        Assert.Contains($"Probe done: 0 orphan slugs (no usable answers; {slugFile} left as it was)\n", r.Out);
+        Assert.DoesNotContain("Probe done", r.Out);   // 失敗了:stdout 不印「完成」
     }
 
     [Fact]
@@ -199,9 +200,9 @@ public class OrphanCommandTests : CliTestBase
 
         var r = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
 
-        Assert.Equal(0, r.Exit);
+        Assert.Equal(2, r.Exit);
         Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
-        Assert.StartsWith("warning: none of the 732 probes got a usable answer (HTTP 403: 732)", r.Err);
+        Assert.StartsWith("error: none of the 732 probes got a usable answer (HTTP 403: 732)", r.Err);
         Assert.EndsWith($"warning: {PathOf("site/orphan_slugs.txt")} was not written; an empty list would read as \"no orphan pages\".\n", r.Err);
         // 先拿掉暫存路徑再檢查:TEMP 含非 ASCII 的開發機(例如中文使用者名稱)上,路徑本身就不是 ASCII
         Assert.True(r.Err.Replace(Root, "").All(char.IsAscii), "警告要是純 ASCII:cp437 等 console 印不出 × 與 —");
@@ -297,9 +298,9 @@ public class OrphanCommandTests : CliTestBase
         var fresh = await Run("probe-orphans", config, "--section", "news", "--years", "2020");
         var kept = await Run("probe-orphans", config, "--section", "news", "--years", "2020", "--out", existing);
 
-        Assert.Equal(0, fresh.Exit);
+        Assert.Equal(2, fresh.Exit);   // 一個回答都沒拿到 = error(3.0)
         Assert.False(File.Exists(PathOf("site/orphan_slugs.txt")));
-        Assert.Equal(0, kept.Exit);
+        Assert.Equal(2, kept.Exit);
         Assert.Equal("20190101", File.ReadAllText(existing));
         Assert.Equal(before, File.GetLastWriteTimeUtc(existing));
     }

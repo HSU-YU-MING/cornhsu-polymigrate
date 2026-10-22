@@ -480,12 +480,12 @@ public static class Cli
             var unanswered = string.Join(", ", result.Unanswered.Select(kv => $"{kv.Key}: {kv.Value}"));
 
             // 一個回答都沒拿到(伺服器掛了、被 WAF 擋、base_url 打錯):空清單會被讀成「沒有孤兒頁」,
-            // 還會蓋掉先前探好的清單——所以不寫,既有檔原樣保留。exit code 刻意不動:
-            // 既有情境的 exit code 改變屬 major,要不要非零結束留給維護者裁定
+            // 還會蓋掉先前探好的清單——所以不寫,既有檔原樣保留。而且是 error(exit 2,3.0 起):
+            // 2.x 回 0,只看 exit code 的排程分不出「真的沒有」與「根本沒問到」(決策檔 H2 選項 B)
             if (result.Checks > 0 && result.UnansweredCount == result.Checks)
             {
                 Console.Error.WriteLine(
-                    $"warning: none of the {result.Checks} probes got a usable answer ({unanswered})."
+                    $"error: none of the {result.Checks} probes got a usable answer ({unanswered})."
                     + " Check site.base_url, site.auth_workaround and site.polite.delay_ms, then rerun.");
                 // 保留下來的舊檔不一定是這個 section 的:預設的 --out 是各 section 共用的同一個檔,
                 // B 全部失敗時留著的可能是 A 的清單,接著跑 fetch-orphans --section B 就會拿 A 的 slug 去抓
@@ -494,8 +494,7 @@ public static class Cli
                         + " --section (the default --out is shared by all sections). Don't feed it to"
                         + $" 'fetch-orphans --section {section}' until a probe of {section} succeeds; give each section its own --out."
                     : $"warning: {outFile} was not written; an empty list would read as \"no orphan pages\".");
-                Console.WriteLine($"Probe done: 0 orphan slugs (no usable answers; {outFile} left as it was)");
-                return 0;
+                return 2;
             }
 
             File.WriteAllText(outFile, string.Join('\n', found));
