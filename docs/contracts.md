@@ -198,7 +198,7 @@ UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**(0 筆時為空檔);ordinal 
 `verify` 只讀 Phase 2/3 的輸出(Markdown + 清單),不需要網路與鏡像 —— 契約完整性的試金石。
 
 檢查項:frontmatter 必填欄位(source_url/lang/slug/translation_key/title/page_type)、
-內部連結對路由集(content 樹推導;index 檔代表目錄路由)、`/media/` 引用對磁碟
+內部連結對路由集(content 樹推導;index 檔代表目錄路由;內嵌 HTML 只認 `href=` / `src=` 屬性,`data-src` 這類不算)、`/media/` 引用對磁碟
 (URL 解碼後比對;`missing_images.csv` 已記錄的原站壞圖降為 warning)、
 孤島頁(2.2 起:沒有任何內容頁連到的頁;內建豁免站根與各語言首頁——深度 ≤ 1 的目錄 index——
 以及 `page_type: listing` 的列表頁,其餘可用 `--allow-unlinked <file>` 豁免,一行一頁、content 相對路徑或路由皆可、`#` 開頭為註解)。

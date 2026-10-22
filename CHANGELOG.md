@@ -45,6 +45,8 @@ exit code 一覽:
   **`verify` 也會看到這些 iframe**:指向「沒有搬過來的站內頁」(例如舊站的表單頁)的 iframe 會報
   `broken_link`,**`verify` 因此可能由 exit 0/1 變成 2**——原本那個嵌入在 Markdown 裡根本不存在,
   現在它在新站上確實是壞的。這是既有情境的 exit code 改變,semver 判讀(patch 或留到 major)待維護者裁定。
+  另外 `verify` 掃內嵌 HTML 時原本連 `data-src` / `data-href` 也當成連結(lazy-load 的 iframe 指向已搬好的頁
+  也會報 `broken_link`);現在只認真正的 `href` / `src` 屬性——這一項只會讓 issue 變少。
 - **修正(patch):npm 啟動腳本自己失敗時,訊息改英文並明講 PolyMigrate 沒有執行。**
   平台不在支援表、平台包沒裝(`--no-optional` / `--omit=optional` 或安裝中斷)、執行檔起不來這三種情況,
   原本印繁體中文(CLI 其他輸出都是英文),也沒說工具根本沒跑。現在 stderr 以 `error:` 開頭、

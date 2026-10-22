@@ -44,6 +44,24 @@ public class VerifyCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task LazyLoadedIframe_DataSrcToAMigratedPage_IsNotABrokenLink()
+    {
+        // 第二輪審查:lazy-load 的 iframe 把真正的網址放在 data-src(src 是 about:blank)。B1 只改寫 src,
+        // 而 verify 掃 src= 的規則前面沒有邊界,data-src 也被當成連結 → 指向已搬好的頁也報 broken_link,
+        // 9f41339 回 0、修正後回 2。data-src 不是瀏覽器會載入的屬性,不該被當成站內連結檢查
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Write("site/raw/ch/news/a.php.html", Page(
+            "<p>x</p><a href=\"/ch/news/b.php\">b</a><iframe data-src=\"/ch/news/b.php\" src=\"about:blank\" class=\"lazyload\"></iframe>"));
+        Write("site/raw/ch/news/b.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(0, r.Exit);
+    }
+
+    [Fact]
     public async Task KeptIframe_ToASameSitePageNotInTheMirror_IsABrokenLink()
     {
         // 剩下真的會多報的情境:iframe 指向沒搬過來的站內舊網址(例如表單頁)。修 H3 之前這個 iframe

@@ -349,6 +349,8 @@ public sealed partial class OutputVerifier
     [GeneratedRegex(@"\]\(([^)\s]+)\)")]
     private static partial Regex MarkdownTarget();
 
-    [GeneratedRegex("""(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", RegexOptions.IgnoreCase)]
+    // 屬性名前面要有邊界:data-src / data-href(lazy-load 的 iframe 與圖)不是瀏覽器會載入的網址,
+    // 沒有邊界的話它們也被當成站內連結,指向已搬好的頁照樣報 broken_link(第二輪審查實測 exit 0 → 2)
+    [GeneratedRegex("""(?<![\w-])(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlTarget();
 }

@@ -180,6 +180,22 @@ public class OutputVerifierTests : IDisposable
         Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/gone");
     }
 
+    [Theory]
+    [InlineData("data-src")]        // lazy-load 的 iframe / img
+    [InlineData("data-href")]
+    [InlineData("xsrc")]
+    public void AttributesThatOnlyEndInSrcOrHref_AreNotLinks(string attribute)
+    {
+        // href=/src= 的比對原本前面沒有邊界:data-src、data-href 也被當成站內連結檢查。
+        // 它們不是瀏覽器會載入的網址(要靠站上的 JS),報 broken_link 是假警報
+        AddPage("ch/a.md", body: $"<iframe {attribute}=\"/ch/news/nope\" src=\"/ch/a\"></iframe>");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Equal(0, report.Errors);
+        Assert.Equal(1, report.LinksChecked);   // 只剩真正的 src
+    }
+
     [Fact]
     public void MediaRef_WithQueryString_ResolvesToFile()
     {
