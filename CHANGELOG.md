@@ -54,7 +54,7 @@ exit code 一覽:
   現在它在新站上確實是壞的。這是既有情境的 exit code 改變,semver 判讀(patch 或留到 major)待維護者裁定。
   另外 `verify` 掃內嵌 HTML 時原本連 `data-src` / `data-href` 也當成連結(lazy-load 的 iframe 指向已搬好的頁
   也會報 `broken_link`);現在只檢查真正的 `href` / `src` 屬性;`data-src` 這類仍算入口(否則只被 lazy-load iframe 指到的頁
-  會開始報 `unlinked_page`)——這一項只會讓 issue 變少。
+  會開始報 `unlinked_page`)——這一項只會讓 issue 變少。`verify` 摘要的 `links checked` 也不再計入這類引用,數字可能變小。
 - **修正(patch):npm 啟動腳本自己失敗時,訊息改英文並明講 PolyMigrate 沒有執行。**
   平台不在支援表、平台包沒裝(`--no-optional` / `--omit=optional` 或安裝中斷)、執行檔起不來這三種情況,
   原本印繁體中文(CLI 其他輸出都是英文),也沒說工具根本沒跑。現在 stderr 以 `error:` 開頭、
@@ -149,7 +149,8 @@ exit code 一覽:
     原本以 `/` 結尾、或那一段是語言前綴的,仍當頁、照舊加尾斜線;`.2-rc`、`.01` 這種 slug 裡的點不算副檔名。
   - 同 host、scheme 不是 http(s) 的網址(`ftp://`、`file://`、`ws://`…)原樣保留,不再改寫成站內路由。
     指向鏡像頁的仍照舊改寫。
-  **升級注意:內文連結與 iframe 在上述兩種情況會改變;頁的路由與 301 檔不變。** 開發過程中 `9254591` 曾把
+  **升級注意:內文連結與 iframe 在上述兩種情況會改變(`verify_report.csv` 裡對應的 `broken_link` 明細字串跟著變,
+  例如 `/embed.swf/` → `/embed.swf`;同 host 非 http(s) 的不再被檢查);頁的路由與 301 檔不變。** 開發過程中 `9254591` 曾把
   判斷套在頁的路由上(`/jane.doe.php`、`/CONTACT.PHP`、`/calendar.html` 頁、key 為 `zh.tw` 的語言首頁等的
   路由與 301 都變了),已在發版前修正,不影響任何已發行版本。
 - **文件(none):hreflang 讀的是整份文件的 `<link rel="alternate" hreflang>`,不只 `<head>`。**
