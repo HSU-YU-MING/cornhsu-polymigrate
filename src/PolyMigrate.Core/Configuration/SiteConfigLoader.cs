@@ -77,6 +77,24 @@ public static class SiteConfigLoader
         {
             errors.Add("extract.content (CSS selector for the main content) is required.");
         }
+        else
+        {
+            AddSelectorProblem(errors, c.Extract.Content, "extract.content");
+        }
+        // type_rules 的 selector 全部驗,不管這次有沒有頁屬於那個頁型、也不管是哪個指令在載入(3.0 起):
+        // 2.x 只在「真的要用」之前才驗,寫壞的規則要等到哪天出現那個頁型才炸,thumbs / probe-orphans 則永遠不報。
+        // 用到前的那一道(CssSelectors.Ensure)保留,擋的是不經 loader、直接在程式裡組的 config
+        foreach (var (type, rules) in c.Extract.TypeRules)
+        {
+            if (rules?.TitleSelector is { } titleSelector)
+            {
+                AddSelectorProblem(errors, titleSelector, $"extract.type_rules.{type}.title_selector");
+            }
+            foreach (var selector in rules?.RemoveSelectors ?? [])
+            {
+                AddSelectorProblem(errors, selector, $"extract.type_rules.{type}.remove_selectors");
+            }
+        }
         if (c.Site.AuthWorkaround is { } auth && auth.Type != "cookie")
         {
             errors.Add($"site.auth_workaround.type '{auth.Type}' is not supported (only 'cookie').");
@@ -119,6 +137,14 @@ public static class SiteConfigLoader
         if (errors.Count > 0)
         {
             throw new ConfigException($"{src}: " + string.Join("\n  - ", ["config is invalid:", .. errors]));
+        }
+    }
+
+    private static void AddSelectorProblem(List<string> errors, string? selector, string field)
+    {
+        if (selector is not null && Extraction.CssSelectors.Problem(selector, field) is { } problem)
+        {
+            errors.Add(problem);
         }
     }
 }

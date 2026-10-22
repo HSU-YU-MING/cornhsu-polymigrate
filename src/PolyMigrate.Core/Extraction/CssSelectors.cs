@@ -7,13 +7,32 @@ namespace PolyMigrate.Core.Extraction;
 /// <summary>
 /// config 裡的 CSS selector 語法檢查。
 ///
-/// <para>刻意<b>不</b>在載入 config 時檢查:<c>type_rules</c> 裡寫壞、但從來沒有頁用到的 selector,
-/// 1.0 起一直能跑;<c>thumbs</c>、<c>probe-orphans</c> 根本不用 selector。在載入時擋下來,
-/// 會讓原本能跑的 config 開始失敗(YAML 面的破壞,要 major)。所以改在「真的要用」之前才檢查——
-/// 被擋下的情境,正好就是原本會以 AngleSharp 的 <see cref="DomException"/> 崩潰的那些。</para>
+/// <para>兩道防線。第一道在<b>載入 config 時</b>(<see cref="SiteConfigLoader"/>,3.0 起):所有 selector 欄位都驗,
+/// 包括這次沒有頁屬於那個頁型的 <c>type_rules</c>,以及根本不用 selector 的指令(<c>thumbs</c>、<c>probe-orphans</c>)
+/// 讀到的 config——寫壞的 config 不該等到某個指令、某個頁型才炸。2.x 刻意不在載入時驗,只是為了不讓原本能跑的
+/// config 在 patch 版開始失敗。第二道在「真的要用」之前(<see cref="Ensure"/>、<see cref="QueryAll"/>):
+/// 函式庫呼叫端可以不經 loader、直接在程式裡組 <see cref="SiteConfig"/>,這一層保證那種 config 寫壞時
+/// 也是 <see cref="ConfigException"/>,而不是 AngleSharp 的 <see cref="DomException"/> 半途崩潰。</para>
 /// </summary>
 internal static class CssSelectors
 {
+    /// <summary>
+    /// <paramref name="selector"/> 合語法回 null,否則回點名欄位與 selector 的訊息(與 <see cref="Ensure"/> 擲出的相同)。
+    /// 給載入 config 時一次收集所有錯誤用。
+    /// </summary>
+    public static string? Problem(string selector, string field)
+    {
+        try
+        {
+            Ensure(selector, field);
+            return null;
+        }
+        catch (ConfigException ex)
+        {
+            return ex.Message;
+        }
+    }
+
     /// <summary>
     /// <paramref name="selector"/> 不合語法時擲 <see cref="ConfigException"/>,訊息點名欄位
     /// (CLI 原樣印出、exit 2)。拿空文件跑一次 QuerySelector:語法錯誤與文件內容無關,

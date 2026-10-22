@@ -45,9 +45,10 @@ internal sealed partial class PageExtractor
     ///
     /// <para>放在寫任何檔之前:<c>type_rules</c> 的 selector 只在碰到該頁型時才用到,
     /// 原本會在半途崩潰——前面的頁已經寫進 content/,清單檔卻一份都沒寫。
-    /// 只檢查「這次真的會用到的」(<c>extract.content</c> 每頁都用;<c>type_rules</c> 只看這批頁
-    /// 出現過的頁型),沒用到的照舊不擋,見 <see cref="CssSelectors"/>。頁型只靠路徑判定,
-    /// 不必先解析 HTML。</para>
+    /// 這是第二道防線:經 <see cref="SiteConfigLoader"/> 載入的 config 在載入時就驗過全部 selector(3.0 起);
+    /// 這裡擋的是函式庫呼叫端直接在程式裡組、沒經過 loader 的 config,只檢查「這次真的會用到的」
+    /// (<c>extract.content</c> 每頁都用;<c>type_rules</c> 只看這批頁出現過的頁型),見 <see cref="CssSelectors"/>。
+    /// 頁型只靠路徑判定,不必先解析 HTML。</para>
     /// </summary>
     public void EnsureSelectorsValid(IReadOnlyCollection<RawPage> pages)
     {

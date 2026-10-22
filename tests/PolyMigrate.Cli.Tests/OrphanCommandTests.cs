@@ -527,7 +527,8 @@ public class OrphanCommandTests : CliTestBase
         var r = await Run("fetch-orphans", config, "--section", "news");
 
         Assert.Equal(2, r.Exit);
-        Assert.Equal("extract.content: 'main[' is not a valid CSS selector.\n", r.Err);
+        Assert.Equal($"{config}: config is invalid:\n  - extract.content: 'main[' is not a valid CSS selector.\n", r.Err);   // 3.0 起載入時就擋
+        Assert.Empty(server.Requests);   // 一個請求都沒發
         Assert.False(File.Exists(PathOf("site/raw/ch/news/20200101.php.html")));
 
         Write("site/site.yaml", good);

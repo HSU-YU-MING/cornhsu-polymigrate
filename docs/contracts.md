@@ -257,9 +257,11 @@ stderr 印一則 `note:` 說明怎麼遷移(它是哪個 section 的清單,就�
 ## exit code
 
 0 乾淨 / 1 warning / 2 error / 130 中斷。所有指令的用法錯誤、config 錯誤、IO 錯誤一律 2;未知指令 2。
-config 的 CSS selector(`extract.content`、`type_rules.*.title_selector` / `remove_selectors`)載入時不檢查語法,
-改在用到之前才檢查:`extract` 在處理任何頁之前、`fetch-orphans` 在寫入抓到的頁之前;寫壞 → 2,而且什麼都還沒寫。
-寫壞但這次沒有頁用到的 selector 不擋(例如沒有任何頁屬於那個頁型)。
+config 的 CSS selector(`extract.content`、每一個 `type_rules.*.title_selector` / `remove_selectors`)**載入時就驗語法**(3.0 起):
+任何指令讀到寫壞的 selector 都是 2,包括這次沒有頁屬於那個頁型的規則、以及根本不用 selector 的 `thumbs` / `probe-orphans`;
+什麼都不寫、不發請求,訊息在 `<config>: config is invalid:` 之後逐行列出每一個寫壞的欄位與 selector。
+用到之前另有一道檢查(`extract` 在處理任何頁之前、`fetch-orphans` 在寫入抓到的頁之前),擋的是函式庫呼叫端
+不經 loader 直接組的 config。(2.3.1 以前載入時不驗,寫壞但這次用不到的 selector 不擋。)
 
 | 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
 |---|---|---|---|---|

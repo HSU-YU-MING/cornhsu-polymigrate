@@ -260,15 +260,15 @@ public class ExtractCommandTests : CliTestBase
     [Fact]
     public async Task InvalidContentSelector_ExitsTwo_NamingTheField_WritingNothing()
     {
-        // config 載入時不驗 selector 語法;寫壞的 selector 原本讓 AngleSharp 的 DomException 直接穿出去,
-        // 以未處理例外結束(Windows 為 0xE0434352),不在 0/1/2/130 契約內
+        // 寫壞的 selector 原本讓 AngleSharp 的 DomException 直接穿出去,以未處理例外結束
+        // (Windows 為 0xE0434352),不在 0/1/2/130 契約內。3.0 起在載入 config 時就擋
         var config = Write("site/site.yaml", Config().Replace("content: \"main\"", "content: \"section[id\""));
         Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
 
         var r = await Run("extract", config);
 
         Assert.Equal(2, r.Exit);
-        Assert.Equal("extract.content: 'section[id' is not a valid CSS selector.\n", r.Err);
+        Assert.Equal($"{config}: config is invalid:\n  - extract.content: 'section[id' is not a valid CSS selector.\n", r.Err);
         Assert.Empty(r.Out);
         Assert.False(Directory.Exists(PathOf("site/content")));
         Assert.False(File.Exists(PathOf("site/content_inventory.csv")));
@@ -289,22 +289,46 @@ public class ExtractCommandTests : CliTestBase
         var r = await Run("extract", config);
 
         Assert.Equal(2, r.Exit);
-        Assert.Equal($"{message} is not a valid CSS selector.\n", r.Err);
+        Assert.Equal($"{config}: config is invalid:\n  - {message} is not a valid CSS selector.\n", r.Err);
         Assert.False(Directory.Exists(PathOf("site/content")));
     }
 
     [Fact]
-    public async Task InvalidSelectorOfAnUnusedPageType_StillExitsZero()
+    public async Task InvalidSelectorOfAnUnusedPageType_ExitsTwo_AtLoad()
     {
-        // 載入時不驗是刻意的:寫壞但這次沒有任何頁用到的規則,1.0 起一直能跑,不能在 patch 版開始擋
+        // 2.x 刻意不擋:寫壞但這次沒有任何頁用到的規則照樣 exit 0(只為了不讓原本能跑的 config 在 patch 版失敗)。
+        // 3.0 起載入時就驗:寫壞的 config 不該等到哪天出現那個頁型才炸
         var config = Write("site/site.yaml", Config(extraExtract:
             "  section_types: { events: event }\n  type_rules:\n    event:\n      title_selector: \"h3[[\""));
         Write("site/raw/ch/index.php.html", Page("<p>首頁</p>"));
 
         var r = await Run("extract", config);
 
-        Assert.Equal(0, r.Exit);
-        Assert.Contains("  markdown files   : 1\n", r.Out);
+        Assert.Equal(2, r.Exit);
+        Assert.Equal($"{config}: config is invalid:\n  - extract.type_rules.event.title_selector: 'h3[[' is not a valid CSS selector.\n", r.Err);
+        Assert.Empty(r.Out);
+        Assert.False(Directory.Exists(PathOf("site/content")));
+    }
+
+    [Theory]
+    [InlineData("thumbs")]
+    [InlineData("probe-orphans")]
+    public async Task InvalidSelector_CommandsThatNeverUseSelectors_AlsoExitTwo_AtLoad(string command)
+    {
+        // thumbs 與 probe-orphans 根本不用 selector:2.x 照樣跑完。同一份 config 交給 extract 一定會炸,
+        // 所以在哪個指令先讀到它就在哪裡擋,不發任何請求、不寫任何檔
+        var config = Write("site/site.yaml", Config(baseUrl: "https://example.invalid").Replace("content: \"main\"", "content: \"main[\""));
+        Write("site/media/a.jpg", "not used");
+
+        var r = command == "thumbs"
+            ? await Run("thumbs", config)
+            : await Run("probe-orphans", config, "--section", "news", "--years", "2020");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal($"{config}: config is invalid:\n  - extract.content: 'main[' is not a valid CSS selector.\n", r.Err);
+        Assert.Empty(r.Out);
+        Assert.False(Directory.Exists(PathOf("site/media_thumb")));
+        Assert.False(File.Exists(PathOf("site/orphan_slugs.news.txt")));
     }
 
     [Fact]

@@ -4,7 +4,8 @@ using PolyMigrate.Core.Extraction;
 namespace PolyMigrate.Core.Tests.Extraction;
 
 /// <summary>
-/// config 裡的 CSS selector 寫壞時(載入時刻意不驗語法,見 <c>CssSelectors</c>):
+/// config 裡的 CSS selector 寫壞時的<b>第二道防線</b>(用到之前才驗):這裡的 config 都是直接在程式裡組的,
+/// 沒經過 <see cref="SiteConfigLoader"/>——經 loader 載入的在載入時就擋下了(3.0 起,見 SiteConfigLoaderTests)。
 /// 原本 AngleSharp 的 <c>DomException</c> 直接穿出去,CLI 以未處理例外結束(exit code 不在契約內),
 /// 而且崩潰前的頁已經寫進 content/、清單檔一份都沒寫。
 /// 現在是 <see cref="ConfigException"/>,訊息點名欄位,並且在寫任何檔之前就停。
@@ -71,7 +72,8 @@ public class SelectorValidationTests : IDisposable
     [Fact]
     public void InvalidSelectorInATypeWithNoPages_IsNotAnError()
     {
-        // 1.0 起一直能跑的 config:寫壞但這次沒有任何頁用到的規則不擋(否則就是 YAML 面的破壞)
+        // 第二道防線只檢查「這次會用到的」;沒用到的頁型規則在這一層不擋。經 loader 載入的 config
+        // 在載入時就會因為它而失敗(3.0 起),見 SiteConfigLoaderTests.InvalidSelector_FailsAtLoad_NamingTheFieldAndTheSelector
         WritePage("ch/index.php.html");
         var config = TestConfigs.IbpsLike();
         config.Extract.TypeRules["event"] = new PageTypeRules { TitleSelector = "h3[[", RemoveSelectors = ["(("] };

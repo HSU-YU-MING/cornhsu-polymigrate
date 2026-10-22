@@ -21,9 +21,11 @@ four surfaces waits for a major. **3.0 is such a release** — it changes exit c
 so they follow the 0 / 1 / 2 / 130 contract (an orphan probe that got no usable answer, a failed
 npm launcher and an interrupted command no longer look like success), gives each section its own
 orphan slug list (`orphan_slugs.<section>.txt`), keeps animated GIF/WebP thumbnails animated, and
-adds probe/fetch entry points and cancellable overloads to the library. Config files, CSV columns
-and frontmatter fields are unchanged; **read the 3.0 upgrade checklist in the CHANGELOG before
-upgrading**. Earlier history: 2.0 was an engineering release — it narrowed the
+adds probe/fetch entry points and cancellable overloads to the library. Config fields, CSV columns
+and frontmatter fields are unchanged, but a config with an invalid CSS selector is now rejected
+when it is loaded, by every command, instead of when some page happens to use it.
+**Read the 3.0 upgrade checklist in the CHANGELOG before upgrading**.
+Earlier history: 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
 config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages) — though
 the npm launcher could only start the Windows/Linux arm64 builds from 2.3.1 on.

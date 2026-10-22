@@ -379,6 +379,69 @@ public class SiteConfigLoaderTests
         Assert.Equal($"Config file not found: {path}", ex.Message);
     }
 
+    // ── CSS selector 在載入時就驗(3.0 起)──────────────────────────────────────
+    // 2.x 只在「真的要用」之前才驗:type_rules 裡寫壞、但這次沒有頁屬於那個頁型的 selector 照樣能跑,
+    // thumbs / probe-orphans 根本不碰 selector,寫壞的 config 也照跑。那只是為了不讓原本能跑的 config
+    // 在 patch 版開始失敗;寫壞的 config 不該等到某個指令、某個頁型才炸。
+
+    private static string WithExtract(string extract) =>
+        "config_version: 1\nsite:\n  base_url: https://www.example.org\n"
+        + "url_pattern:\n  lang_map: { ch: zh-Hant, en: en }\n  default_lang: zh-Hant\n"
+        + "extract:\n" + extract;
+
+    [Theory]
+    [InlineData("  content: \"section[id\"\n", "extract.content: 'section[id' is not a valid CSS selector.")]
+    [InlineData("  content: \"main\"\n  type_rules:\n    article:\n      title_selector: \"h3[[\"\n",
+        "extract.type_rules.article.title_selector: 'h3[[' is not a valid CSS selector.")]
+    [InlineData("  content: \"main\"\n  type_rules:\n    article:\n      remove_selectors: [\"h5\", \"h5[[\"]\n",
+        "extract.type_rules.article.remove_selectors: 'h5[[' is not a valid CSS selector.")]
+    // 沒有任何 section 對應到 event 頁型:2.x 永遠不會用到、所以永遠不報;現在載入就擋
+    [InlineData("  content: \"main\"\n  type_rules:\n    event:\n      title_selector: \"((\"\n",
+        "extract.type_rules.event.title_selector: '((' is not a valid CSS selector.")]
+    public void InvalidSelector_FailsAtLoad_NamingTheFieldAndTheSelector(string extract, string message)
+    {
+        var ex = Assert.Throws<ConfigException>(() => SiteConfigLoader.Load(WithExtract(extract), "site.yaml"));
+
+        Assert.Equal("site.yaml: config is invalid:\n  - " + message, ex.Message);
+    }
+
+    [Fact]
+    public void EveryInvalidSelector_IsListed_NotJustTheFirst()
+    {
+        var yaml = WithExtract(
+            "  content: \"main[\"\n  type_rules:\n    article:\n      title_selector: \"h3[[\"\n"
+            + "      remove_selectors: [\"ok\", \"h5[[\", \"((\"]\n");
+
+        var ex = Assert.Throws<ConfigException>(() => SiteConfigLoader.Load(yaml, "site.yaml"));
+
+        Assert.Equal(
+            "site.yaml: config is invalid:\n"
+            + "  - extract.content: 'main[' is not a valid CSS selector.\n"
+            + "  - extract.type_rules.article.title_selector: 'h3[[' is not a valid CSS selector.\n"
+            + "  - extract.type_rules.article.remove_selectors: 'h5[[' is not a valid CSS selector.\n"
+            + "  - extract.type_rules.article.remove_selectors: '((' is not a valid CSS selector.",
+            ex.Message);
+    }
+
+    [Fact]
+    public void ValidSelectors_StillLoad()
+    {
+        var config = SiteConfigLoader.Load(WithExtract(
+            "  content: \"section[id]:not(#header) > div, main\"\n  type_rules:\n    article:\n"
+            + "      title_selector: \"#personal h3, .personal_1 h3\"\n      remove_selectors: [\"#personal h5\", \"p:first-child\"]\n"));
+
+        Assert.Equal("#personal h3, .personal_1 h3", config.Extract.TypeRules["article"].TitleSelector);
+    }
+
+    [Fact]
+    public void FixtureConfig_IsValid()
+    {
+        // golden 測試用的 fixture config 也要過載入時的 selector 檢查
+        var config = SiteConfigLoader.LoadFile(Path.Combine(FindRepoRoot(), "tests", "fixtures", "site", "config.yaml"));
+
+        Assert.Equal("#main h3", config.Extract.TypeRules["article"].TitleSelector);
+    }
+
     [Fact]
     public void ExampleConfig_IsValid()
     {

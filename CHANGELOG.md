@@ -7,7 +7,8 @@
 **Major:修正一輪產品 bug,並把 2.x 期間因為會動到凍結面而留待裁定的改動一次做完。**
 四面契約裡,這一版動到的是 **exit code**(見下面的對照表)、**CLI 的預設值**(`probe-orphans --out` /
 `fetch-orphans --slugs` 的預設檔名)與 **.NET 函式庫的行為**(`OrphanProber` 兩處語意、selector 寫壞時的例外型別)。
-**YAML config 欄位、CSV 欄位與 frontmatter 欄位都沒有改**,既有 config 原樣可用;CLI 指令與參數沒有增減。
+**YAML config 欄位、CSV 欄位與 frontmatter 欄位都沒有改**;既有 config 原樣可用,除非裡面有寫壞的 CSS selector
+(3.0 起載入時就擋,見「破壞性變更」)。CLI 指令與參數沒有增減。
 函式庫的 public 簽章只有新增、沒有移除或更改(`PublicApi.approved.txt` 的 diff 全是新增)。
 
 ### ⚠️ 升級必做
@@ -21,7 +22,10 @@
 3. **重產動畫縮圖。** `thumbs` 會跳過已存在的縮圖:要拿到保留動畫的 GIF / WebP 縮圖,先刪掉 `media_thumb/` 裡的 `.gif` / `.webp` 再跑一次。
 4. **部署 `redirects.nginx.conf` 之前重新 `nginx -t`。** 含非 ASCII 或特殊字元的舊網址改寫成解碼後的路徑,寫法與排序都會變。
 5. **Windows 使用者:重跑 `extract` 後,每一個 `.md` 的行尾都會改變**(frontmatter 改成 `\n`),第一次 commit 會是整片的行尾 diff。
-6. **函式庫使用者**:`OrphanProber.ProbeAsync` 的 `known` 語意、`OrphanProber.KnownSlugs` / `PolyMigrator.MirrorSlugs` 的 slug 規則、
+6. **先載入一次 config,修掉寫壞的 CSS selector。** 3.0 起載入 config 時就驗全部 selector 欄位:2.x 能跑、但裡面有寫壞的
+   `type_rules`(這次沒有頁屬於那個頁型)的 config,現在任何指令一讀到就 exit 2,訊息列出每一個寫壞的欄位與 selector。
+   例如跑一次 `polymigrate extract site.yaml --dry-run` 就知道。
+7. **函式庫使用者**:`OrphanProber.ProbeAsync` 的 `known` 語意、`OrphanProber.KnownSlugs` / `PolyMigrator.MirrorSlugs` 的 slug 規則、
    selector 寫壞時擲的例外型別都變了,見下一節。
 
 ### ⚠️ 破壞性變更
@@ -62,13 +66,23 @@
   2.x 取檔名第一個點之前(`v1.2-release.php.html` → `v1`),現在去掉結尾的 `.html` 再去掉一段 1～8 個 ASCII 英數字、
   至少一個字母的副檔名(→ `v1.2-release`;細節與仍不一致的情況見「修正」)。
   **遷移**:手上有 config 時改用新的 `KnownSlugs(rawDir, langPrefix, section, stripExtensions)`,結果與 `extract` 一致。
+- **config 載入時就驗所有 CSS selector**(`extract.content`、每一個 `type_rules.*.title_selector` 與 `remove_selectors`)。
+  2.x 只在「真的要用」之前才驗:`type_rules` 裡寫壞、但這次沒有頁屬於那個頁型的 selector 照樣 exit 0,`thumbs` /
+  `probe-orphans` 根本不用 selector,寫壞的 config 也照跑——寫壞的 config 要等到哪天出現那個頁型、或換一個指令才炸。
+  那只是為了不讓原本能跑的 config 在 patch 版開始失敗。現在任何指令載入 config 時就擋:exit 2、什麼都不寫、不發請求,
+  訊息列出每一個寫壞的欄位與 selector(`site.yaml: config is invalid:` 之後一行一個
+  `- extract.type_rules.event.title_selector: 'h3[[' is not a valid CSS selector.`)。用到之前的那道檢查保留為第二道防線
+  (擋函式庫呼叫端不經 loader、直接在程式裡組的 config)。函式庫的 `SiteConfigLoader.Load` / `LoadFile`、
+  `PolyMigrator.FromConfigFile` 對這類 config 改擲 `ConfigException`。
+  **遷移**:修好或刪掉寫壞的 selector(見「升級必做」第 6 條)。
 - **函式庫:config 的 CSS selector 寫壞時擲 `ConfigException`**(2.x:AngleSharp 的 `DomException`)。影響
   `PolyMigrator.Extract`、`ExtractionPipeline.Run`、`OrphanFetcher.FetchAsync` 與新的 `PolyMigrator.FetchOrphansAsync`。
   **遷移**:改接 `ConfigException`(訊息點名寫壞的欄位)。
 
 ### exit code 對照表(3.0)
 
-0 乾淨 / 1 有 warning / 2 有 error / 130 中斷。所有指令的用法錯誤、config 錯誤(含寫壞的 CSS selector)、IO 錯誤一律 2;未知指令 2。
+0 乾淨 / 1 有 warning / 2 有 error / 130 中斷。所有指令的用法錯誤、config 錯誤(含寫壞的 CSS selector,3.0 起載入時就驗)、
+IO 錯誤一律 2;未知指令 2。
 
 | 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
 |---|---|---|---|---|
@@ -90,7 +104,8 @@
 | **`verify`:保留的 iframe 指向沒搬過來的站內頁** | 0/1(iframe 不在 Markdown 裡) | 2 |
 | **`fetch-orphans` 沒給 `--slugs`,只有 2.x 的 `orphan_slugs.txt`** | 照讀(0/1) | 2(訊息講明怎麼改名) |
 | **沒給 `--out` / `--slugs`,`--section` 含 `/` 等** | 照跑 | 2 |
-| config 的 CSS selector 寫壞(`extract` / `fetch-orphans`) | 未處理例外(不在契約內) | 2 |
+| config 的 CSS selector 寫壞、而且這次用得到(`extract` / `fetch-orphans`) | 未處理例外(不在契約內) | 2 |
+| **config 有寫壞、但這次用不到的 selector**(沒有頁屬於的頁型;`thumbs` / `probe-orphans` 讀到的任何 selector) | 照跑(0/1) | 2(載入時) |
 | `verify`:只被 iframe 嵌入的頁 | 1(`unlinked_page`) | 0 |
 | `verify`:`data-src` 這類名稱只是以 href/src 結尾的屬性、同 host 非 http(s) 連結指向站內 | 可能 2(假的 `broken_link`) | 不檢查 |
 | `fetch-orphans`:`lang_map` key 為 `""`、伺服器不合併斜線 | 1(全部 404) | 0 |
@@ -194,8 +209,8 @@
   `type_rules.*.remove_selectors` 不合語法時,AngleSharp 的 `DomException` 直接穿出去,行程以未處理例外結束(Windows 為
   `0xE0434352`),不在 0/1/2/130 契約內。`extract` 還會先把前面的頁寫進 `content/`、清單檔一份都沒寫;`fetch-orphans` 則是頁面
   先寫進 `raw/` 才掃資產,修好 config 重跑時那一頁被當成已抓過,它的資產永遠補不回來。現在是 **exit 2**,訊息點名欄位
-  (`extract.content: 'section[id' is not a valid CSS selector.`),而且在寫任何檔之前就停。載入 config 時不驗 selector:
-  寫壞但這次沒有頁用到的規則不擋。函式庫的例外型別見「破壞性變更」。
+  (`extract.content: 'section[id' is not a valid CSS selector.`),而且在寫任何檔之前就停。3.0 起更進一步在載入 config 時就驗全部 selector(見「破壞性變更」),
+  用到之前的這道檢查保留為第二道防線。函式庫的例外型別見「破壞性變更」。
 - **`extract` 的內部媒體雜湊快取存不了時,清單只寫一半、exit 2。** `.polymigrate/media_sha1_cache.csv` 是內部加速檔、不是交付物,
   但原本夾在 `media_manifest.csv` 與 `redirect_map.csv` 之間存檔、沒有保護:`.polymigrate` 被同名檔案佔住、唯讀或磁碟滿時擲 IO 錯誤
   → exit 2,`redirect_map.csv`、`redirects.nginx.conf`、`_redirects`、`missing_images.csv`、`path_issues.csv`、`need_fetch_media.txt`
