@@ -189,9 +189,18 @@ public sealed class ThumbnailGenerator(SiteConfig config)
             }
             var page = info[0].Page;
             var (width, height) = page.Width > 0 && page.Height > 0 ? (page.Width, page.Height) : (info[0].Width, info[0].Height);
-            if ((long)info.Count * width * height > AnimationPixelBudget)
+            // 每格以「宣告的畫面」與「這一格實際的大小」取大的算:解碼與 Coalesce 的記憶體跟實際影格走。
+            // 只看宣告的畫面會被騙——宣告 10x10、影格卻是 3000x3000 的 GIF,原本算成 150 × 100 像素照樣整檔解碼,
+            // 審查實測峰值 5.2 GB(建議 1)
+            var pixels = info.Sum(f => (long)Math.Max(width, f.Width) * Math.Max(height, f.Height));
+            if (pixels > AnimationPixelBudget)
             {
-                firstFrameReason = $"{info.Count} frames of {width}x{height} exceed the animation budget of {AnimationPixelBudget} pixels";
+                var maxWidth = Math.Max(width, info.Max(f => f.Width));
+                var maxHeight = Math.Max(height, info.Max(f => f.Height));
+                var size = maxWidth == width && maxHeight == height
+                    ? $"of {width}x{height}"
+                    : $"up to {maxWidth}x{maxHeight} (the file declares {width}x{height})";
+                firstFrameReason = $"{info.Count} frames {size} exceed the animation budget of {AnimationPixelBudget} pixels";
                 return false;
             }
         }

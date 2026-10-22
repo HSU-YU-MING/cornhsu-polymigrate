@@ -424,6 +424,30 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(1000u, Assert.Single(thumb).Width);   // 與 2.3.1 相同:第一格
     }
 
+    public static TheoryData<int, int, int, int> LyingScreens => new()
+    {
+        { 10, 10, 2000, 500 },   // 宣告 10x10 的畫面,每格都是 2000x500
+        { 1, 1, 1, 1 },          // 第一格 1x1(畫面也照它宣告),之後的格才是 2000x500
+    };
+
+    [Theory]
+    [MemberData(nameof(LyingScreens))]
+    public void FramesBiggerThanTheDeclaredScreen_AreBudgetedByTheirRealSize(int screenW, int screenH, int frame0W, int frame0H)
+    {
+        // 惡意或壞掉的 GIF:原本預算只拿宣告的畫面 × 格數算(3 × 10 × 10 = 300 像素),照樣整檔解碼——
+        // 審查以宣告 10x10、150 格 3000x3000 的 GIF 實測峰值 5.2 GB(建議 1)。改用 Ping 拿到的每格實際尺寸
+        File.WriteAllBytes(MediaPath("liar.gif"), RawGif.Build((screenW, screenH), [(frame0W, frame0H), (2000, 500), (2000, 500)]));
+        var generator = new ThumbnailGenerator(TestConfigs.IbpsLike()) { AnimationPixelBudget = 1_500_000 };
+
+        var report = generator.Run(MediaDir, OutDir);
+
+        Assert.Equal(0, report.AnimationsKept);
+        Assert.Equal(0, report.Failed);
+        var (path, reason) = Assert.Single(report.AnimationsAsFirstFrame);
+        Assert.Equal("liar.gif", path);
+        Assert.Equal($"3 frames up to 2000x500 (the file declares {screenW}x{screenH}) exceed the animation budget of 1500000 pixels", reason);
+    }
+
     [Fact]
     public void AnimationWithinTheBudget_IsKept_AndCounted()
     {
