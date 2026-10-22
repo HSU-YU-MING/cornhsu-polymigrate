@@ -85,6 +85,23 @@ public sealed class ThumbnailGenerator(SiteConfig config)
         return report;
     }
 
+    /// <summary>
+    /// 多格讀取;讀不起來回 null(呼叫端改走單張路徑)。截斷的檔(舊站鏡像裡下載到一半的 GIF 很常見)多格讀取
+    /// 直接擲例外,單張讀取卻讀得到第一格——退回單張,結果與 2.3.1 相同(第一格縮圖、不算 failed);
+    /// 單張也讀不起來的才是 failed(審查必修 1)。
+    /// </summary>
+    private static MagickImageCollection? ReadFrames(string file)
+    {
+        try
+        {
+            return new MagickImageCollection(file);
+        }
+        catch (MagickException)
+        {
+            return null;
+        }
+    }
+
     private static void Downscale(IMagickImage<byte> image, ThumbnailSection thumbs)
     {
         if (image.Width > (uint)thumbs.MaxWidth)
@@ -108,8 +125,8 @@ public sealed class ThumbnailGenerator(SiteConfig config)
         {
             return false;
         }
-        using var frames = new MagickImageCollection(file);
-        if (frames.Count < 2)
+        using var frames = ReadFrames(file);
+        if (frames is not { Count: >= 2 })
         {
             return false;
         }

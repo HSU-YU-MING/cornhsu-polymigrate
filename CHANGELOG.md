@@ -158,7 +158,7 @@ IO 錯誤一律 2;未知指令 2。
 
 - **`thumbs` 把動畫 GIF / 動畫 WebP 縮成只剩第一格。** 原本以單張讀檔,動畫縮圖變成靜止的第一格,照樣計入 `created`、沒有任何提示。
   現在多格的 GIF / WebP 逐格縮放、保留動畫(格數、每格延遲、循環次數):先補成完整畫面再縮,GIF 寫出前再壓回格間差異。
-  單格的圖照舊。相依沒有變(同一個 Magick.NET,WebP 動畫的編碼器本來就在 Magick.Native 裡),授權通知不受影響。
+  單格的圖照舊;截斷的多格 GIF(舊站鏡像裡下載到一半的)多格讀不起來時退回單張讀取,與 2.3.1 一樣產出第一格縮圖、不算 failed。相依沒有變(同一個 Magick.NET,WebP 動畫的編碼器本來就在 Magick.Native 裡),授權通知不受影響。
   **升級注意**:見「升級必做」第 3 條。
 - **YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說其他 iframe「保留原樣」,實際上它們留在 DOM 裡
   交給 ReverseMarkdown,而未知標籤的處理是只輸出子節點——iframe 沒有子節點,於是 Google 地圖、行事曆、表單、Vimeo 等嵌入

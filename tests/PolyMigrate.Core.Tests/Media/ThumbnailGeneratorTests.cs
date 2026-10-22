@@ -301,6 +301,32 @@ public class ThumbnailGeneratorTests : IDisposable
     }
 
     [Fact]
+    public void TruncatedAnimatedGif_StillGetsAFirstFrameThumbnail_LikeBefore()
+    {
+        // 舊站鏡像裡下載到一半的 GIF 很常見。多格讀取(MagickImageCollection)對截斷的檔直接擲例外,
+        // 不退回單張路徑的話,這張圖就從「有第一格縮圖」(2.3.1)變成 failed、thumbs 由 exit 0 變 1(審查必修 1)。
+        // 截斷的 WebP 單張也讀不起來(2.3.1 一樣是 failed),不在這條的範圍
+        const string name = "cut.gif";
+        WriteAnimation(name, MagickFormat.Gif, 2000, 500);
+        var path = MediaPath(name);
+        var bytes = File.ReadAllBytes(path);
+        File.WriteAllBytes(path, bytes[..(bytes.Length * 2 / 3)]);
+        using (var probe = new MagickImage())
+        {
+            // 前提:這個截斷檔單張讀得起來(2.3.1 的路徑),多格讀不起來(3.0 新路徑)
+            probe.Read(path);
+            Assert.ThrowsAny<MagickException>(() => new MagickImageCollection(path));
+        }
+
+        var report = Run();
+
+        Assert.Equal(0, report.Failed);
+        Assert.Equal(1, report.Created);
+        using var thumb = new MagickImageCollection(Path.Combine(OutDir, name));
+        Assert.Equal(1000u, Assert.Single(thumb).Width);
+    }
+
+    [Fact]
     public void SingleFrameGif_StillOneFrame()
     {
         using (var image = new MagickImage(MagickColors.Red, 2000, 500))
