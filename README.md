@@ -3,27 +3,39 @@
 [![NuGet](https://img.shields.io/nuget/v/Cornhsu.PolyMigrate.svg?label=Cornhsu.PolyMigrate)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![Downloads](https://img.shields.io/nuget/dt/Cornhsu.PolyMigrate.svg)](https://www.nuget.org/packages/Cornhsu.PolyMigrate)
 [![CI](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml/badge.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/LICENSE)
 
 > **The i18n-first static-site migrator** — the only site migrator that pairs your multilingual pages automatically.
 
-**[Project write-up](https://cornhsu.com/polymigrate) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](README.zh-Hant.md) · MIT**
+**[Project write-up](https://cornhsu.com/polymigrate) · [NuGet](https://www.nuget.org/packages/Cornhsu.PolyMigrate) · [繁體中文說明](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/README.zh-Hant.md) · MIT**
 
 PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, static-site-ready
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
 Config-driven, fully offline-rerunnable, built on .NET.
 
-**Status: 2.3.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
+**Status: 3.0.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
-surface and the Phase output contracts remain stable** (unchanged since 1.0): new features bump
-the minor version, fixes bump the patch. 2.0 was an engineering release — it narrowed the
+surface, exit codes, Phase output contracts and YAML config are frozen within a major version**:
+new features bump the minor version, fixes bump the patch, and anything that changes one of those
+four surfaces waits for a major. **3.0 is such a release** — it changes exit codes in a few cases
+so they follow the 0 / 1 / 2 / 130 contract (an orphan probe that got no usable answer, a failed
+npm launcher and an interrupted command no longer look like success), gives each section its own
+orphan slug list (`orphan_slugs.<section>.txt`), keeps animated GIF/WebP thumbnails animated, and
+adds probe/fetch entry points and cancellable overloads to the library. Config fields, CSV columns
+and frontmatter fields are unchanged, but a config with an invalid value (a CSS selector, a regex, a
+path that isn't a single segment, a malformed URL or language tag, a key left without a value…) is now
+rejected when it is loaded, by every command, instead of when some page or command happens to use it, and a probe in
+which only some candidates got no answer exits 1 (the list is written, but may be incomplete).
+**Read the 3.0 upgrade checklist in the CHANGELOG before upgrading**.
+Earlier history: 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
-config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages).
+config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages) — though
+the npm launcher could only start the Windows/Linux arm64 builds from 2.3.1 on.
 2.2 closed a blind spot in `verify` — pages nothing links to were reported as fine, because a
 link-following audit never reaches them — and added `slugs` for keeping up with a source site
 that is still being updated. **Upgrading to 2.2 can turn a passing `verify` into exit 1**.
 2.3 reads the source site's own `hreflang` declarations (see below) and reports them in a new
-`hreflang_map.csv`. See the [CHANGELOG](CHANGELOG.md) for the migration notes.
+`hreflang_map.csv`. See the [CHANGELOG](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/CHANGELOG.md) for the migration notes.
 
 ## Why
 
@@ -62,6 +74,8 @@ A declaration is only used for pairing if it:
 - resolves to a page actually in your mirror — **same host included**, since plenty of sites put
   the English version on `en.example.org`, where a path-only comparison would make a page its
   own translation,
+- has a content page at both ends — neither end is a site-level page (a language picker and the
+  like, which isn't anyone's translation),
 - and **isn't one of many same-language pages claiming the same target**. This is the classic
   failure: one `<link>` pasted into the site-wide template, so every Chinese page declares the
   English homepage as its English version. One page cannot be the translation of three others,
@@ -74,7 +88,7 @@ Everything declared — including the rejected ones — is written to `hreflang_
 Pairs are still only ever *suggested*: `hreflang` raises the evidence quality, it does not
 switch the tool into merging pages on its own. That is a deliberate call, not an unfinished
 one — the measurement behind it, and what would have to change to revisit it, are recorded in
-[docs/hreflang_量測與決策.md](docs/hreflang_量測與決策.md).
+[docs/hreflang_量測與決策.md](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/docs/hreflang_%E9%87%8F%E6%B8%AC%E8%88%87%E6%B1%BA%E7%AD%96.md).
 
 ## Battle-tested defaults
 
@@ -123,7 +137,7 @@ Two channels — pick whichever runtime you already have. **Same tool, same beha
 
 ```
 npx cornhsu-polymigrate extract site.yaml   # Node — no .NET install needed
-dotnet tool install -g Cornhsu.PolyMigrate  # .NET
+dotnet tool install -g Cornhsu.PolyMigrate  # .NET 10
 ```
 
 > The npm build ships a self-contained native binary and only downloads the one
@@ -134,12 +148,23 @@ dotnet tool install -g Cornhsu.PolyMigrate  # .NET
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
-polymigrate verify out/                     # link/media/frontmatter/unlinked-page audit, CI exit codes
+polymigrate verify .                        # link/media/frontmatter/unlinked-page audit, CI exit codes
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
-polymigrate probe-orphans site.yaml --section news --years 2021-2023
-polymigrate fetch-orphans site.yaml --section news
+polymigrate probe-orphans site.yaml --section news --years 2021-2023   # -> orphan_slugs.news.txt
+polymigrate fetch-orphans site.yaml --section news                      # reads orphan_slugs.news.txt
 polymigrate slugs . --section news          # slugs already mirrored under ./raw (pipeable)
 ```
+
+> **Animated GIF/WebP thumbnails keep every frame — within limits.** Scaling an animation frame by
+> frame costs memory and time in proportion to frames × width × height (measured: a 400-frame
+> 1300×900 GIF took 39 s and 3.2 GB). So an animation over **50 megapixels** in total, or one whose
+> animated thumbnail would be larger than the original, gets a first-frame thumbnail instead — the
+> same result as before 3.0 (an animation that needs no scaling is copied as-is instead). At the limit it takes about 6 s and a 250–400 MB memory peak, depending on the content
+> (two 100-frame 1000×500 GIFs measured 250 MB and 384 MB). The `thumbs` summary lists
+> which files got a first frame and why; neither case is a failure or changes the exit code.
+> Still images get a limit too: one over **179 megapixels** (Pillow's decompression-bomb threshold —
+> a 270 KB GIF can declare 20000×20000, and decoding it took 14.8 s and 1.6 GB) is not decoded at all and
+> counts as a failed thumbnail (exit 1). 100-megapixel camera originals are well within it.
 
 > **`raw/` is the one thing you cannot regenerate.** Re-crawling a site takes hours at a
 > polite request rate, and the source site may be switched off the moment you finish
@@ -148,10 +173,10 @@ polymigrate slugs . --section news          # slugs already mirrored under ./raw
 > off, and back them up if the source is going away.
 
 > No .NET? Every command above also runs with **zero install** via npm — just prefix it:
-> `npx cornhsu-polymigrate extract site.yaml`, `npx cornhsu-polymigrate verify out/`, and so on.
+> `npx cornhsu-polymigrate extract site.yaml`, `npx cornhsu-polymigrate verify .`, and so on.
 
 One YAML config per site describes everything site-specific — see
-[examples/ibps-austin.yaml](examples/ibps-austin.yaml) for a fully-annotated real example.
+[examples/ibps-austin.yaml](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/examples/ibps-austin.yaml) for a fully-annotated real example.
 
 ```yaml
 config_version: 1
@@ -185,7 +210,15 @@ if (report.HasErrors) { /* unsafe paths were skipped; see path_issues.csv */ }
 
 var verify = PolyMigrator.Verify("out/");      // no config needed; reads Phase 2 output only
 Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
+
+// Orphan pages (probe-orphans / fetch-orphans). Nothing is written until you decide to.
+var probe = await migrator.ProbeOrphansAsync("out/", "news", 2021, 2023);
+if (probe.NoUsableAnswers) { /* the site never answered: an empty list means nothing */ }
+else { await migrator.FetchOrphansAsync("out/", "news", probe.Found); }
 ```
+
+Extract, Verify and GenerateThumbnails also have overloads that take a `CancellationToken`
+(the probe/fetch methods take one as their last parameter).
 
 ## Layout
 
@@ -214,9 +247,9 @@ signals in priority order, why "just read `hreflang`" often misses on real legac
 (measured on one: 528 pages, **0** declarations, sitemap 404), the five gates a declaration has to
 pass before it is usable at all, and why URL string similarity is the wrong tool for this job.
 
-License: [MIT](LICENSE). All dependencies are MIT/BSD/Apache-2.0
+License: [MIT](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/LICENSE). All dependencies are MIT/BSD/Apache-2.0
 (imaging via **Magick.NET**; ImageSharp was dropped when its 4.x line began requiring a
-license key at build time). See [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES.md).
+license key at build time). See [THIRD-PARTY-NOTICES](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/THIRD-PARTY-NOTICES.md).
 
 PolyMigrate fetches pages from the site you point it at, and can be configured to send
 cookies past a bot challenge. **It assumes the site is yours, or that you are migrating

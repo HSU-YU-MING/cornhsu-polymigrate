@@ -64,6 +64,30 @@ public class RawPageParserTests
     }
 
     [Fact]
+    public void BaseUrlWithTrailingSlash_DoesNotDoubleTheSlash()
+    {
+        // config 常寫成 https://www.example.org/(帶結尾斜線)。source_url 一旦變成 //ch/news/…,
+        // redirect_map 的舊網址與兩份 301 設定檔就全部對不上原站的實際網址
+        var config = TestConfigs.IbpsLike();
+        config.Site.BaseUrl = "https://www.ibps-austin.org/";
+
+        var page = new RawPageParser(config.Site, config.UrlPattern)
+            .Parse(@"C:\raw", Path.Combine(@"C:\raw", "ch", "news", "20260712.php.html"));
+
+        Assert.Equal("https://www.ibps-austin.org/ch/news/20260712.php", page.SourceUrl);
+    }
+
+    [Theory]
+    [InlineData("ch/news/.php.html")]
+    [InlineData("ch/news/.html")]
+    public void FileNameThatIsOnlyASuffix_SlugIsIndex(string relative)
+    {
+        // 目錄網址(/ch/news/)被鏡像成只剩尾綴的檔名時,slug 不可是空字串:
+        // 空 slug 會讓輸出檔名變成 content/ch/news/.md,而 verify 要求 slug 非空
+        Assert.Equal("index", Parse(relative).Slug);
+    }
+
+    [Fact]
     public void RootLanguageChooser_DoesNotPairWithLocalizedIndex()
     {
         // 語言選擇頁不是任何語言版的翻譯,key 不可與 ch/en 的 index 相撞

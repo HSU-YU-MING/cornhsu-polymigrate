@@ -65,6 +65,23 @@ public class ReadmeDriftTests
             """);
     }
 
+    [Fact]
+    public async Task PackagedReadme_HasNoRelativeLinks()
+    {
+        // README.md 隨 NuGet(PackageReadmeFile)與 npm 主套件出貨,nuget.org 會把相對連結清成 href="",
+        // v2.3.1 套件頁上的 License 徽章、CHANGELOG、THIRD-PARTY-NOTICES、繁中說明都是死連結(稽核 L7;
+        // 622edd4 已改成絕對網址)。這條擋住之後再貼回相對路徑。README.zh-Hant.md 不出貨,不在此限
+        var text = await File.ReadAllTextAsync(Path.Combine(RepoRoot, "README.md"));
+        var targets = Regex.Matches(text, @"\]\((?<t>[^)\s]+)")
+            .Concat(Regex.Matches(text, @"\b(?:href|src)=""(?<t>[^""]*)"""))
+            .Select(m => m.Groups["t"].Value);
+
+        Assert.All(targets, t => Assert.True(
+            t.StartsWith("https://", StringComparison.Ordinal) || t.StartsWith("http://", StringComparison.Ordinal)
+            || t.StartsWith('#') || t.StartsWith("mailto:", StringComparison.Ordinal),
+            $"README.md 有相對連結 '{t}'——nuget.org 套件頁上會變成死連結,請改成絕對網址"));
+    }
+
     private static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;

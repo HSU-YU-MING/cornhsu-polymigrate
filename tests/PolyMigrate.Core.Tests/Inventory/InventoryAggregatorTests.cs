@@ -59,6 +59,45 @@ public class InventoryAggregatorTests
     }
 
     [Fact]
+    public void EmptyAlt_IsNotListedInTheManifestAlts()
+    {
+        // contracts.md:media_manifest 的 alt 欄只收「非空的」alt 文字。一語版有 alt、另一語版留空時,
+        // 不可寫出「 | 圖」這種前面帶一格空值的欄位
+        var agg = NewAggregator();
+        var ch = Page("ch", "zh-Hant", "a");
+        var en = Page("en", "en", "a");
+        const string Url = "https://www.ibps-austin.org/media/news/a/img.jpg";
+
+        agg.Add(ch, Extracted(ch, 10, [], [new MediaUse("news/a/img.jpg", Url, ch.SourceUrl, "圖")]));
+        agg.Add(en, Extracted(en, 10, [], [new MediaUse("news/a/img.jpg", Url, en.SourceUrl, "")]));
+
+        var entry = Assert.Single(agg.MediaRefs).Value;
+        Assert.Equal(["圖"], entry.Alts);
+        Assert.Equal([ch.SourceUrl, en.SourceUrl], entry.Refs);
+    }
+
+    [Fact]
+    public void ImageCount_IsTheMaximumAcrossLocales()
+    {
+        // contracts.md:content_inventory 的 image_count「各語版取最大」。
+        // 三個語版、最多圖的那個夾在中間(1 → 3 → 2):先到先贏會得 1、後到蓋前會得 2、
+        // 加總會得 6,只有取最大才是 3。兩語版的話「後到蓋前」剛好會對,測不出來
+        var config = TestConfigs.IbpsLike();
+        config.UrlPattern.LangMap["ja"] = "ja";
+        var agg = new InventoryAggregator(new LinkRewriter(config.Site, config.UrlPattern));
+        var ch = Page("ch", "zh-Hant", "a");
+        var en = Page("en", "en", "a");
+        var ja = Page("ja", "ja", "a");
+        MediaUse Use(RawPage p, int i) => new($"news/a/{i}.jpg", $"https://www.ibps-austin.org/news/a/{i}.jpg", p.SourceUrl, "");
+
+        agg.Add(ch, Extracted(ch, 10, [], [Use(ch, 1)]));
+        agg.Add(en, Extracted(en, 10, [], [Use(en, 1), Use(en, 2), Use(en, 3)]));
+        agg.Add(ja, Extracted(ja, 10, [], [Use(ja, 1), Use(ja, 2)]));
+
+        Assert.Equal(3, Assert.Single(agg.Inventory).Value.ImageCount);
+    }
+
+    [Fact]
     public void Redirect_NewPathDerivedFromSourceUrlRoute()
     {
         var agg = NewAggregator();

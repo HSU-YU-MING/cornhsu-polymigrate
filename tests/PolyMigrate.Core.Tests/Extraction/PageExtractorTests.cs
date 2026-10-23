@@ -7,6 +7,9 @@ public class PageExtractorTests : IDisposable
     private readonly string _mediaRoot = Directory.CreateTempSubdirectory("polymigrate-media").FullName;
     private readonly PageExtractor _extractor = new(TestConfigs.IbpsLike());
 
+    /// <summary>鏡像裡一頁都沒有:iframe 的目標都「不是鏡像頁」,檔案與 scheme 判斷才會生效(見 LinkRewriter)。</summary>
+    private readonly PageExtractor _noMirrorPages = new(TestConfigs.IbpsLike(), new HashSet<string>());
+
     private static readonly RawPage ArticlePage = new(
         FilePath: "unused",
         LangPrefix: "ch",
@@ -99,6 +102,42 @@ public class PageExtractorTests : IDisposable
     }
 
     [Fact]
+    public void BodyTitle_StartingWithTheSiteName_IsKeptWhole()
+    {
+        // 站名雜訊只在退回 <title> 時剝:內文標題(title_selector 抓到的)可能合法地以站名開頭。
+        // TitleCleanerTests 證明清理器分得開兩種模式;這裡證明抽取時真的用對了模式
+        const string html =
+            """
+            <html><head><title>佛光山香雲寺 2026/07/12 新聞:別的標題</title></head><body>
+            <section id="personal"><h3>Fo Guang Shan Xiang Yun Temple Hosts Winter Retreat</h3><p>內文</p></section>
+            </body></html>
+            """;
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal("Fo Guang Shan Xiang Yun Temple Hosts Winter Retreat", result.Title);
+    }
+
+    [Fact]
+    public void EmptyAltInlineImage_SurvivesTheEmptyLinkCleanup()
+    {
+        // CleanupMarkdown 會刪掉無文字連結 [](x)(輪播控制鈕),但 alt 留空的圖 ![](x) 長得只差一個驚嘆號,
+        // 不可被一起刪掉——舊站的圖大半沒寫 alt
+        AddMediaFile("images/a.jpg");
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+        const string html =
+            """
+            <html><body><section id="intro"><p>這頁的文字夠長,不會被判成資訊鎖在圖裡的那一類頁面。</p>
+            <img src="/images/a.jpg" alt=""><a href="#carousel"></a></section></body></html>
+            """;
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Contains("![](/media/images/a.jpg)", result.BodyMarkdown);
+        Assert.DoesNotContain("[](#carousel)", result.BodyMarkdown);
+    }
+
+    [Fact]
     public void NoSelectorMatch_FallsBackToBody()
     {
         var page = ArticlePage with { Section = "", Slug = "index", TranslationKey = "index" };
@@ -123,6 +162,276 @@ public class PageExtractorTests : IDisposable
         Assert.Contains("下載／檢視 PDF", result.BodyMarkdown);
         Assert.Equal("/media/files/schedule.pdf", Assert.Single(result.Documents)["src"]);
         Assert.Equal("https://www.ibps-austin.org/files/schedule.pdf", Assert.Single(result.NeedFetch));
+    }
+
+    [Fact]
+    public void LocalVideo_BecomesEmbed_FrontmatterLocalEntry_AndNeedFetch()
+    {
+        // 爬蟲當初沒抓 <source>,所以本地影片一律進待補清單;frontmatter 記 {type: local, src}
+        const string html =
+            """
+            <html><body><section id="personal">
+            <p>開場</p>
+            <video controls><source src="clips/opening.mp4" type="video/mp4"></video>
+            </section></body></html>
+            """;
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        var video = Assert.Single(result.Videos);
+        Assert.Equal(new Dictionary<string, string> { ["type"] = "local", ["src"] = "/media/ch/news/clips/opening.mp4" },
+            video);
+        Assert.Equal("https://www.ibps-austin.org/ch/news/clips/opening.mp4", Assert.Single(result.NeedFetch));
+        Assert.Contains("<video controls preload=\"metadata\" src=\"/media/ch/news/clips/opening.mp4\"", result.BodyMarkdown);
+        Assert.DoesNotContain("@@EMBED", result.BodyMarkdown);
+        Assert.DoesNotContain("type=\"video/mp4\"", result.BodyMarkdown);   // 原 <video> 已整個換掉
+    }
+
+    [Theory]
+    [InlineData("/files/schedule.PDF", "/media/files/schedule.PDF")]            // 副檔名大寫
+    [InlineData("/files/schedule.pdf?dl=1", "/media/files/schedule.pdf")]      // 帶 query:網路路徑不含 query
+    public void PdfIframe_RecognizedRegardlessOfCaseOrQuery(string src, string web)
+    {
+        var html = $"<html><body><section id=\"personal\"><iframe src=\"{src}\"></iframe></section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal(web, Assert.Single(result.Documents)["src"]);
+        Assert.Equal("https://www.ibps-austin.org" + src, Assert.Single(result.NeedFetch));   // 待補清單保留原網址
+        Assert.Contains($"<iframe src=\"{web}\"", result.BodyMarkdown);
+    }
+
+    [Theory]
+    [InlineData("https://calendar.google.com/calendar/embed?src=x", "<iframe src=\"https://calendar.google.com/calendar/embed?src=x\"></iframe>")]
+    [InlineData("https://www.google.com/maps/embed?pb=1&amp;hl=zh-TW", "<iframe src=\"https://www.google.com/maps/embed?pb=1&amp;hl=zh-TW\" width=\"600\"></iframe>")]
+    [InlineData("https://player.vimeo.com/video/123", "<iframe src=\"https://player.vimeo.com/video/123\" allowfullscreen=\"\"></iframe>")]
+    // 站內的 src 與 <a href> 走同一套路由改寫(見下一條)
+    [InlineData("/forms/signup.php", "<iframe src=\"/forms/signup\"></iframe>")]
+    public void OtherIframes_KeptInPlace_AsTheOriginalHtml(string src, string expected)
+    {
+        // 原本:迴圈只處理 YouTube 與 PDF,其他 iframe 原樣留在 DOM,而 ReverseMarkdown(Unknown = Bypass)
+        // 只輸出子節點——iframe 沒有子節點,於是整個消失,沒有任何清單或 warning 記得它。
+        // 遷移後的頁面靜默缺內容(地圖、行事曆、表單、非 YouTube 影片),README 卻說 embeds 會保留
+        var attributes = src.Contains("maps") ? " width=\"600\"" : src.Contains("vimeo") ? " allowfullscreen" : "";
+        var html = "<html><body><section id=\"personal\"><p>行事曆如下</p>"
+            + $"<iframe src=\"{src}\"{attributes}></iframe><p>以上</p></section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal($"行事曆如下\n\n{expected}\n\n以上", result.BodyMarkdown);
+        Assert.Empty(result.Videos);          // 不認得的嵌入不猜型別,frontmatter 不變
+        Assert.Empty(result.Documents);
+        Assert.Empty(result.NeedFetch);
+    }
+
+    [Theory]
+    [InlineData("/ch/news/20260101.php", "/ch/news/20260101")]                                 // 站內絕對路徑
+    [InlineData("x.php?a=1#t", "/ch/news/x?a=1#t")]                                           // query 與 fragment 保留
+    [InlineData("https://www.ibps-austin.org/ch/news/x.php", "https://www.ibps-austin.org/ch/news/x.php")]   // 完整網址與 <a href> 一樣不動
+    [InlineData("map.php", "/ch/news/map")]                                                    // 相對路徑:以頁面網址解析
+    [InlineData("https://calendar.google.com/x.php", "https://calendar.google.com/x.php")]     // 外站不動
+    [InlineData("/embed.swf", "/embed.swf")]                                               // 根層的檔案不加尾斜線
+    [InlineData("ftp://www.ibps-austin.org/ch/file.php", "ftp://www.ibps-austin.org/ch/file.php")]   // 同 host 的非 http(s) 不動
+    public void KeptIframe_SameSiteSrc_IsRewrittenLikeLinks(string src, string rewritten)
+    {
+        // 原樣保留的 iframe 若留著舊站網址,同一頁的 <a href> 已改成新路由、iframe 卻還是 .php,
+        // verify 就把它報成 broken_link(exit 2)——明明連到的是一個有搬過來的頁
+        var html = $"<html><body><section id=\"personal\"><iframe src=\"{src}\"></iframe></section></body></html>";
+
+        var result = _noMirrorPages.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Contains($"<iframe src=\"{rewritten.Replace("&", "&amp;")}\"></iframe>", result.BodyMarkdown);
+    }
+
+    [Theory]
+    [InlineData("/ch/news/20260101.php", "/ch/news/20260101")]
+    [InlineData("map.php?a=1", "/ch/news/map?a=1")]
+    [InlineData("https://calendar.google.com/x.php", "https://calendar.google.com/x.php")]   // 外站不動
+    public void KeptIframe_LazyLoadDataSrc_IsRewrittenLikeSrc(string dataSrc, string rewritten)
+    {
+        // lazy-load 的嵌入把真正的網址放在 data-src(src 是 about:blank,捲到才由 JS 換上)。
+        // 2.x 只改寫 src:新站沿用 lazy-load 的 JS 時,data-src 仍指著舊站的 .php(決策檔 B1 留下的「要不要一併改寫」;3.0 照 src 改寫)
+        var html = "<html><body><section id=\"personal\">"
+            + $"<iframe src=\"about:blank\" data-src=\"{dataSrc}\"></iframe></section></body></html>";
+
+        var result = _noMirrorPages.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Contains($"<iframe src=\"about:blank\" data-src=\"{rewritten}\"></iframe>", result.BodyMarkdown);
+    }
+
+    [Fact]
+    public void KeptIframe_BothSrcAndDataSrcOnTheSite_AreBothRewritten()
+    {
+        // src 是預覽頁、data-src 是 lazy-load 換上的完整頁:兩個都是站內網址時兩個都要改寫,不是只改其中一個
+        // (審查 mutation DS-3「兩者都在時只改 data-src」原本存活)
+        var html = "<html><body><section id=\"personal\">"
+            + "<iframe src=\"preview.php\" data-src=\"/ch/news/20260101.php\"></iframe></section></body></html>";
+
+        var result = _noMirrorPages.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Contains("<iframe src=\"/ch/news/preview\" data-src=\"/ch/news/20260101\"></iframe>", result.BodyMarkdown);
+    }
+
+    [Theory]
+    [InlineData("https://youtu.be/abc123")]
+    [InlineData("https://www.YouTube.com/embed/abc123?start=30")]
+    [InlineData("https://www.youtube-nocookie.com/embed/abc123")]   // 隱私強化模式:不含 youtube.com/embed 子字串
+    public void YoutubeIframe_ShortLinkAndMixedCase_AreVideos(string src)
+    {
+        var html = $"<html><body><section id=\"personal\"><p>開場</p><iframe src=\"{src}\"></iframe></section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal(new Dictionary<string, string> { ["type"] = "youtube", ["url"] = src }, Assert.Single(result.Videos));
+        Assert.Contains($"<iframe src=\"{src}\" title=\"video\"", result.BodyMarkdown);
+    }
+
+    [Theory]
+    [InlineData(79, true)]    // 「少於」門檻才標
+    [InlineData(80, false)]   // 剛好等於門檻(預設 80)不標
+    public void TextInImage_ThresholdIsStrictlyLessThan(int textLength, bool flagged)
+    {
+        AddMediaFile("img/poster.jpg");
+        var page = ArticlePage with { Section = "events", Slug = "x", TranslationKey = "events/x" };
+        var html = $"<html><body><section id=\"event\"><p>{new string('字', textLength)}</p>"
+            + "<img src=\"/img/poster.jpg\" alt=\"\"></section></body></html>";
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Equal(textLength, result.TextLength);
+        Assert.Equal(flagged, result.Flags.Contains("text_in_image"));
+    }
+
+    [Theory]
+    [InlineData("<video controls></video>")]                         // 沒有 source
+    [InlineData("<video><source src=\"http://[broken\"></video>")]   // src 解析不了
+    [InlineData("<video><source src=\"/\"></video>")]                // 指到站根,不是檔案
+    public void VideoWithoutUsableSource_IsRemoved(string videoHtml)
+    {
+        var html = $"<html><body><section id=\"personal\"><p>內文</p>{videoHtml}</section></body></html>";
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Empty(result.Videos);
+        Assert.Empty(result.NeedFetch);
+        // 逐字比對整段內文:「移除」包含不留下空的 16:9 外框(VideoWrap)。
+        // 只斷言不含 "<video" 擋不住這種回歸——外框是 div,而 <video> 標籤 ReverseMarkdown 本來就會丟
+        Assert.Equal("內文", result.BodyMarkdown);
+    }
+
+    [Fact]
+    public void ScriptAndStyle_InsideContent_AreStripped()
+    {
+        // 正文 selector 常常整塊包到模板內嵌的 <script>/<style>;轉成 Markdown 後它們會變成
+        // 一段看得見的程式碼文字(最壞的情況是可執行的內嵌 script 被搬進新站)。
+        // 目前 PageExtractor 先剝、ReverseMarkdown 自己也會丟——這條守的是輸出結果,
+        // 不論是哪一層剝掉的(換 Markdown 轉換器或升版時,少了任一層都還要是乾淨的)
+        const string html =
+            """
+            <html><body><section id="intro">
+            <p>正文</p>
+            <script>window.tracker = 'abc';</script>
+            <style>.banner { color: red; }</style>
+            </section></body></html>
+            """;
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Contains("正文", result.BodyMarkdown);
+        Assert.DoesNotContain("tracker", result.BodyMarkdown);
+        Assert.DoesNotContain("banner", result.BodyMarkdown);
+        Assert.DoesNotContain("<script", result.BodyMarkdown);
+    }
+
+    [Fact]
+    public void UnresolvableImageSrc_IsIgnored_NotCountedMissing()
+    {
+        const string html =
+            """
+            <html><body><section id="intro"><p>這頁的文字夠長,不會被判成資訊鎖在圖裡的那一類頁面。</p>
+            <img src="http://[broken" alt="壞網址"></section></body></html>
+            """;
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Empty(result.Images);
+        Assert.Empty(result.MissingImages);
+        Assert.Empty(result.MediaUses);
+    }
+
+    [Fact]
+    public void ListingPage_ShortTextWithImage_IsNotFlaggedTextInImage()
+    {
+        // 列表頁本來就是一排縮圖配短標題,標 text_in_image 只會把每一個列表頁都列進待辦
+        AddMediaFile("ch/news/images/thumb.jpg");
+        var page = ArticlePage with { Slug = "index", TranslationKey = "news/index" };
+        const string html =
+            """
+            <html><body><section id="list"><img src="images/thumb.jpg" alt=""></section></body></html>
+            """;
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Equal("listing", result.PageType);
+        Assert.DoesNotContain("text_in_image", result.Flags);
+    }
+
+    [Fact]
+    public void NoTitleAnywhere_FallsBackToSlug()
+    {
+        var page = ArticlePage with { Section = "austin", TranslationKey = "austin/intro", Slug = "intro" };
+
+        var result = _extractor.Extract(page, "<html><body><section id=\"x\">文字</section></body></html>", _mediaRoot);
+
+        Assert.Equal("intro", result.Title);   // verify 要求 title 非空,不能留空字串
+    }
+
+    [Fact]
+    public void PdfLabel_FallsBackToViewPdf_ForLocalesWithoutALabel()
+    {
+        var page = ArticlePage with { Locale = "ja", LangPrefix = "jp" };
+        const string html =
+            """
+            <html><body><section id="personal"><iframe src="/files/a.pdf"></iframe></section></body></html>
+            """;
+
+        var result = _extractor.Extract(page, html, _mediaRoot);
+
+        Assert.Contains("📄 View PDF", result.BodyMarkdown);
+    }
+
+    [Fact]
+    public void Alternates_OnlyLinkRelAlternateTokens_NotAnchorHreflang()
+    {
+        // 認的是文件中任何位置、rel 含 alternate token 的 <link hreflang href>(作者宣告的語言版本),
+        // 不限 <head>——現行實作對整份文件下 selector,body 裡的 <link> 也算(見 docs/公開介面盤點.md 3.5、7.5);
+        // 若之後決定只看 head,另寫一條測試把那個決定釘住。這裡的測資沒有 body 裡的 <link>。
+        // <a hreflang> 不算:它是「這個連結指向的東西是什麼語言」,內文一句「另見英文說明」不是本頁的英文版。
+        const string html =
+            """
+            <html><head>
+            <link rel="alternate" hreflang="en" href="/en/news/20260712.php">
+            <link rel="ALTERNATE stylesheet" hreflang=" ja " href="../../jp/news/20260712.php">
+            <link rel="canonical" hreflang="fr" href="/fr/x.php">
+            <link hreflang="de" href="/de/x.php">
+            <link rel="alternate" hreflang="  " href="/ko/x.php">
+            <link rel="alternate" hreflang="es" href="http://[broken">
+            </head><body><section id="personal">
+            <p>另見 <a rel="alternate" hreflang="en" href="/en/other.php">英文說明</a></p>
+            </section></body></html>
+            """;
+
+        var result = _extractor.Extract(ArticlePage, html, _mediaRoot);
+
+        Assert.Equal(
+        [
+            ("en", "https://www.ibps-austin.org/en/news/20260712.php"),
+            ("ja", "https://www.ibps-austin.org/jp/news/20260712.php"),   // rel 是 token 集、不分大小寫;值去空白
+        ],
+        result.Alternates.Select(a => (a.Hreflang, a.TargetUrl)));
+        Assert.Equal("../../jp/news/20260712.php", result.Alternates[1].Href);   // 原值照記,不正規化
     }
 
     [Fact]

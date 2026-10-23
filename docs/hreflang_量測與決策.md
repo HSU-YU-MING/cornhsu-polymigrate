@@ -38,8 +38,9 @@ find "$R" -iname "*sitemap*"
 
 ## 據此做了什麼(2.3.0)
 
-- **讀**:每頁 `<head>` 的 `<link rel="alternate" hreflang>` 全記錄成 `hreflang_map.csv`,
-  含不可用的宣告與被擋下的原因。沒宣告的站只有表頭——這正是上面那個 0 的來源。
+- **讀**:每頁的 `<link rel="alternate" hreflang>` 全記錄成 `hreflang_map.csv`,
+  含不可用的宣告與被擋下的原因。讀的是整份文件、不只 `<head>`:舊站的 head 常被 BOM 或雜訊文字
+  提早截斷,解析器把後面的 link 放進 body;代價是正文裡亂放的 link 也會被收(仍須過門檻,而且只是建議)。沒宣告的站只有表頭——這正是上面那個 0 的來源。
 - **建議**:`hreflang` 成為 `pairing.fallback` 的合法值,排在最前面,
   並且是唯一不受「兩端須同 section」限制的線索。
 - **不合併**:配對結果一樣只是 `heuristic_suggested`,`translation_key` 不動,

@@ -44,8 +44,8 @@ public class GoldenTests : IDisposable
 
         foreach (var rel in goldenFiles)
         {
-            var expected = Normalize(File.ReadAllText(Path.Combine(GoldenDir, rel)));
-            var actual = Normalize(File.ReadAllText(Path.Combine(_out, rel)));
+            var expected = Normalize(rel, File.ReadAllText(Path.Combine(GoldenDir, rel)));
+            var actual = Normalize(rel, File.ReadAllText(Path.Combine(_out, rel)));
             Assert.True(expected == actual, $"golden mismatch: {rel}\n--- expected ---\n{expected}\n--- actual ---\n{actual}");
         }
     }
@@ -116,6 +116,23 @@ public class GoldenTests : IDisposable
         }
     }
 
+    [Fact]
+    public void StaleOutputs_OnlyMarkdown_SortedOrdinal()
+    {
+        // 殘檔清單是 CLI 摘要的 [stale] 那幾行(只印前 10 筆),順序必須決定性(§3.10):
+        // 用 ordinal 而不是檔案系統的列舉順序(NTFS 不分大小寫字母序、ext4 依雜湊)
+        foreach (var name in (string[])["content/zz/a.md", "content/zz/B.md", "content/notes.txt"])
+        {
+            var path = Path.Combine(_out, name.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "left over");
+        }
+
+        var report = RunPipeline();
+
+        Assert.Equal(["content/zz/B.md", "content/zz/a.md"], report.StaleOutputs);   // 'B' < 'a'(ordinal)
+    }
+
     private static void CopyDirectory(string source, string target)
     {
         Directory.CreateDirectory(target);
@@ -161,7 +178,12 @@ public class GoldenTests : IDisposable
             .Where(f => f != "verify_report.csv" && !f.StartsWith(".polymigrate/", StringComparison.Ordinal))
             .OrderBy(f => f, StringComparer.Ordinal)];
 
-    private static string Normalize(string text) => text.Replace("\r", "");
+    /// <summary>
+    /// CSV 的行尾是 CRLF(契約),golden 基準存的是 LF,所以比對前刪掉 \r;位元組格式另由 OutputBytesTests 釘。
+    /// Markdown 不刪:它的契約就是一律 LF,刪了的話 Windows 上 frontmatter 混進 CRLF 也照樣全綠(踩過)。
+    /// </summary>
+    private static string Normalize(string relativePath, string text) =>
+        relativePath.EndsWith(".md", StringComparison.Ordinal) ? text : text.Replace("\r", "");
 
     private static string FindRepoRoot()
     {

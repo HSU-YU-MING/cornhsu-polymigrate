@@ -2,6 +2,336 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 3.0.0 — 2026-10-23
+
+**Major:修正一輪產品 bug,並把 2.x 期間因為會動到凍結面而留待裁定的改動一次做完。**
+四面契約裡,這一版動到的是 **exit code**(見下面的對照表)、**CLI 的預設值**(`probe-orphans --out` /
+`fetch-orphans --slugs` 的預設檔名)與 **.NET 函式庫的行為**(`OrphanProber` 兩處語意、selector 寫壞時的例外型別)。
+**YAML config 欄位、CSV 欄位與 frontmatter 欄位都沒有改**;既有 config 原樣可用,除非裡面有寫壞的值
+(CSS selector、regex、路徑形狀、網址、YAML 寫了 key 卻沒給值…——3.0 起載入時就擋,見「破壞性變更」)。CLI 指令與參數沒有增減。
+函式庫的 public 簽章只有新增、沒有移除或更改(`PublicApi.approved.txt` 的 diff 全是新增)。
+
+### ⚠️ 升級必做
+
+1. **改名孤兒頁清單。** `probe-orphans` / `fetch-orphans` 的預設清單改成每個 section 一份 `<root>/orphan_slugs.<section>.txt`,
+   2.x 的 `<root>/orphan_slugs.txt` 不再被讀寫。手上有舊檔的話,它是哪個 section 的清單就改名成 `orphan_slugs.<section>.txt`
+   (例如 `orphan_slugs.news.txt`);不確定是哪個 section 的,或那個 section 已經用 3.0 探過(新檔已經在了),就刪掉——
+   改名會用舊清單蓋掉新清單。腳本裡明寫 `--out` / `--slugs` 的不受影響。
+   沒改名也不會靜默出錯:`fetch-orphans` 找不到新檔時會指出舊檔與改名方式並 exit 2,`probe-orphans` 會印一則 `note:`。
+2. **檢查 CI / 排程怎麼解讀 exit code**(見「exit code 對照表」),尤其是「0/1 放行」的流程:`probe-orphans` 一個回答都沒拿到、
+   npm 啟動腳本自己失敗,現在都是 **2**;`probe-orphans` 有部分候選沒拿到回答時是 **1**(2.x 是 0);`verify` 可能因為保留下來的 iframe 由 0/1 變 **2**;同步指令按一次 Ctrl-C 就是 **130**。
+3. **重產動畫縮圖。** `thumbs` 會跳過已存在的縮圖:要拿到保留動畫的 GIF / WebP 縮圖,先刪掉 `media_thumb/` 裡的 `.gif` / `.webp` 再跑一次。
+   另外,超過 **179 MP** 的靜態圖(解壓縮炸彈)現在不解碼、算縮圖失敗,`thumbs` 因此可能由 0 變 1(見「破壞性變更」)。
+4. **部署 `redirects.nginx.conf` 之前重新 `nginx -t`。** 含非 ASCII 或特殊字元的舊網址改寫成解碼後的路徑,寫法與排序都會變。
+5. **Windows 使用者:重跑 `extract` 後,每一個 `.md` 的行尾都會改變**(frontmatter 改成 `\n`),第一次 commit 會是整片的行尾 diff。
+6. **先載入一次 config,修掉寫壞的值。** 3.0 起載入 config 時多驗了一批欄位(CSS selector、`strip_title_prefix` 的 regex、
+   `base_url`、路徑形狀、BCP-47、cookie 與 User-Agent、數值範圍、重複的 key、寫了 key 卻沒給值;驗了什麼、沒驗什麼見「破壞性變更」
+   與 `docs/contracts.md`):2.x 能跑、
+   但裡面有寫壞的值的 config(例如 `type_rules` 裡這次沒用到的頁型、只有 `extract` 才會用到的 regex),
+   現在任何指令一讀到就 exit 2,訊息一次列出每一個寫壞的欄位。例如跑一次 `polymigrate extract site.yaml --dry-run` 就知道。
+7. **函式庫使用者**:`OrphanProber.ProbeAsync` 的 `known` 語意、`OrphanProber.KnownSlugs` / `PolyMigrator.MirrorSlugs` 的 slug 規則、
+   selector 寫壞時擲的例外型別都變了,見下一節。
+
+### ⚠️ 破壞性變更
+
+- **`probe-orphans` 一個回答都沒拿到時 exit 2**(2.x:0)。每個候選都是連線錯誤、逾時、重試後仍 409,或 401/403/429/5xx 這類
+  不是「有/沒有」的回答時——伺服器掛了、被 WAF 擋、`site.base_url` 打錯——2.x 只印警告、exit 0,只看 exit code 的排程會讀成
+  「沒有孤兒頁」。清單照舊不寫(既有檔原樣保留,沒有檔也不建空檔),stderr 第一行改成 `error:` 並列出原因(例如 `HTTP 503: 732`);
+  stdout 照樣印結論行 `Probe done: 0 orphan slugs (no usable answers; … left as it was)`(或 `not written`),排程的 log 看得出結論。
+  **遷移**:把 2 當成「這次沒問到,稍後重跑」,不要當成清單已經更新。
+- **`probe-orphans` 有部分候選沒拿到回答時 exit 1**(2.x:0)。清單照寫(命中的都是真的),stderr 照舊警告清單可能不完整、
+  列出原因與筆數——2.x 印了 `warning:` 卻回 0,只看 exit code 的排程看不出這次漏了一段(例如 12 月整個月被限流)。
+  契約的「1 = 有 warning、輸出仍可用」正是這個情況。
+  **遷移**:「0/1 放行」的流程不受影響;只接受 0 的流程,把 1 當成「清單可用但不完整,稍後重跑補齊」。
+- **`probe-orphans --out` / `fetch-orphans --slugs` 預設 `<root>/orphan_slugs.<section>.txt`**(2.x:各 section 共用
+  `<root>/orphan_slugs.txt`——探第二個 section 會蓋掉第一個的清單,一個回答都沒拿到時留下來的也可能是別的 section 的)。
+  2.x 的檔不讀、不寫、不刪;用到預設檔名而它還在時,stderr 印一則 `note:` 說明怎麼遷移(新檔還不存在才叫人改名,已經存在就只叫人刪掉;不影響 exit code);
+  `fetch-orphans` 找不到新檔、但舊檔在時,錯誤訊息(exit 2)講明改名或以 `--slugs` 指定舊檔。
+  `--section` 不能當檔名的一部分(含 `/` `\` `:` `*` `?` `"` `<` `>` `|` 或控制字元,或是 `.` `..`;一律照 Windows 的規則,三平台相同)時拼不出預設檔名,exit 2,請明確指定 `--out` / `--slugs`。
+  **遷移**:見「升級必做」第 1 條。
+- **npm 啟動腳本自己失敗時 exit 2**(2.x:1)。平台不在支援表、平台包沒裝(`--no-optional` / `--omit=optional` 或安裝中斷)、
+  執行檔起不來時,PolyMigrate 根本沒有執行;2.x 的 1 與契約的「1 = 只有 warning」撞號,「0/1 放行」的 CI 會把「工具沒跑」當成通過
+  (2.1.0～2.3.0 的 arm64 事故走的就是這條路)。訊息也從繁體中文改成英文,以 `error:` 開頭、註明 `PolyMigrate did not run.`。
+  **遷移**:依賴「npm 沒裝好時回 1」的判斷改成 2。
+- **同步指令(`extract` / `thumbs` / `verify` / `slugs`)第一次 Ctrl-C 就回 130**(2.x:第一次 Ctrl-C 沒有作用,照常跑完回 0/1/2;
+  第二次由 runtime 直接終止,Windows 結束碼 `0xC000013A`)。2.2.0 就說 `extract` / `thumbs` 會乾淨回 130,實際上只有
+  `probe-orphans` / `fetch-orphans` 看取消訊號。現在第一次 Ctrl-C 就在下一個檢查點(下一頁、下一張圖、下一個媒體檔的雜湊、
+  開始寫清單之前)停下,stderr 印 `cancelled.`;已寫出的 `.md` 與縮圖保留,清單檔、`verify_report.csv` 不會只寫一半,
+  `slugs` 不印半份清單,已算好的媒體雜湊盡量存進內部快取。第二次 Ctrl-C 的行為不變。
+  **遷移**:不需要;把 130 當成「被中斷」。
+- **`verify` 可能因為保留下來的 `<iframe>` 由 exit 0/1 變 2。** `extract` 現在保留 YouTube 與 PDF 以外的 iframe(見「修正」),
+  指向**沒有搬過來的站內頁**(例如舊站的表單頁)的 iframe 報 `broken_link`——2.x 那個嵌入在 Markdown 裡根本不存在,
+  現在它在新站上確實是壞的。
+  **遷移**:把被嵌入的頁搬過來,或在內文裡拿掉、換掉那個 iframe,再重跑 `verify`。
+- **只被 iframe 嵌入的頁算有入口**(`verify` 可能由 1 變 0)。某頁沒有任何 `<a>` 連到、只被另一頁保留下來的 iframe 嵌入時,
+  iframe 的 `src`(與 lazy-load 的 `data-src`)算進入口,不再報 `unlinked_page`——被嵌入的內容確實有呈現給訪客。
+  **遷移**:不需要;若仍要提醒自己替這類頁加獨立入口,得另外列清單。
+- **函式庫:`OrphanProber.ProbeAsync` 的 `known` 參數語意改了**(簽章不變)。2.x 是「這些候選完全不碰」,現在是「這些候選已存在:
+  本身不探,但它的 `A`～`D` 後綴照探;已知的後綴版不探、不列」——修正「原頁已鏡像、`A` 版是孤兒」永遠找不到。
+  **遷移**:拿 `known` 限制探測範圍的呼叫端,請求數會變多(每個已知日期多一個 HEAD)、回傳的清單可能不同;
+  要完全跳過一批日期,請縮小年份範圍或在回傳後過濾。
+- **函式庫:`OrphanProber.KnownSlugs(rawDir, langPrefix, section)` 與 `PolyMigrator.MirrorSlugs` 的 slug 規則改了。**
+  2.x 取檔名第一個點之前(`v1.2-release.php.html` → `v1`),現在去掉結尾的 `.html` 再去掉一段 1～8 個 ASCII 英數字、
+  至少一個字母的副檔名(→ `v1.2-release`;細節與仍不一致的情況見「修正」)。
+  **遷移**:手上有 config 時改用新的 `KnownSlugs(rawDir, langPrefix, section, stripExtensions)`,結果與 `extract` 一致。
+- **config 載入時就驗所有 CSS selector**(`extract.content`、每一個 `type_rules.*.title_selector` 與 `remove_selectors`)。
+  2.x 只在「真的要用」之前才驗:`type_rules` 裡寫壞、但這次沒有頁屬於那個頁型的 selector 照樣 exit 0,`thumbs` /
+  `probe-orphans` 根本不用 selector,寫壞的 config 也照跑——寫壞的 config 要等到哪天出現那個頁型、或換一個指令才炸。
+  那只是為了不讓原本能跑的 config 在 patch 版開始失敗。現在任何指令載入 config 時就擋:exit 2、什麼都不寫、不發請求,
+  訊息列出每一個寫壞的欄位與 selector(`site.yaml: config is invalid:` 之後一行一個
+  `- extract.type_rules.event.title_selector: 'h3[[' is not a valid CSS selector.`)。用到之前的那道檢查保留為第二道防線
+  (擋函式庫呼叫端不經 loader、直接在程式裡組的 config)。函式庫的 `SiteConfigLoader.Load` / `LoadFile`、
+  `PolyMigrator.FromConfigFile` 對這類 config 改擲 `ConfigException`。
+  **遷移**:修好或刪掉寫壞的 selector(見「升級必做」第 6 條)。
+- **config 載入時多驗一批欄位**(selector 以外;`SiteConfig` 每個欄位逐一看過,挑出「寫壞了要到使用時才擲例外、或安靜地產出錯的東西」
+  的那些)。原則同上:寫壞的 config 不該等到某個指令、某一頁才炸。**不是每一種錯都驗得出來**——沒有驗的見下面最後一項。新增的載入時檢查:
+  - **寫了 key 卻沒給值**(`site:`、`title_noise:` 後面什麼都沒有,或清單裡的 `~`):2.x 在載入或使用時 `NullReferenceException`
+    (未處理例外,exit code 不在契約內)或 `Value cannot be null`。現在逐一點名(清單、對照表提示寫 `[]` / `{}` 或拿掉 key)。
+  - **重複的 key**:同一個對照表裡同一個 key 出現兩次(`section_types: { news: article, news: event }`),2.x 安靜地讓後者蓋掉前者;
+    現在點名欄位與行號。
+  - `extract.strip_title_prefix`:用與標題清理相同的選項編譯 regex(2.x 要到 `extract` 建標題清理器時才 exit 2,
+    訊息是 .NET 的 `Invalid pattern …`、沒點名欄位;`thumbs` / `probe-orphans` 永遠不報)。
+  - `site.base_url`:不可帶 query 或 fragment(網址一律組成 `<base_url>/<路徑>`,2.x 照樣把路徑接在 `?…` 後面發出去)。
+  - `site.user_agent`、`site.auth_workaround.set`:只收可列印的 ASCII(0x20～0x7E;`user_agent` 另外允許 tab——RFC 9110 的
+    field-value 允許 HTAB,2.3.1 也送得出去)。換行、控制字元與非 ASCII(`café`、中文 cookie 值)
+    會讓每一個請求送不出去(.NET 拒絕非 ASCII 的標頭值),probe 把它算成連線錯誤、一路錯到「一個回答都沒拿到」;
+    cookie 名另外不可空、不可含 `=` `;` 空白,值不可含 `;`。probe 一個回答都沒拿到時的訊息也把 `site.user_agent` 與 cookie 列進「請檢查」。
+  - `site.polite.delay_ms`:上限 1073741823(409 後的重試等兩倍,超過時 `Task.Delay` 要到探測當下才擲例外)。
+  - `url_pattern.lang_map`:key 必須是 `""` 或單一路徑段(含斜線的永遠對不上任何鏡像頁,`..` 會讓 probe 讀到 `raw/` 以外);
+    值必須是形狀正確的 BCP-47 標記(`zh_Hant` 這類底線寫法 2.x 照收)。
+  - `url_pattern.strip_extensions`:每一項是以 `.` 開頭的副檔名(`php` 會剝到 slug 中間;`""` 永遠成立、讓後面的副檔名全部失效)。
+  - `extract.section_types` / `section_flags`:key 是 `""`(根層頁的 section)或單一目錄名(含斜線的永遠對不上);頁型不可空(null 要到用到 `type_rules` 時才擲例外);
+    flag 不可空、不可含 `;`(`content_inventory.csv` 以 `;` 分隔 flags)。
+  - `pairing.fallback`:不可重複(2.x 同一種證據加兩次權重、`pair_evidence` 寫兩次)。
+  - `media.web_prefix`:根相對路徑(`/media/`)或絕對 http(s) 網址,不含空白、引號、`<` `>` `?` `#`(相對路徑在巢狀頁上指錯地方)。
+  - `media.pdf_labels`:key 必須是形狀正確的 BCP-47 標記;值不可空。key 不在 `lang_map` 裡(含大小寫不同)只**警告**:依頁面 locale
+    精確查表,那條用不到(2.x 安靜地退回 `View PDF`),但共用模板帶來的多語言標籤不是寫壞。載入時的 warning 照既有慣例
+    以 `warning: <config>: …` 印在 stderr,不影響 exit code。
+  - **沒有驗的**(載入時判斷不了,或不是寫壞):selector 與 regex 在真實頁面上選不選得到東西、regex 會不會太慢;
+    `type_rules` 的頁型與 `section_types` 的值有沒有對上(拼錯的頁型只是沒有規則);`base_url` 連不連得到、帶的路徑對不對;
+    `site.encoding` 與頁面實際的編碼合不合;`web_prefix` 是不是媒體真正放的位置;section 名稱在 `raw/` 裡存不存在;
+    BCP-47 只驗形狀、不查登記表;`lang_map` 兩個前綴對到同一個 locale(合法);標題雜訊、標記字、PDF 標籤、cookie 值的內容;
+    `max_width`、`text_in_image_max_length` 的上限。
+  一律 `ConfigException` → exit 2,與 selector 的錯誤一起在同一則訊息裡逐行列出、點名欄位。用到時的檢查保留為第二道防線
+  (標題清理器照樣編譯 regex,而且改成容忍 `title_noise` / `title_markers` 的 null 項目)。
+  **遷移**:照訊息修好或拿掉那些值(見「升級必做」第 6 條)。`examples/ibps-austin.yaml` 與測試用的 config 都不受影響。
+- **`thumbs` 不解碼超過 179 MP 的靜態圖,記成縮圖失敗(`thumbs` 可能由 exit 0 變 1)。** 小檔、巨大尺寸的圖(解壓縮炸彈)
+  不經過動畫預算:一格 20000x20000 的 GIF 只有 270 KB,2.3.1 起照樣整張解碼,實測 14.8 秒、峰值 1.6 GB(約每像素 4 位元組);
+  宣告 65535x65535 的檔可以把機器拖垮。現在解碼前只讀標頭(Ping)拿尺寸,寬 × 高超過 **178,956,970 像素(約 179 MP)**
+  ——Pillow 擲 DecompressionBombError 的門檻(2 × 89,478,485)——就不解碼,記進 failed:
+  `[fail] one.gif :: 20000x20000 (400 MP) exceeds the 179 MP still-image limit`。以同樣的比例,179 MP 約 720 MB;
+  100 MP 級的相機原圖(11648x8736 約 101.8 MP)照常處理。改用第一格的動畫也照這個上限檢查那一格。
+  **刻意不「複製原檔、不做縮圖」**:那等於把一張幾億像素的圖放在頁面以為是縮圖的位置,交給每個訪客的瀏覽器去解碼。
+  動畫預算的訊息一併改用同一套單位(`3 frames of 2000x500 (3 MP) exceed the 50 MP animation budget`)。
+  **遷移**:用影像工具先把那張圖縮小到 179 MP 以內再跑 `thumbs`,或接受它沒有縮圖。
+- **函式庫:config 的 CSS selector 寫壞時擲 `ConfigException`**(2.x:AngleSharp 的 `DomException`)。影響
+  `PolyMigrator.Extract`、`ExtractionPipeline.Run`、`OrphanFetcher.FetchAsync` 與新的 `PolyMigrator.FetchOrphansAsync`。
+  **遷移**:改接 `ConfigException`(訊息點名寫壞的欄位)。
+
+### exit code 對照表(3.0)
+
+0 乾淨 / 1 有 warning / 2 有 error / 130 中斷。所有指令的用法錯誤、config 錯誤(含寫壞的 CSS selector,3.0 起載入時就驗)、
+IO 錯誤一律 2;未知指令 2。
+
+| 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
+|---|---|---|---|---|
+| `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | 第一次 Ctrl-C |
+| `thumbs` | 全部建立或已存在 | 任一張失敗(含超過 179 MP 的靜態圖) | 媒體目錄不存在 | 第一次 Ctrl-C |
+| `probe-orphans` | 跑完、每個候選都拿到回答(不論命中幾筆) | **部分候選沒拿到回答**(清單照寫,可能不完整) | `--years` 不合法;**一個回答都沒拿到**;沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
+| `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
+| `verify` | 無 issue | 只有 warning | 有 error(含保留的 iframe 指向沒搬的站內頁);`--allow-unlinked` 檔不存在 | 第一次 Ctrl-C |
+| `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | 第一次 Ctrl-C |
+| npm 啟動腳本 | 原樣轉傳 PolyMigrate 的 exit code;被訊號中斷時為 128+訊號編號 | — | **啟動腳本自己失敗** | Ctrl-C:轉傳 PolyMigrate 的 130(Windows 也是,見下) |
+
+與 2.3.1 相比,exit code 改變的情境(**粗體**為往上升、可能讓原本通過的流程變紅):
+
+| 情境 | 2.3.1 | 3.0 |
+|---|---|---|
+| **同步指令(`extract` / `thumbs` / `verify` / `slugs`)按一次 Ctrl-C** | 照常跑完,0/1/2 | 130 |
+| **`probe-orphans` 一個回答都沒拿到** | 0 | 2 |
+| **`thumbs`:靜態圖超過 179 MP(解壓縮炸彈)** | 0(整張解碼,20000x20000 要 14.8 秒、1.6 GB) | 1(不解碼,記成失敗) |
+| **`probe-orphans` 部分候選沒拿到回答** | 0(有 `warning:`) | 1 |
+| **npm 啟動腳本自己失敗** | 1 | 2 |
+| 經 npm 執行時按 Ctrl-C(Windows) | `0xC000013A`(node 先被結束) | 130(PolyMigrate 收尾後轉傳) |
+| **`verify`:保留的 iframe 指向沒搬過來的站內頁** | 0/1(iframe 不在 Markdown 裡) | 2 |
+| **`fetch-orphans` 沒給 `--slugs`,只有 2.x 的 `orphan_slugs.txt`** | 照讀(0/1) | 2(訊息講明怎麼改名) |
+| **沒給 `--out` / `--slugs`,`--section` 含 `/` 等** | 照跑 | 2 |
+| config 的 CSS selector 寫壞、而且這次用得到(`extract` / `fetch-orphans`) | 未處理例外(不在契約內) | 2 |
+| **config 有寫壞、但這次用不到的 selector**(沒有頁屬於的頁型;`thumbs` / `probe-orphans` 讀到的任何 selector) | 照跑(0/1) | 2(載入時) |
+| **config 有其他寫壞的值**(`strip_title_prefix` 的 regex、沒有點的 `strip_extensions`、含斜線的 section / 語言 key、不是根路徑的 `web_prefix`、帶 query 的 `base_url`、重複的 `fallback`…) | 照跑(0/1),或到用到時才 2 | 2(載入時) |
+| **YAML 寫了 key 卻沒給值**(`site:`、`title_noise:`…) | 未處理例外或用到時 2 | 2(載入時) |
+| `verify`:只被 iframe 嵌入的頁 | 1(`unlinked_page`) | 0 |
+| `verify`:`data-src` 這類名稱只是以 href/src 結尾的屬性、同 host 非 http(s) 連結指向站內 | 可能 2(假的 `broken_link`) | 不檢查 |
+| `fetch-orphans`:`lang_map` key 為 `""`、伺服器不合併斜線 | 1(全部 404) | 0 |
+| `extract`:內部快取 `.polymigrate/media_sha1_cache.csv` 存不了 | 2(清單只寫一半) | 0/1(清單全部寫出) |
+
+### 新增
+
+- **函式庫:`PolyMigrator.ProbeOrphansAsync` / `PolyMigrator.FetchOrphansAsync`**(探測與抓回孤兒頁的 facade 入口)。
+  規則與 CLI 的 `probe-orphans` / `fetch-orphans` 相同(已知 slug 取自 `root/raw`、依 `strip_extensions`;語言預設 `lang_map`
+  第一個 key;禮貌延遲、cookie;probe 不跟轉址、fetch 跟);probe **不寫檔**,清單在回傳值裡,寫到哪由呼叫端決定。
+  CLI 的 `fetch-orphans` 改走同一條路。年份不合法時在發任何請求之前擲 `ArgumentOutOfRangeException`。
+- **函式庫:`ProbeReport`**(2.x 是 internal 的 `ProbeResult`):`Found`、`Checks`、`Unanswered`(依原因計數)、`UnansweredCount`、
+  `NoUsableAnswers`——分得出「確定沒有」與「沒拿到回答」。`OrphanProber.ProbeDetailedAsync` 改 public。
+- **函式庫:可取消的 overload。** `PolyMigrator.Extract(paths, dryRun, ct)`、`Extract(root, dryRun, ct)`、
+  `GenerateThumbnails(mediaDir, thumbnailDir, ct)`、`Verify(outputDir, mediaDir, mediaPrefix, allowUnlinked, ct)`,
+  以及底層的 `ExtractionPipeline.Run`、`OutputVerifier.Run`、`ThumbnailGenerator.Run` 收 `CancellationToken` 的版本(2.x 是 internal,
+  只有 CLI 用得到)。以新增 overload 的方式加,既有呼叫端原始碼與二進位都相容;檢查點與 CLI 的 Ctrl-C 相同。
+- **函式庫:`OrphanProber.KnownSlugs(rawDir, langPrefix, section, stripExtensions)`**:依 `url_pattern.strip_extensions` 判定已鏡像的 slug,
+  與 `extract` 及 CLI 的 `probe-orphans` 一致(2.x 只有 internal 版)。
+- **函式庫:`ThumbnailReport.AnimationsKept` 與 `AnimationsAsFirstFrame`**:保留動畫的數量,以及改用第一格的
+  (相對路徑, 原因)清單(見下面 `thumbs` 那一條)。
+
+### 修正
+
+- **`thumbs` 把動畫 GIF / 動畫 WebP 縮成只剩第一格。** 原本以單張讀檔,動畫縮圖變成靜止的第一格,照樣計入 `created`、沒有任何提示。
+  現在多格的 GIF / WebP 逐格縮放、保留動畫(格數、每格延遲、循環次數):先補成完整畫面再縮,GIF 寫出前再壓回格間差異。
+  單格的圖照舊;截斷的多格 GIF(舊站鏡像裡下載到一半的)、或中間某格解不開的,多格讀不起來時退回單張讀取,與 2.3.1 一樣產出第一格縮圖、不算 failed
+  (讀得到格數的,摘要以 `not every frame could be decoded` 列在 first frame)。相依沒有變(同一個 Magick.NET,WebP 動畫的編碼器本來就在 Magick.Native 裡),授權通知不受影響。
+  **有上限**:逐格縮放的記憶體與時間跟「格數 × 畫布寬 × 高」成正比(實測 400 格 1300x900 要 39 秒、峰值 3.2 GB;
+  298 格 800x408 的真實錄影要 21 秒,縮圖 4.18 MB 比原檔 1.8 MB 還大)。所以兩種情況改用第一格(與 2.3.1 的結果相同):
+  - 每一格以「宣告的畫布」與「這一格實際的大小」取大的相加,超過 **5,000 萬像素**(只讀中繼資料就判斷,不解碼像素)。
+    宣告的畫布比影格小的惡意或壞掉的 GIF 也騙不過(宣告 10x10、150 格 3000x3000 的 GIF,只看畫布時峰值 5.2 GB;
+    現在 0.3 秒、峰值約 170 MB 就改用第一格)。剛好在上限的 100 格 1000x500 實測約 6 秒、
+    峰值 250～400 MB(視內容而定:兩個這種 GIF 分別約 250 MB 與 384 MB);一般的小動畫(480x270 × 100 格約 1,300 萬像素)照樣保留。
+  - 保留動畫的縮圖比原檔大(縮圖的意義是更小;例如無損 WebP 的動畫重新編碼後反而變大)。但動畫本來就不需要縮放
+    (畫布不超過 `max_width`、也不必轉正)時,原檔本身就是最小、而且保留動畫的縮圖:直接複製原檔,不退回第一格。
+  兩者都不是失敗、不影響 exit code;`thumbs` 的摘要多一行 `animated: N kept, M as first frame`,並以
+  `[first frame] <路徑> :: <原因>` 列出前 10 個。上述兩個實測檔在 3.0 分別約 0.2 秒、峰值約 170 MB 就完成。
+  **升級注意**:見「升級必做」第 3 條。
+- **PNG 縮圖每次跑出來的位元組都不一樣。** Magick 寫 PNG 時預設帶 `tIME`(寫出的時間)與 `date:create` / `date:modify`
+  (取自輸入檔的修改時間)、`date:timestamp`(現在時間)三種文字 chunk:同一張圖跑兩次、或輸入檔被複製過(修改時間變了),
+  縮圖就不一樣,重跑與版控比對都會冒出假的變更。現在寫 PNG 時不寫這些 chunk,同一張輸入、同樣的設定,輸出逐位元組相同;
+  像素與尺寸不變(實測只少了那幾個 chunk)。JPEG、WebP、GIF 本來就是決定性的。
+  **升級注意**:既有的 PNG 縮圖不會自動重產(`thumbs` 跳過已存在的縮圖);要統一成新的位元組,先刪掉 `media_thumb/` 裡的 `.png` 再跑。
+- **YouTube 與 PDF 以外的 `<iframe>` 在 Markdown 裡整個消失。** 程式註解與 README 都說其他 iframe「保留原樣」,實際上它們留在 DOM 裡
+  交給 ReverseMarkdown,而未知標籤的處理是只輸出子節點——iframe 沒有子節點,於是 Google 地圖、行事曆、表單、Vimeo 等嵌入
+  靜默消失,沒有任何清單或 warning 記得。現在以原始 HTML 保留在內文原位置(不進 `videos` / `documents`,不猜型別),
+  站內的 `src`、lazy-load 用的 `data-src` 與 `<a href>` 走同一套路由改寫(外站與完整網址不動、相對路徑以頁面網址解析)。
+  另外 `youtube-nocookie.com/embed`(YouTube 的隱私強化模式)現在也認成 YouTube 影片。
+  **升級注意**:重跑 `extract` 後,含這類 iframe 的頁 `.md` 內文會多出 `<iframe …>`;用 `youtube-nocookie.com` 嵌入的頁,
+  frontmatter `videos` 會多一筆 `{type: youtube, url}`。`verify` 的 exit code 影響見「破壞性變更」。
+- **`verify` 把 `data-src` 這類屬性也當成連結檢查。** 原本掃內嵌 HTML 時,`href=` / `src=` 前面沒有邊界,`data-src`、`data-href`、
+  `ng-src`、`x-href`、`_src` 這類名稱只是以 href/src 結尾的屬性也被當成連結(lazy-load 的 iframe 指向已搬好的頁也報 `broken_link`)。
+  現在站內頁只檢查名稱剛好是 `href` / `src` 的屬性;其餘仍算入口(否則只被 lazy-load iframe 指到的頁會開始報 `unlinked_page`),
+  指向 `/media/` 的與原本一樣檢查缺檔、算進 `media refs`(lazy-load 的圖在 JS 跑完後確實會被載入)。只會讓 issue 變少;
+  `verify` 摘要的 `links checked` 不再計入這類引用,數字可能變小。
+- **`probe-orphans` 一個回答都沒拿到時,把既有的清單覆寫成空檔。** 連線錯誤、逾時、403/429/5xx 原本一律當成「不存在」,
+  全部失敗時照樣「跑完、0 筆」——先前探好的清單(預設延遲下一年約 36 分鐘的請求量)被清空。現在分開統計「確定沒有」
+  (404、410、其他 2xx、3xx)與「沒拿到回答」:一個回答都沒拿到時不寫清單(exit code 見「破壞性變更」);
+  部分沒拿到回答時照寫,stderr 警告清單可能不完整並列出原因(exit code 見「破壞性變更」)。
+- **`probe-orphans` 要整批探完才發現 `--out` 寫不出去。** 目錄不存在或 `--out` 指到一個目錄時,原本先發完一整輪請求
+  (一年 730 個以上,預設延遲下約 36 分鐘)才在寫檔時 exit 2。現在探測前就檢查,一個請求都不發;檢查不留痕跡
+  (既有檔內容與修改時間不變,原本沒有的檔不會被建成空檔)。exit code 仍是 2。(中斷時把已命中的部分寫出**刻意不做**:
+  那會用半份清單蓋掉上一次完整的清單;命中的 slug 已即時印在 stdout 的 `hit …` 行。)
+- **`probe-orphans` 漏探已鏡像日期的後綴孤兒,又重複列出已鏡像的後綴版。** 日期本身已在鏡像裡時,原本連 `A`～`D` 後綴都不探,
+  所以「原頁已鏡像、`A` 版是孤兒」永遠找不到——而那正是 probe 要找的東西;後綴變體則不比對已鏡像的 slug,已經抓過的 `A` 版照樣列出。
+  現在已鏡像的日期本身不探、後綴照探;已鏡像的後綴版不探也不列,「`A` 有才會有 `B`」的鏈繼續往下。
+  **升級注意**:清單可能多出原本漏掉的後綴孤兒、少掉已鏡像的後綴版;每個已鏡像的日期多一個 HEAD 請求(探它的 `A`)。
+  函式庫的語意變化見「破壞性變更」。
+- **沒有語言前綴的站(`lang_map` 的 key 是 `""`)在 `probe-orphans` / `fetch-orphans` 請求 `//news/…` 這種雙斜線網址。**
+  nginx 預設合併斜線所以看不出來,但不合併斜線的伺服器或框架路由會讓 probe 全部落空、fetch 全部 404。現在只接非空的路徑段
+  (`/news/…`);進度訊息與 `fetch-orphans` 的錯誤列(`[404] news/…`)同樣不再多一個斜線。函式庫的 `OrphanProber.ProbeAsync` /
+  `OrphanFetcher.FetchAsync` 請求的網址與 `FetchReport.Errors` 的字串隨之改變(只影響 key 為 `""` 的站)。
+- **`slugs`(與 `probe-orphans` 的已知 slug 集、函式庫的 `PolyMigrator.MirrorSlugs`)在檔名第一個點就截斷,和 `extract` 寫出的 slug
+  不一致。** `raw/ch/news/v1.2-release.php.html` 原本印 `v1`(`extract` 寫的是 `slug: v1.2-release`),餵給 `fetch-orphans --slugs`
+  就去抓不存在的網址。`probe-orphans` 手上有 config,已知 slug 集改用 `url_pattern.strip_extensions`,與 `extract` 完全相同的規則。
+  `slugs` 與 `PolyMigrator.MirrorSlugs` 不帶 config,改成去掉結尾的 `.html` 再去掉一個 1～8 個 ASCII 英數字、至少一個字母的副檔名
+  (`.php`、`.php5`、`.php3`、`.asp`、`.aspx`…),`2019.05.01.html` 這類乾淨網址不會被多剝——**這仍是啟發式,大多數站與 `extract`
+  一致,但不是全部**:乾淨網址站的 `jane.doe.html` 會印成 `jane`;`strip_extensions: []` 的站上 `foo.php.html` 會印成 `foo`;
+  副檔名不在 `strip_extensions` 裡(只列 `.php` 時的 `a.php5.html`)或大小寫不符(`A.PHP.html`)的,會剝成 `a`、`A`
+  (`extract` 的 slug 分別是 `jane.doe`、`foo.php`、`a.php5`、`A.PHP`)。函式庫呼叫端手上有 config 時,用新增的
+  `KnownSlugs(…, stripExtensions)` 就與 `extract` 一致。
+  **升級注意**:含點的 slug 輸出會改變——`v1.2-release.php.html` 這類「第一個點之後還是 slug」的,原本被截斷成無法回餵的 `v1`,
+  現在是完整的 slug;`20260301.php5.html` 這類「點之後只是副檔名」的,結果與原本相同(`20260301`)。列表頁 `index` 照舊列出。
+  `probe-orphans`:鏡像檔名的副檔名不在 `strip_extensions` 裡、或大小寫不同(`strip_extensions: [.php]` 而鏡像是 `20260301.PHP.html`)時,
+  這個檔原本被當成已知的 `20260301`、現在不算(`extract` 也一直把它當成另一頁),所以那個日期會被探測。
+- **Windows 上 `slugs` 導成檔案時跟著 console 碼頁,回餵 `fetch-orphans` 變成亂碼網址。** 2.2.0 與 `docs/搬完之後你還要做的事.md`
+  教的就是 `slugs … > local.txt` 這條管線;在 zh-TW Windows(cp950)用 cmd 或 Git Bash 導檔,`禪修` 寫成 Big5,`fetch-orphans`
+  以 UTF-8 讀回成 U+FFFD。現在 **stdout 導到檔案時一律寫無 BOM 的 UTF-8**。接到 console 或管線時刻意維持 console 編碼:
+  Windows PowerShell 5.1 讀原生指令輸出走管線、依 console 編碼解讀,那條路改寫 UTF-8 反而會變亂碼。**PowerShell 7.4 起不在修正範圍內**:
+  它的 `>` 同樣走管線、但保留原始位元組,檔案仍是 console 碼頁——先 `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()`
+  (或 `chcp 65001`)再導檔(見 `docs/contracts.md`)。行尾仍是 `Environment.NewLine`。
+  **升級注意**:Windows 上導檔得到的非 ASCII slug 位元組會改變(原本的值本來就讀不回來)。
+- **`redirects.nginx.conf` 對中日韓或含空白的舊網址寫出永遠不會命中的 `location`。** 舊路徑原本寫成百分號編碼
+  (`location = /ch/news/%E7%A6%AA%E4%BF%AE.php`),但 nginx 的 location 比對的是 `%XX` **解碼後**的 URI、設定檔字串照字面
+  (ngx_http_core_module 文件「location」段),所以這些 301 永遠不會命中,舊網址直接 404;含空白的路徑更會讓 `nginx -t`
+  整份設定載入失敗。現在 `{old}` 寫解碼後的路徑(`location = /ch/news/禪修.php`),含空白或 `; { } " ' \ # $` 時加雙引號並跳脫;
+  `return 301` 的目標維持編碼(另把 `$` 編成 `%24`,避免被當成 nginx 變數)。排序改依寫出來的(解碼後的)路徑。
+  格式 `location = {old} { return 301 {new}; }` 不變,純 ASCII 的路徑逐位元組相同。**升級注意**:見「升級必做」第 4 條。
+  `_redirects`(Netlify)維持單次編碼:Netlify 文件(<https://docs.netlify.com/manage/routing/redirects/overview/> 的 `_redirects` 語法段)
+  寫明「special characters in paths must be url-encoded」,與現行寫法一致,所以不動;Netlify 論壇有編碼路徑比對不穩的回報,
+  部署中日韓網址的 301 前仍建議實測一次。
+- **連結指向「不是鏡像頁」的根層檔案時被加上尾斜線、同 host 的 `ftp://` 被改寫成站內路由。** 修好 iframe 之後,iframe 也走
+  `<a href>` 的路由規則,常見的嵌入目標會被改壞——而這兩個怪癖 `<a href>` 在 2.3.1 就有:只剩一段的路徑一律加尾斜線(本意是語言首頁
+  `/ch/` 與根層頁 `/about/`),於是 `/brochure.pdf` 變成 `/brochure.pdf/`;同 host 的 `ftp://…/ch/file.php` 被改寫成 `/ch/file`。
+  **頁的路由一律不變**:`redirect_map.csv`、`redirects.nginx.conf` 與 `_redirects` 的新路徑、`hreflang_map.csv`,以及內文裡指向
+  鏡像頁的連結,對任何輸入都與修正前逐位元相同。只有連結目標**不是鏡像裡的頁**時才另外判斷:
+  - 單段路徑若看起來是檔案(點檔案如 `/.htaccess`,或副檔名是 1～16 個英數字、至少一個字母,如 `/embed.swf`、`/brochure.pdf`、
+    `/site.webmanifest`),不加尾斜線。剝掉了 `strip_extensions`、拿掉了 `index`、原本以 `/` 結尾、或那一段是語言前綴的,
+    仍當頁、照舊加尾斜線;`.2-rc`、`.01` 這種 slug 裡的點不算副檔名。
+  - 同 host、scheme 不是 http(s) 的網址(`ftp://`、`file://`、`ws://`…)原樣保留,不再改寫成站內路由。指向鏡像頁的仍照舊改寫。
+  - 「是不是鏡像頁」是拿連結算出的路由與鏡像頁的路由**逐字比對(ordinal,分大小寫)**,所以下面兩種也算「不是鏡像頁」、
+    套用上面兩條:大小寫與鏡像頁不同的連結(鏡像頁是 `/contact.php`、連結寫 `/CONTACT.PHP` → `/CONTACT.PHP`,原本 `/CONTACT.PHP/`;
+    兩者都不是那一頁在新站的路由 `/contact/`),以及只有子頁、沒有自己 index 頁的目錄(鏡像有 `docs.v2/a.php` 但沒有
+    `docs.v2/index.php` 時,`/docs.v2` → `/docs.v2`,原本 `/docs.v2/`;同 host 的 `ftp://…/docs.v2/` 原樣保留)。
+  **升級注意**:內文連結與 iframe 在上述情況會改變(`verify_report.csv` 裡對應的 `broken_link` 明細字串跟著變,例如
+  `/embed.swf/` → `/embed.swf`;同 host 非 http(s) 的不再被檢查);頁的路由與 301 檔不變。
+- **config 的 CSS selector 寫壞時,`extract` 與 `fetch-orphans` 以未處理例外崩潰。** `extract.content`、`type_rules.*.title_selector`、
+  `type_rules.*.remove_selectors` 不合語法時,AngleSharp 的 `DomException` 直接穿出去,行程以未處理例外結束(Windows 為
+  `0xE0434352`),不在 0/1/2/130 契約內。`extract` 還會先把前面的頁寫進 `content/`、清單檔一份都沒寫;`fetch-orphans` 則是頁面
+  先寫進 `raw/` 才掃資產,修好 config 重跑時那一頁被當成已抓過,它的資產永遠補不回來。現在是 **exit 2**,訊息點名欄位
+  (`extract.content: 'section[id' is not a valid CSS selector.`),而且在寫任何檔之前就停。3.0 起更進一步在載入 config 時就驗全部 selector(見「破壞性變更」),
+  用到之前的這道檢查保留為第二道防線。函式庫的例外型別見「破壞性變更」。
+- **`extract` 的內部媒體雜湊快取存不了時,清單只寫一半、exit 2。** `.polymigrate/media_sha1_cache.csv` 是內部加速檔、不是交付物,
+  但原本夾在 `media_manifest.csv` 與 `redirect_map.csv` 之間存檔、沒有保護:`.polymigrate` 被同名檔案佔住、唯讀或磁碟滿時擲 IO 錯誤
+  → exit 2,`redirect_map.csv`、`redirects.nginx.conf`、`_redirects`、`missing_images.csv`、`path_issues.csv`、`need_fetch_media.txt`
+  都沒有更新(留著上一次的舊檔,或根本沒有)。現在所有清單寫完才存,存不了就略過(stderr 不印東西,只是下次重跑要重讀媒體),
+  exit code 照 warning 有無回 0/1。另外快取改成先寫暫存檔再改名(存到一半被終止不會留下截斷的快取檔;存失敗時暫存檔會清掉、
+  原本的快取檔不動),讀快取時 sha1 不是 40 位小寫十六進位的列丟掉——原本截斷的最後一列若大小與 mtime 對得上,
+  半截 sha1 會被當成命中、寫進 `media_manifest.csv`。
+- **`content_inventory.csv` 的 `pair_evidence` 隨機器文化改變。** `date=` 與 `title_similarity=` 原本以目前文化格式化:th-TH 寫出佛曆
+  (`date=2569-02-14`)、fa-IR 寫出波斯曆、de-DE 寫出 `0,84`(CSV 欄位因此被加引號),違反決定性輸出,也與契約範例的 ISO 日期不符。
+  現在一律 invariant。配對決策本身不受影響;en-US 等文化的輸出不變。
+- **Windows 上 Markdown 的 frontmatter 是 CRLF,同一個檔混用兩種行尾。** YamlDotNet 預設用 `Environment.NewLine`,所以 Windows 上
+  frontmatter 各行是 `\r\n`、圍欄與內文卻是 `\n`,兩平台產出的位元組不同(YAML 解析器兩者都吃,不會壞,但跨平台比對與 git diff
+  會有雜訊)。現在整檔一律 `\n`。golden 比對原本把所有 `\r` 刪掉再比,所以三平台 CI 都沒抓到——Markdown 現在逐字比對,
+  基準也重產過(只少了 `\r`)。**升級注意**:見「升級必做」第 5 條。
+- **`content/` 不存在時,`verify` 的摘要印出一個從未寫出的報告路徑,媒體列也印 `media refs : 0`。** exit 2 與
+  `[error] no_content` 明細本來就對,只有摘要誤導。現在印 `report : (not written)` 與 `media checks : skipped (content directory not found)`。
+- **CLI 內建說明和 parser 不一致,也漏寫預設值與別名。** `extract` 參數錯誤時印的 `Usage:` 沒有 `--dry-run`(與 `--help` 不同);
+  六個指令的語法列現在只寫一次,`--help` 與參數錯誤的 `Usage:` 共用。`--help` 另補上:`--years` 可只給一年、`probe-orphans` 的
+  `--lang` 預設是 `lang_map` 第一個 key、`--out` / `--slugs` 的預設檔名、probe 部分 / 全部候選沒拿到回答時的 exit 1 / 2、動畫縮圖保留每一格、
+  `-h` / `-v` 別名,以及「`--root` 預設是 config 所在目錄」。
+
+### 文件
+
+- **hreflang 讀的是整份文件的 `<link rel="alternate" hreflang>`,不只 `<head>`。** 程式註解與 `docs/hreflang_量測與決策.md`
+  原本寫「`<head>` 裡的」,與實作不符;現在照實寫,並以測試釘住。行為**刻意維持讀整份文件**(設計決定,不是為了相容):
+  舊站的 `<head>` 常被 include 檔的 BOM 提早截斷、`<link>` 落進 body,只讀 head 會讓這類站的宣告整批、安靜地消失;
+  正文裡亂放的宣告則有門檻與「只建議不合併」擋著。
+- **`PolyMigrator` 的 XML 文件不再把 public 型別稱為「內部實作型別」。** `ExtractionPipeline`、`OutputVerifier`、`ThumbnailGenerator`、
+  `OrphanProber`、`OrphanFetcher` 等自 2.0.0 起就是 public、已經出貨,屬於公開面;現在寫成「較底層的進階用途、同樣受 semver 約束」。
+- **README 的相對連結改成絕對網址**(`622edd4`)。README.md 隨 NuGet 與 npm 主套件出貨,nuget.org 會把相對連結清成 `href=""`,
+  v2.3.1 套件頁上的 License 徽章、CHANGELOG、THIRD-PARTY-NOTICES、繁體中文說明、hreflang 文件、examples 都是死連結。
+  新增測試擋住之後再貼回相對路徑。
+- `docs/contracts.md`、兩份 README、`docs/公開介面盤點.md` 照 3.0 的契約改寫。
+
+### 打包
+
+- **tool 套件現在附 `NOTICE.txt` 與第三方授權聲明。** `Cornhsu.PolyMigrate` 把相依與 Magick.NET 的全平台原生檔
+  (內含 ImageMagick)整包打進 nupkg,本身就是再散布,但 2.x 沒附 Magick.NET 的 `Notice.txt`(Apache-2.0 §4(d) 要求)。
+  現在套件根目錄有 `NOTICE.txt` 與 `THIRD-PARTY-NOTICES.md`;npm 平台套件也多帶一份 `THIRD-PARTY-NOTICES.md`。
+- **tool 套件與 npm 執行檔不再夾帶 `System.IO.Hashing.dll`。** 它是建置期才用的 SourceLink 帶進來的相依,
+  程式碼沒有用到;現在只在建置時參考、不複製進輸出。
+
+### 內部
+
+- **npm 發佈只走 OIDC 信任發布。** `release.yml` 裡 2.1.0 首發用、之後一直休眠的 `NPM_TOKEN` 分支拿掉了——
+  只要有人加了同名 secret,它就會繞過信任發布、回到長效金鑰。環境或 `.npmrc` 裡出現 npm token 時,發佈步驟直接失敗。
+- **CI 與發佈用的 `actions/*` 全部改釘 commit SHA**(checkout、setup-dotnet、setup-node、upload-artifact,註解標版本)。
+  2.3.1 只釘了 `NuGet/login`;移動式 tag 可以被上游挪到任意 commit。
+
 ## 2.3.1
 
 **兩件已經壞了三個版本、但沒有人回報的事。** 對外契約與 exit code 不變。

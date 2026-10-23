@@ -7,6 +7,9 @@ public class LinkRewriterTests
 {
     private static readonly SiteConfig Config = TestConfigs.IbpsLike();
     private static readonly LinkRewriter Rewriter = new(Config.Site, Config.UrlPattern);
+
+    /// <summary>鏡像裡一頁都沒有:所有連結目標都「不是鏡像頁」,檔案判斷與 scheme 判斷才會生效。</summary>
+    private static readonly LinkRewriter NoMirrorPages = new(Config.Site, Config.UrlPattern, new HashSet<string>());
     private const string PageUrl = "https://www.ibps-austin.org/ch/news/20260712.php";
 
     [Theory]
@@ -32,6 +35,141 @@ public class LinkRewriterTests
     [Fact]
     public void RootIndex_CollapsesToSlash() =>
         Assert.Equal("/", Rewriter.Rewrite("/index.php", PageUrl));
+
+    [Theory]
+    // 解析後落在別的 host / 別的協定:不是站內頁,原樣保留(不可改寫成本站路由)
+    [InlineData("ftp://files.ibps-austin.org/a.pdf")]
+    // 解析不了的 href(UriFormatException):原樣保留,不得讓整頁抽取失敗
+    [InlineData("http:[x")]
+    [InlineData("ftp://[::1")]
+    public void NonSiteOrMalformedHrefs_Untouched(string href) =>
+        Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
+
+    [Theory]
+    // 第二輪審查:同 host 的非 http(s) 網址原本被當成站內路徑改寫(ftp://同站/ch/file.php → /ch/file)。
+    // 只有 http(s) 才是網站的頁;其他 scheme 原樣保留
+    [InlineData("ftp://www.ibps-austin.org/ch/file.php")]
+    [InlineData("FTP://WWW.IBPS-AUSTIN.ORG/ch/file.php")]
+    public void SameHostNonHttpScheme_Untouched(string href) =>
+        Assert.Equal(href, NoMirrorPages.Rewrite(href, PageUrl));
+
+    [Theory]
+    // 第二輪審查:只剩一段的路徑一律加尾斜線(「只剩語言前綴 → 該語首頁」),連帶把檔案也改壞了:
+    // /embed.swf → /embed.swf/、/calendar.html → /calendar.html/。剝完 strip_extensions 還帶副檔名的
+    // 是檔案,不是頁,不加尾斜線;語言首頁與無前綴的根層頁照舊
+    [InlineData("/embed.swf", "/embed.swf")]
+    [InlineData("/calendar.html", "/calendar.html")]
+    [InlineData("/brochure.pdf", "/brochure.pdf")]
+    [InlineData("/clip.mp4", "/clip.mp4")]
+    [InlineData("/ch/index.php", "/ch/")]              // 語言首頁:照舊
+    [InlineData("/about.php", "/about/")]              // 無語言前綴的根層頁:照舊(盤點 §3.7)
+    [InlineData("/v1.2-release.php", "/v1.2-release/")]   // .2-release 不是副檔名:仍是頁
+    [InlineData("/2019.05.01.php", "/2019.05.01/")]       // .01 不是副檔名
+    public void SingleSegment_TrailingSlashOnlyForPages(string href, string expected) =>
+        Assert.Equal(expected, NoMirrorPages.Rewrite(href, PageUrl));
+
+    [Theory]
+    // 最終驗證 I5:不知道鏡像有哪些頁(沒有傳路由集)時,原本「全部當成非鏡像頁」——日後新的呼叫端忘了傳,
+    // 指向鏡像頁的連結就會被改壞。沒傳時一律照頁的規則,與 9d17071 逐位元相同
+    [InlineData("/embed.swf", "/embed.swf/")]
+    [InlineData("/calendar.html", "/calendar.html/")]
+    [InlineData("ftp://www.ibps-austin.org/ch/file.php", "/ch/file")]
+    public void WithoutMirrorRoutes_FollowsThe9d17071PageRule(string href, string expected) =>
+        Assert.Equal(expected, Rewriter.Rewrite(href, PageUrl));
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 第三輪審查:頁的路由必須與 9d17071 逐位元相同。RouteForPath(redirect_map、RouteToKey、hreflang)
+    // 對任何輸入都不套用「檔案」判斷;只有改寫連結時、而且目標不是鏡像頁,才考慮它。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static LinkRewriter RewriterFor(string langMap, params string[] mirrorRoutes)
+    {
+        var config = TestConfigs.IbpsLike();
+        config.UrlPattern.LangMap = langMap.Split(',').ToDictionary(k => k, _ => "zh-Hant");
+        return new LinkRewriter(config.Site, config.UrlPattern, mirrorRoutes.ToHashSet(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("/jane.doe.php", "/jane.doe/")]
+    [InlineData("/node.js.php", "/node.js/")]
+    [InlineData("/asp.net.php", "/asp.net/")]
+    [InlineData("/v2.0.release.php", "/v2.0.release/")]
+    [InlineData("/index.en.php", "/index.en/")]
+    [InlineData("/2026.q1.php", "/2026.q1/")]
+    [InlineData("/CONTACT.PHP", "/CONTACT.PHP/")]          // 大小寫與 strip_extensions 不符:沒剝,仍是頁
+    [InlineData("/calendar.html", "/calendar.html/")]      // 鏡像裡的 calendar.html 頁
+    [InlineData("/jane.doe", "/jane.doe/")]                // 乾淨網址站
+    [InlineData("/zh.tw/index.php", "/zh.tw/")]            // key 帶點的語言首頁
+    [InlineData("/node.js/", "/node.js/")]
+    [InlineData("/about.php", "/about/")]
+    [InlineData("/ch/index.php", "/ch/")]
+    [InlineData("/ch/news/x.y.php", "/ch/news/x.y")]
+    public void PageRoutes_AreExactlyThe9d17071Rule(string path, string route) =>
+        Assert.Equal(route, Rewriter.RouteForPath(path));
+
+    [Fact]
+    public void RouteForUrl_IgnoresTheScheme_LikeBefore()
+    {
+        // hreflang 的目標路由(hreflang_map.csv)屬於「頁的路由」,不可因為連結改寫的 scheme 判斷而改變
+        Assert.Equal("/ch/news/a", Rewriter.RouteForUrl("ftp://www.ibps-austin.org/ch/news/a.php"));
+    }
+
+    [Theory]
+    // 目標是鏡像頁:一律照頁的規則(與 9d17071 相同),不管它長得像不像檔案
+    [InlineData("/calendar.html", "/calendar.html/")]
+    [InlineData("/jane.doe", "/jane.doe/")]
+    [InlineData("ftp://www.ibps-austin.org/calendar.html", "/calendar.html/")]   // 同 host 的非 http(s),指到鏡像頁:照舊改寫
+    public void LinkToAMirrorPage_FollowsThePageRule(string href, string expected) =>
+        Assert.Equal(expected, RewriterFor("ch", "/calendar.html/", "/jane.doe/").Rewrite(href, PageUrl));
+
+    [Theory]
+    // 目標不是鏡像頁時才考慮「檔案」:剝了 strip_extensions、拿掉了 index、原本以 / 結尾、或是語言前綴的,仍當頁
+    [InlineData("/jane.doe.php", "/jane.doe/")]
+    [InlineData("/node.js/", "/node.js/")]
+    [InlineData("/zh.tw", "/zh.tw/")]
+    [InlineData("/zh.tw/index.php", "/zh.tw/")]
+    [InlineData("/embed.swf", "/embed.swf")]
+    [InlineData("/brochure.pdf", "/brochure.pdf")]
+    [InlineData("/v1.2-rc", "/v1.2-rc/")]                   // .2-rc 有非英數字:不是副檔名(第三輪 R4)
+    [InlineData("/site.webmanifest", "/site.webmanifest")]  // 11 字的副檔名(R5)
+    [InlineData("/a.abcdefghijklmnopq", "/a.abcdefghijklmnopq/")]   // 17 字:太長,不當副檔名(R5)
+    [InlineData("/.htaccess", "/.htaccess")]                // 點檔案(R6)
+    [InlineData("ftp://www.ibps-austin.org/ch/file.php", "ftp://www.ibps-austin.org/ch/file.php")]
+    public void LinkToANonMirrorTarget_MayBeAFile(string href, string expected) =>
+        Assert.Equal(expected, RewriterFor("ch,zh.tw", "/calendar.html/").Rewrite(href, PageUrl));
+
+    [Theory]
+    // 「是不是鏡像頁」是路由逐字比對(ordinal、分大小寫),CHANGELOG 照這個寫(最終驗證 I4)
+    [InlineData("/contact.php", "/contact/")]               // 大小寫相同:鏡像頁,照頁的規則
+    [InlineData("/CONTACT.PHP", "/CONTACT.PHP")]            // 大小寫不同:不是鏡像頁(9d17071 是 /CONTACT.PHP/)
+    [InlineData("/CALENDAR.HTML", "/CALENDAR.HTML")]        // 同上(9d17071 是 /CALENDAR.HTML/)
+    [InlineData("/docs.v2", "/docs.v2")]                    // 只有子頁、沒有自己的 index 頁:不是鏡像頁(9d17071 是 /docs.v2/)
+    [InlineData("ftp://www.ibps-austin.org/docs.v2/", "ftp://www.ibps-austin.org/docs.v2/")]
+    public void MirrorPageMatching_IsOrdinal_AndNeedsThePageItself(string href, string expected) =>
+        Assert.Equal(expected, RewriterFor("ch", "/contact/", "/calendar.html/", "/docs.v2/a").Rewrite(href, PageUrl));
+
+    [Theory]
+    // 絕對 http(s) 連結一律原樣保留(只改寫相對連結),同站的也一樣;scheme 的大小寫不影響這個判斷。
+    // 測資必須是「同站」:別站的網址就算前綴比對改成分大小寫,也會在後面的 host 檢查被原樣傳回,守不住前綴這一關
+    [InlineData("https://www.ibps-austin.org/ch/news/a.php")]
+    [InlineData("HTTPS://WWW.IBPS-AUSTIN.ORG/ch/news/a.php")]   // 前綴分大小寫的話會被改寫成 /ch/news/a
+    public void AbsoluteHttpLinks_PassThrough_SchemeCaseInsensitive(string href) =>
+        Assert.Equal(href, Rewriter.Rewrite(href, PageUrl));
+
+    [Fact]
+    public void SiteHostMatch_IsCaseInsensitive()
+    {
+        // 主機名本來就不分大小寫;舊站內文裡大小寫混用的絕對連結仍是站內連結
+        Assert.Equal("/ch/news/a", Rewriter.RouteForUrl("https://WWW.IBPS-AUSTIN.ORG/ch/news/a.php"));
+        Assert.Null(Rewriter.RouteForUrl("https://en.ibps-austin.org/ch/news/a.php"));   // 子網域是別的站
+        Assert.Null(Rewriter.RouteForUrl("not a url"));
+    }
+
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    public void NullOrEmptyHref_YieldsEmpty(string? href, string expected) =>
+        Assert.Equal(expected, Rewriter.Rewrite(href, PageUrl));
 
     [Theory]
     // query 與 fragment 是頁面身分的一部分,改寫時不可丟(?id=5 兩頁不能塌成同一路由)

@@ -1,40 +1,14 @@
-using PolyMigrate.Cli;
-
 // Console 是行程級全域,重導向不能並行 → 關掉這個組件的平行測試
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace PolyMigrate.Cli.Tests;
 
-public class CliTests : IDisposable
+/// <summary>
+/// 最早的一批 CLI 測試(參數解析、slugs、exit code 契約)。Console 重導向、拋棄式目錄與
+/// Run / RunWith 都來自 <see cref="CliTestBase"/>,與各子指令的測試檔共用同一份。
+/// </summary>
+public class CliTests : CliTestBase
 {
-    private readonly string _dir = Directory.CreateTempSubdirectory("polymigrate-cli").FullName;
-
-    public void Dispose() => Directory.Delete(_dir, recursive: true);
-
-    private static Task<(int Exit, string Out, string Err)> Run(params string[] args) =>
-        RunWith(CancellationToken.None, args);
-
-    private static async Task<(int Exit, string Out, string Err)> RunWith(
-        CancellationToken ct, params string[] args)
-    {
-        var origOut = Console.Out;
-        var origErr = Console.Error;
-        var so = new StringWriter();
-        var se = new StringWriter();
-        Console.SetOut(so);
-        Console.SetError(se);
-        try
-        {
-            var exit = await Cli.RunAsync(args, ct);
-            return (exit, so.ToString(), se.ToString());
-        }
-        finally
-        {
-            Console.SetOut(origOut);
-            Console.SetError(origErr);
-        }
-    }
-
     [Fact]
     public async Task Version_ReturnsZero()
     {
@@ -88,7 +62,7 @@ public class CliTests : IDisposable
     [Fact]
     public async Task Extract_NonexistentConfig_ReturnsTwo()
     {
-        var r = await Run("extract", Path.Combine(_dir, "nope.yaml"));
+        var r = await Run("extract", Path.Combine(Root, "nope.yaml"));
         Assert.Equal(2, r.Exit);
         Assert.Contains("Config file not found", r.Err);
     }
@@ -139,7 +113,7 @@ public class CliTests : IDisposable
 
     private void AddMirrored(string langPrefix, string section, params string[] fileNames)
     {
-        var dir = Path.Combine(_dir, "raw", langPrefix, section);
+        var dir = Path.Combine(Root, "raw", langPrefix, section);
         Directory.CreateDirectory(dir);
         foreach (var name in fileNames)
         {
@@ -153,11 +127,11 @@ public class CliTests : IDisposable
         AddMirrored("ch", "news", "20260214.php.html", "20260101.php.html");
         AddMirrored("en", "news", "20260101.php.html");
 
-        var r = await Run("slugs", _dir, "--section", "news");
+        var r = await Run("slugs", Root, "--section", "news");
 
         Assert.Equal(0, r.Exit);
         // stdout 必須逐字只有 slug——它會被直接導成檔案再餵給 fetch-orphans --slugs
-        Assert.Equal("20260101\n20260214\n", r.Out.Replace("\r", ""));
+        Assert.Equal("20260101\n20260214\n", r.Out);
         Assert.Contains("2 slugs", r.Err);
     }
 
@@ -167,10 +141,10 @@ public class CliTests : IDisposable
         AddMirrored("ch", "news", "20260101.php.html");
         AddMirrored("en", "news", "02142026.php.html");
 
-        var r = await Run("slugs", _dir, "--section", "news", "--lang", "en");
+        var r = await Run("slugs", Root, "--section", "news", "--lang", "en");
 
         Assert.Equal(0, r.Exit);
-        Assert.Equal("02142026\n", r.Out.Replace("\r", ""));
+        Assert.Equal("02142026\n", r.Out);
     }
 
     [Fact]
@@ -178,7 +152,7 @@ public class CliTests : IDisposable
     {
         AddMirrored("ch", "news", "20260101.php.html");
 
-        var r = await Run("slugs", _dir, "--section", "newz");
+        var r = await Run("slugs", Root, "--section", "newz");
 
         Assert.Equal(2, r.Exit);
         Assert.Empty(r.Out);
@@ -188,7 +162,7 @@ public class CliTests : IDisposable
     [Fact]
     public async Task Slugs_MissingSection_ReturnsUsage()
     {
-        var r = await Run("slugs", _dir);
+        var r = await Run("slugs", Root);
 
         Assert.Equal(2, r.Exit);
         Assert.Contains("Usage: polymigrate slugs", r.Err);
@@ -221,7 +195,7 @@ public class CliTests : IDisposable
     /// <summary>造一份最小但合法的 Phase 2 輸出;body 決定這次要觸發哪一類巡檢結果。</summary>
     private string WriteOutput(string body, bool withMediaDir = false, string? knownMissing = null)
     {
-        var outDir = Path.Combine(_dir, "out");
+        var outDir = Path.Combine(Root, "out");
         Directory.CreateDirectory(Path.Combine(outDir, "content"));
         File.WriteAllText(Path.Combine(outDir, "content", "index.md"),
             $"""
@@ -328,7 +302,7 @@ public class CliTests : IDisposable
     {
         var outDir = WriteOutput("# 首頁");
         AddOrphanPage(outDir);
-        var allowFile = Path.Combine(_dir, "allow_unlinked.txt");
+        var allowFile = Path.Combine(Root, "allow_unlinked.txt");
         File.WriteAllText(allowFile, "# 刻意不連的到達頁\nch/blia/index.md\n");
 
         var r = await Run("verify", outDir, "--allow-unlinked", allowFile);
@@ -341,7 +315,7 @@ public class CliTests : IDisposable
     {
         var outDir = WriteOutput("# 首頁");
 
-        var r = await Run("verify", outDir, "--allow-unlinked", Path.Combine(_dir, "nope.txt"));
+        var r = await Run("verify", outDir, "--allow-unlinked", Path.Combine(Root, "nope.txt"));
 
         Assert.Equal(2, r.Exit);
         Assert.Contains("Allow-unlinked list not found", r.Err);
@@ -351,7 +325,7 @@ public class CliTests : IDisposable
     public async Task Cancelled_Returns130()
     {
         // 已取消的 token:probe 在第一次 polite delay 就中止,不會發出任何請求
-        var configPath = Path.Combine(_dir, "site.yaml");
+        var configPath = Path.Combine(Root, "site.yaml");
         File.WriteAllText(configPath, MinimalConfig);
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();

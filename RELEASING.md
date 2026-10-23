@@ -39,11 +39,25 @@ git push origin v1.0.0-preview.1
 ## 本機乾跑(不發佈,驗證封裝可裝可跑)
 
 ```sh
-dotnet pack -c Release -o ./artifacts
-dotnet tool install --global --add-source ./artifacts Cornhsu.PolyMigrate
-polymigrate --version && polymigrate --help
-dotnet tool uninstall --global Cornhsu.PolyMigrate
+v=0.0.0-local.$(date +%s)                      # 每次一個沒用過的版本號(理由見下)
+dotnet pack -c Release -o ./artifacts -p:Version=$v
+dotnet tool install --tool-path ./artifacts/tool --add-source ./artifacts Cornhsu.PolyMigrate --version $v
+./artifacts/tool/polymigrate --version && ./artifacts/tool/polymigrate --help
+rm -rf ./artifacts                             # artifacts/ 在 .gitignore 裡;只裝在這裡,不必 uninstall
 ```
+
+三個陷阱,都踩得到:
+
+- **不指定 `--version` 會裝到 nuget.org 上的正式版。** 本機 pack 不帶 `-p:Version` 時是 `0.0.0-dev`(預覽版),
+  `--add-source` 只是**多加**一個來源,`dotnet tool install` 照樣挑 nuget.org 上最新的正式版(例如 2.3.1)——
+  驗到的根本不是剛 pack 的東西。
+- **同一個版本號第二次 pack,裝到的是舊的那一份。** `dotnet tool install` 先看 `~/.nuget/packages` 的快取,
+  已經有 `cornhsu.polymigrate/<版本>` 就不會去讀新 pack 的 nupkg。所以每次用唯一的版本號(上面用 Unix 時間);
+  也不要用真的版本號(例如 `3.0.0`)乾跑:本機的假 3.0.0 會留在快取裡,之後裝正式的 3.0.0 時拿到的是它。
+- **`--global` 會撞到使用者已安裝的版本**:全域裝了 2.3.1 時 `install --global` 直接失敗,改用 `--tool-path`
+  裝在 `./artifacts/tool`,不動到全域。
+
+留在 `~/.nuget/packages/cornhsu.polymigrate/` 底下的 `0.0.0-local.*` 不影響任何正式版本,要清可以整個刪掉。
 
 > tool 套件約 100 MB——內含 Magick.NET 全平台原生二進位(EXIF 轉正縮圖用)。
 > 若要瘦身,backlog 有「把 thumbs 拆成選配套件」一項。
@@ -57,12 +71,17 @@ dotnet tool uninstall --global Cornhsu.PolyMigrate
   由 `npm/prepare.mjs` 組成主套件 `cornhsu-polymigrate`(只含啟動腳本)+ 六個平台包
   (`@cornhsu/polymigrate-*`,掛 `optionalDependencies`,npm 依 os/cpu 只下載當前平台那份)。
 - **只有 CLI 上 npm**;`Cornhsu.PolyMigrate.Core` 是給 .NET 開發者的函式庫,受眾在 NuGet。
-- 認證自動切換:有 `NPM_TOKEN` secret → token(首次發布只能這樣,信任發布需先有套件才設定得了);
-  沒有 → OIDC 信任發布(零長效金鑰)。設定好信任發布後把 secret 刪掉即自動改走 OIDC。
+- 認證只走 OIDC 信任發布(零長效金鑰)。七個套件(`cornhsu-polymigrate` 與六個 `@cornhsu/polymigrate-*`)
+  都已存在、信任發布都已設定。workflow 沒有 token 通道:環境或 `.npmrc` 裡出現 npm token 時,
+  `Publish to npm` 那一步直接失敗。
 - 發布冪等:已存在的版本跳過而非報錯,某包失敗重跑不會被前面已成功的擋住。
 
-一次性設定:在 npmjs.org 為 `cornhsu-polymigrate` 與 `@cornhsu/polymigrate-*` 設 trusted publisher
+一次性設定(已完成):在 npmjs.org 為 `cornhsu-polymigrate` 與 `@cornhsu/polymigrate-*` 設 trusted publisher
 (repo `HSU-YU-MING/cornhsu-polymigrate`、workflow `release.yml`)。
+
+**新增平台包時**,npm 的信任發布無法建立全新套件——套件要先存在才設定得了。那一包的首發由維護者
+在本機用自己的 npm 登入手動 `npm publish` 建立,接著到 npmjs 為它設信任發布,之後就由 `release.yml` 接手。
+**不要為了首發在 repo 加 `NPM_TOKEN` secret**:workflow 已經不讀它(2.1.0 那條 token 分支在 3.0.0 拿掉了)。
 
 ## 發布前檢查清單
 
@@ -72,9 +91,11 @@ dotnet tool uninstall --global Cornhsu.PolyMigrate
 - [ ] 破壞性變更(major)在 CHANGELOG 寫明遷移方式
 - [ ] 相依套件有增刪或改版 → [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) 跟著更新
 
-> **授權通知已自動處理,不需人工確認。** npm 平台套件夾了 `Magick.Native-Q8-*`,
-> 那是實質的再散布,Apache-2.0 §4(d) 要求隨附 Magick.NET 的 `Notice.txt`。
-> `npm/prepare.mjs` 會依 `project.assets.json` 解析出的實際版本去 NuGet 快取取那份通知,
-> 放進每個平台套件,**找不到就中止建置**;release.yml 另有一步驗成品確實帶到。
+> **授權通知已自動處理,不需人工確認。** tool 套件(`PackAsTool` 把相依與原生檔整包打進 nupkg)
+> 與 npm 平台套件(self-contained 執行檔)都夾了 `Magick.Native-Q8-*`,那是實質的再散布,
+> Apache-2.0 §4(d) 要求隨附 Magick.NET 的 `Notice.txt`。兩條通路都依實際還原到的版本去 NuGet 快取
+> 取那份通知,連同 `THIRD-PARTY-NOTICES.md` 放進套件,**找不到就中止**:tool 套件由
+> `PolyMigrate.Cli.csproj` 的 `_PackMagickNotice` target 讓 `dotnet pack` 失敗;npm 由 `npm/prepare.mjs`
+> 中止建置,release.yml 另有一步驗成品確實帶到。
 > 原本這是這張清單上的一條人工項目——而人工項目遲早會被忘記,那正是把它自動化的理由。
-> NuGet 通路不受影響(相依由 NuGet 解析、授權隨套件走)。
+> 只有函式庫 `Cornhsu.PolyMigrate.Core` 不需要(相依由使用者端的 NuGet 解析、授權隨各套件走)。

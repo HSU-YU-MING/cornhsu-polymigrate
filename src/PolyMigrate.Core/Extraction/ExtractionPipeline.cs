@@ -86,17 +86,40 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
     /// <param name="paths">輸入/輸出位置。</param>
     /// <param name="dryRun">true = 完整跑抽取與統計但不寫任何檔案(§3.8)。</param>
-    public ExtractionReport Run(ExtractionPaths paths, bool dryRun = false)
+    public ExtractionReport Run(ExtractionPaths paths, bool dryRun = false) =>
+        Run(paths, dryRun, CancellationToken.None);
+
+    /// <summary>
+    /// 測試用:每個取消檢查點之前呼叫一次,參數是檢查點標籤(<c>page:&lt;raw 相對路徑&gt;</c>、<c>write</c>)。
+    /// 讓測試能在「半途」取消——只用預先取消的 token,測不出逐頁的檢查到底有沒有作用。
+    /// </summary>
+    internal Action<string>? OnCheckpoint { get; init; }
+
+    /// <summary>
+    /// 同上,可取消(取消時擲 <see cref="OperationCanceledException"/>;CLI 接 Ctrl-C 後回 130)。
+    /// 逐頁檢查一次、媒體檔算 sha1 前逐檔檢查、寫清單之前再檢查一次:已寫出的 .md 保留(只寫不刪,重跑會覆寫),
+    /// 清單檔要嘛整組寫出、要嘛一份都不寫。3.0 起 public:以新增 overload 的方式加,不替既有方法加選用參數
+    /// (那是二進位不相容)。
+    /// <para>方法開頭刻意不另外檢查:第一頁之前就是一個檢查點,0 頁時則由寫清單前那一個接住。</para>
+    /// </summary>
+    public ExtractionReport Run(ExtractionPaths paths, bool dryRun, CancellationToken ct)
     {
         var parser = new RawPageParser(config.Site, config.UrlPattern);
-        var extractor = new PageExtractor(config);
         var links = new LinkRewriter(config.Site, config.UrlPattern);
         var encoding = TextEncodings.Resolve(config.Site.Encoding);
         var locales = config.UrlPattern.LangMap.Values.Distinct().ToList();
 
-        var files = Directory.EnumerateFiles(paths.RawDir, "*.html", SearchOption.AllDirectories)
+        var pages = Directory.EnumerateFiles(paths.RawDir, "*.html", SearchOption.AllDirectories)
             .OrderBy(f => Path.GetRelativePath(paths.RawDir, f).Replace('\\', '/'), StringComparer.Ordinal)
+            .Select(f => parser.Parse(paths.RawDir, f))
             .ToList();
+        // 鏡像頁的路由集:內文連結指到這些頁時一律照頁的規則改寫,只有不是鏡像頁的目標才判斷「是不是檔案」
+        var pageRoutes = pages
+            .Select(p => links.RouteForPath(new Uri(p.SourceUrl).AbsolutePath))
+            .ToHashSet(StringComparer.Ordinal);
+        var extractor = new PageExtractor(config, pageRoutes);
+        // config selector 寫壞的話在寫任何檔之前就停(ConfigException),不要半途崩潰留下半套輸出
+        extractor.EnsureSelectorsValid(pages);
 
         var aggregator = new InventoryAggregator(links);
         var pathIssues = new List<PathIssue>();
@@ -104,10 +127,10 @@ public sealed class ExtractionPipeline(SiteConfig config)
         var writtenPaths = new HashSet<string>(StringComparer.Ordinal);
         var pagesWritten = 0;
 
-        foreach (var file in files)
+        foreach (var page in pages)
         {
-            var page = parser.Parse(paths.RawDir, file);
-            var extracted = extractor.Extract(page, File.ReadAllText(file, encoding), paths.MediaDir);
+            Checkpoint("page:" + Path.GetRelativePath(paths.RawDir, page.FilePath).Replace('\\', '/'), ct);
+            var extracted = extractor.Extract(page, File.ReadAllText(page.FilePath, encoding), paths.MediaDir);
 
             // §3.4:不安全路徑在「任何平台」都一致地拒寫並記錄——兩平台產出必須相同
             var relPath = MarkdownRelativePath(page);
@@ -137,22 +160,43 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         var hreflang = HreflangIndex.Build(aggregator.HreflangLinks, aggregator.RouteToKey);
         var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang);
+        // media_manifest 的 sha1 是收尾階段最慢的一段(大媒體目錄可達數十秒):先逐檔算完(每檔一個檢查點),
+        // 再開始寫清單——中斷時清單仍是「一份都不寫」,而不是寫了一半
+        var manifest = dryRun ? null : BuildMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs, ct);
+        try
+        {
+            Checkpoint("write", ct);
+        }
+        catch (OperationCanceledException)
+        {
+            manifest?.Cache.TrySave();   // 雜湊已全部算完:照樣存進快取,重跑不必重讀
+            throw;
+        }
         if (!dryRun)
         {
             WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions);
             WriteHreflangMap(paths.OutDir, hreflang);
-            WriteMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs);
+            Csv.Write(Path.Combine(paths.OutDir, "media_manifest.csv"), manifest!.Rows);
             WriteRedirectMap(paths.OutDir, aggregator.Redirects);
             WriteRedirectExports(paths.OutDir, aggregator.Redirects);
             WriteMissingImages(paths.OutDir, aggregator.Missing);
             WritePathIssues(paths.OutDir, pathIssues);
             File.WriteAllText(Path.Combine(paths.OutDir, "need_fetch_media.txt"),
                 string.Join('\n', aggregator.NeedFetch), Utf8NoBom);
+            // 內部快取最後才存、而且存不了就算了:原本夾在 media_manifest.csv 與 redirect_map.csv 之間,
+            // 擲 IO 錯誤時清單只寫一半、exit 2(第三輪審查)
+            manifest.Cache.TrySave();
         }
 
         return BuildReport(aggregator.Inventory, locales, pagesWritten, aggregator.MediaRefs.Count,
             aggregator.Missing.Count, aggregator.NeedFetch.Count, suggestions.Count / 2, pathIssues,
             FindStaleOutputs(paths.OutDir, writtenPaths), hreflang);
+    }
+
+    private void Checkpoint(string label, CancellationToken ct)
+    {
+        OnCheckpoint?.Invoke(label);
+        ct.ThrowIfCancellationRequested();
     }
 
     /// <summary>
@@ -295,8 +339,11 @@ public sealed class ExtractionPipeline(SiteConfig config)
         Csv.Write(Path.Combine(outDir, "content_inventory.csv"), rows);
     }
 
-    private static void WriteMediaManifest(
-        string outDir, string mediaDir, SortedDictionary<string, MediaEntry> mediaRefs)
+    /// <summary>算好的 media_manifest.csv 列與更新過的雜湊快取(寫檔留給呼叫端,見 Run)。</summary>
+    private sealed record MediaManifest(List<IReadOnlyList<string>> Rows, MediaHashCache Cache);
+
+    private MediaManifest BuildMediaManifest(
+        string outDir, string mediaDir, SortedDictionary<string, MediaEntry> mediaRefs, CancellationToken ct)
     {
         // 雜湊快取:沒動過的檔案免重讀(重跑數 GB 媒體從分鐘級降到秒級)
         var cache = MediaHashCache.Load(Path.Combine(outDir, ".polymigrate", "media_sha1_cache.csv"));
@@ -306,6 +353,17 @@ public sealed class ExtractionPipeline(SiteConfig config)
         };
         foreach (var (relative, entry) in mediaRefs)
         {
+            try
+            {
+                Checkpoint("media:" + relative, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // 已經算好的雜湊照樣存進快取(內部加速檔,不是交付物):中斷後重跑不必從頭重讀數 GB。
+                // 存不了就算了——不可以讓 IO 錯誤蓋掉取消(CLI 要回 130,不是 2)
+                cache.TrySave();
+                throw;
+            }
             var localAbs = MediaPaths.LocalPath(mediaDir, relative);
             var localPath = Path.GetRelativePath(outDir, localAbs).Replace('\\', '/');
             if (localPath.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(localPath))
@@ -317,8 +375,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
             rows.Add(new[] { localPath, entry.OriginalUrl,
                 string.Join(" | ", entry.Refs), string.Join(" | ", entry.Alts), sha1, bytes });
         }
-        Csv.Write(Path.Combine(outDir, "media_manifest.csv"), rows);
-        cache.Save();
+        return new MediaManifest(rows, cache);
     }
 
     /// <summary>

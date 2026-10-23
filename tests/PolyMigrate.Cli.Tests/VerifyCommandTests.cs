@@ -1,0 +1,267 @@
+namespace PolyMigrate.Cli.Tests;
+
+/// <summary>
+/// <c>polymigrate verify</c> 的參數與結束路徑(CliTests 末段已有 0/1/2 的基本驗收,這裡補其餘分支)。
+/// </summary>
+public class VerifyCommandTests : CliTestBase
+{
+    /// <summary>站根 index.md(內建豁免孤島偵測),內文由呼叫端決定。</summary>
+    private string WriteSite(string body)
+    {
+        Write("out/content/index.md",
+            $"""
+            ---
+            source_url: https://example.invalid/index.php
+            lang: zh-Hant
+            slug: index
+            translation_key: /index
+            title: 首頁
+            page_type: page
+            ---
+
+            {body}
+
+            """);
+        return PathOf("out");
+    }
+
+    [Fact]
+    public async Task KeptIframe_ToAMigratedPage_IsNotABrokenLink()
+    {
+        // 審查實測:同一頁同時有 <a href="/ch/news/b.php"> 與同址的 <iframe src>,a 被改寫成 /ch/news/b,
+        // 原樣保留的 iframe 卻還是 .php → verify 報假的 broken_link,exit 由 0 變 2
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Write("site/raw/ch/news/a.php.html",
+            Page("<p>表單如下</p><a href=\"/ch/news/b.php\">b</a><iframe src=\"/ch/news/b.php\"></iframe>"));
+        Write("site/raw/ch/news/b.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("<iframe src=\"/ch/news/b\"></iframe>", File.ReadAllText(PathOf("site/content/ch/news/a.md")));
+    }
+
+    [Fact]
+    public async Task LazyLoadedIframe_DataSrcToAMigratedPage_IsNotABrokenLink()
+    {
+        // 第二輪審查:lazy-load 的 iframe 把真正的網址放在 data-src(src 是 about:blank)。B1 只改寫 src,
+        // 而 verify 掃 src= 的規則前面沒有邊界,data-src 也被當成連結 → 指向已搬好的頁也報 broken_link,
+        // 9f41339 回 0、修正後回 2。data-src 不是瀏覽器會載入的屬性,不該被當成站內連結檢查
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Write("site/raw/ch/news/a.php.html", Page(
+            "<p>x</p><a href=\"/ch/news/b.php\">b</a><iframe data-src=\"/ch/news/b.php\" src=\"about:blank\" class=\"lazyload\"></iframe>"));
+        Write("site/raw/ch/news/b.php.html", Page("<a href=\"/ch/news/a.php\">a</a>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(0, r.Exit);
+    }
+
+    [Fact]
+    public async Task PagesReachedOnlyViaFtpLinkOrDataSrc_AreNotUnlinked()
+    {
+        // 第三輪審查 B3 的重現(review3 的 site-up):9d17071 回 0,9254591 / 75fbf30 之後回 1——
+        // 同 host 的 ftp:// 連結與 data-src 不再算入口,被它們指到、又沒有其他入口的頁開始報 unlinked_page
+        var config = Write("site/site.yaml", Config().Replace("base_url: https://example.invalid", "base_url: https://legacy.example.org"));
+        Write("site/raw/ch/index.php.html", Page("<a href=\"/ch/news/a.php\">a</a> <a href=\"/ch/news/c.php\">c</a>"));
+        Write("site/raw/ch/news/a.php.html", Page("<a href=\"ftp://legacy.example.org/ch/news/b.php\">b via ftp</a>"));
+        Write("site/raw/ch/news/b.php.html", Page("<p>b</p>"));
+        Write("site/raw/ch/news/c.php.html", Page("<iframe data-src=\"/ch/news/d\" src=\"about:blank\"></iframe>"));
+        Write("site/raw/ch/news/d.php.html", Page("<p>d</p>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(0, r.Exit);
+        Assert.DoesNotContain("unlinked_page", r.Out);
+    }
+
+    [Fact]
+    public async Task KeptIframe_ToASameSitePageNotInTheMirror_IsABrokenLink()
+    {
+        // 剩下真的會多報的情境:iframe 指向沒搬過來的站內舊網址(例如表單頁)。修 H3 之前這個 iframe
+        // 整個從 Markdown 消失,verify 看不到它;現在保留下來,新站上它確實是壞的嵌入 → broken_link、exit 2。
+        // 這是既有情境的 exit code 改變(0/1 → 2),已寫進 CHANGELOG 的升級注意並列入待裁定;
+        // 這條測試讓那個決定看得見——改判的話這裡要一起改
+        var config = Write("site/site.yaml", Config());
+        Write("site/raw/ch/index.php.html", Page("<p>報名</p><iframe src=\"/forms/signup.php\"></iframe>"));
+        Assert.Equal(0, (await Run("extract", config)).Exit);
+
+        var r = await Run("verify", PathOf("site"));
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("  [error] ch/index.md: broken_link /forms/signup\n", r.Out);
+    }
+
+    [Fact]
+    public async Task Cancelled_Returns130_WithoutWritingTheReport()
+    {
+        // 原本同步指令不看 token:第一次 Ctrl-C 沒作用、照常跑完回 0/1/2;第二次由 runtime 直接終止,
+        // 結束碼由作業系統決定(Windows 0xC000013A),不是契約的 130
+        var outDir = WriteSite("# 首頁");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var r = await RunWith(cts.Token, "verify", outDir);
+
+        Assert.Equal(130, r.Exit);
+        Assert.Equal("cancelled.\n", r.Err);
+        Assert.False(File.Exists(PathOf("out/verify_report.csv")));
+    }
+
+    [Fact]
+    public async Task NoContentDirectory_ExitsTwo()
+    {
+        // 指錯目錄(例如把 raw/ 當成輸出根目錄)必須失敗,不能是「0 頁、全部通過」
+        Directory.CreateDirectory(PathOf("out"));
+
+        var r = await Run("verify", PathOf("out"));
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("  errors          : 1\n", r.Out);
+        Assert.Contains($"  [error] : no_content content directory not found: {PathOf("out/content")}\n", r.Out);
+        // 摘要不可以誤導:原本照印一個從未寫出的報告路徑,媒體列也印「media refs : 0」(像是檢查過、零筆)
+        Assert.Contains("  media checks    : skipped (content directory not found)\n", r.Out);
+        Assert.Contains("  report          : (not written)\n", r.Out);
+        Assert.DoesNotContain("verify_report.csv", r.Out);
+        Assert.False(File.Exists(PathOf("out/verify_report.csv")));
+    }
+
+    [Fact]
+    public async Task MediaDirectoryAbsent_SaysSkipped_AndDoesNotFail()
+    {
+        var outDir = WriteSite("![圖](/media/x.jpg)");
+
+        var r = await Run("verify", outDir);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("  media checks    : skipped (media directory not found)\n", r.Out);
+        Assert.DoesNotContain("media refs", r.Out);
+    }
+
+    [Theory]
+    [InlineData(true, 0)]    // 圖在 --media 指定的目錄裡 → 乾淨
+    [InlineData(false, 2)]   // 不在 → missing_media(error)
+    public async Task MediaOverride_IsWhereMediaIsLookedUp(bool present, int expectedExit)
+    {
+        var outDir = WriteSite("![圖](/media/img/x.jpg)");
+        Directory.CreateDirectory(PathOf("elsewhere"));
+        if (present)
+        {
+            Write("elsewhere/img/x.jpg", "jpeg");
+        }
+
+        var r = await Run("verify", outDir, "--media", PathOf("elsewhere"));
+
+        Assert.Equal(expectedExit, r.Exit);
+        Assert.Contains("  media refs      : 1\n", r.Out);
+        if (!present)
+        {
+            Assert.Contains("  [error] index.md: missing_media /media/img/x.jpg\n", r.Out);
+        }
+    }
+
+    [Fact]
+    public async Task MediaPrefixOverride_ChangesWhatCountsAsMedia()
+    {
+        // 新站把媒體放在 /assets/ 時:/assets/ 的引用對磁碟查,/media/ 的就只是一般連結(→ 壞連結)
+        var outDir = WriteSite("![a](/assets/a.jpg) [b](/media/b.jpg)");
+        Write("out/media/a.jpg", "jpeg");
+
+        var r = await Run("verify", outDir, "--media-prefix", "/assets/");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("  media refs      : 1\n", r.Out);
+        Assert.Contains("  links checked   : 1\n", r.Out);
+        Assert.Contains("  [error] index.md: broken_link /media/b.jpg\n", r.Out);
+        Assert.DoesNotContain("missing_media", r.Out);
+    }
+
+    [Fact]
+    public async Task ErrorsAndWarnings_ExitsTwo()
+    {
+        // error 優先於 warning:同時有兩者時是 2,不是 1
+        var outDir = WriteSite("[壞](/nope) ![已知壞圖](/media/gone.jpg)");
+        Directory.CreateDirectory(PathOf("out/media"));
+        Write("out/missing_images.csv", "source_page,missing_image\r\nx,/media/gone.jpg\r\n");
+
+        var r = await Run("verify", outDir);
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("  errors          : 1\n", r.Out);
+        Assert.Contains("  warnings        : 1\n", r.Out);
+        Assert.Contains("  [warning] index.md: known_missing_media /media/gone.jpg\n", r.Out);
+    }
+
+    [Fact]
+    public async Task WarningsOtherThanUnlinked_GetNoUnlinkedHint_AndNoErrorLines()
+    {
+        // 「去選單加連結、或用 --allow-unlinked」的提示只屬於 unlinked_page:原站壞圖這類 warning
+        // 跟選單無關,印出來只會誤導。warning 也只出現在 [warning] 明細,不可混進 [error]
+        var outDir = WriteSite("![已知壞圖](/media/gone.jpg)");
+        Directory.CreateDirectory(PathOf("out/media"));
+        Write("out/missing_images.csv", "source_page,missing_image\r\nx,/media/gone.jpg\r\n");
+
+        var r = await Run("verify", outDir);
+
+        Assert.Equal(1, r.Exit);
+        Assert.Contains("  [warning] index.md: known_missing_media /media/gone.jpg\n", r.Out);
+        Assert.DoesNotContain("[error]", r.Out);
+        Assert.DoesNotContain("unlinked pages can only be reached", r.Out);
+    }
+
+    [Fact]
+    public async Task ReportPath_IsPrinted_AndTheFileExists()
+    {
+        var outDir = WriteSite("沒有引用");
+
+        var r = await Run("verify", outDir);
+
+        var report = Path.Combine(outDir, "verify_report.csv");
+        Assert.Contains($"  report          : {report}\n", r.Out);
+        Assert.True(File.Exists(report));
+    }
+
+    [Fact]
+    public async Task AllowUnlinked_EntriesTrimmed_PathsAndRoutesBothAccepted()
+    {
+        WriteSite("# 首頁");
+        foreach (var page in (string[])["a", "b"])
+        {
+            Write($"out/content/ch/promo/{page}.md",
+                $"---\nsource_url: x\nlang: zh-Hant\nslug: {page}\ntranslation_key: promo/{page}\ntitle: t\npage_type: page\n---\n\n內文\n");
+        }
+        var allow = Write("allow.txt", "\n# 活動到達頁\n   \n/ch/promo/a\n  ch/promo/b.md  \n");
+
+        var r = await Run("verify", PathOf("out"), "--allow-unlinked", allow);
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("  warnings        : 0\n", r.Out);
+    }
+
+    [Theory]
+    [InlineData("--media")]
+    [InlineData("--media-prefix")]
+    [InlineData("--allow-unlinked")]
+    public async Task OptionWithoutValue_ExitsTwo(string option)
+    {
+        // verify 的解析不吃「下一個是旗標」的值:缺值時該旗標本身被當成未知參數
+        var r = await Run("verify", "out", option);
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal($"Unexpected argument: {option}\n", r.Err);
+    }
+
+    [Fact]
+    public async Task SecondOutputDir_ExitsTwo()
+    {
+        var r = await Run("verify", "out1", "out2");
+
+        Assert.Equal(2, r.Exit);
+        Assert.Equal("Unexpected argument: out2\n", r.Err);
+    }
+}

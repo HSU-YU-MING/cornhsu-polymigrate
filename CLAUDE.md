@@ -29,6 +29,10 @@ POLYMIGRATE_UPDATE_GOLDEN=1 dotnet test -c Release --filter FixtureSite_MatchesG
 git diff tests/fixtures/golden    # 逐檔看過再 commit，diff 本身就是 review
 ```
 
+函式庫公開面快照 `tests/PolyMigrate.Core.Tests/PublicApi.approved.txt` 是第二份要重產的基準
+（改到 `Cornhsu.PolyMigrate.Core` 的 public 型別或成員時才會紅）。**先判 semver 再更新**，
+流程見 [CONTRIBUTING.md](CONTRIBUTING.md)「Updating the public API baseline」。
+
 本機乾跑封裝（不發佈，只確認裝得起來、跑得動）的指令在 [RELEASING.md](RELEASING.md)；
 tool 套件約 **100 MB**（內含 Magick.NET 全平台原生檔），這個大小是預期的，不是打包壞掉。
 
@@ -48,23 +52,26 @@ tool 套件約 **100 MB**（內含 Magick.NET 全平台原生檔），這個大�
 
 **只有 CLI 上 npm。** `Cornhsu.PolyMigrate.Core` 是給 .NET 開發者的函式庫，受眾本來就在 NuGet。
 
-### 兩種認證需求互卡（2.1.0 實際踩到，加新平台包時會再遇到）
+### npm 認證只走 OIDC 信任發布（3.0 拿掉了 token 分支）
 
-npm 的 **OIDC 信任發布無法建立全新套件**——套件要先存在，才設定得了信任發布。所以每次新增一個
-平台包，那一包的首發只能用 `NPM_TOKEN`。但**既有且已設信任發布的套件，用 token 發會撞 provenance
-簽章 403**（`CA_CREATE_SIGNING_CERTIFICATE_ERROR`）：workflow 有 `id-token: write`，npm 就會自動
-嘗試簽 provenance，而認證走的是 token → 憑證申請被拒。
+npm 的 **OIDC 信任發布無法建立全新套件**——套件要先存在，才設定得了信任發布。2.1.0 加 arm64 平台包時
+因此在 `release.yml` 開過一條 `NPM_TOKEN` 分支給首發用；而**既有且已設信任發布的套件，用 token 發會撞
+provenance 簽章 403**（`CA_CREATE_SIGNING_CERTIFICATE_ERROR`：workflow 有 `id-token: write`，npm 會自動
+嘗試簽 provenance，認證卻走 token → 憑證申請被拒），所以那條分支還得 `export NPM_CONFIG_PROVENANCE=false`。
 
-`release.yml` 已經內建對策，不要拆掉：
+七個套件都已存在、都設好信任發布之後，那條分支只剩風險：平常休眠，但只要有人加了同名 secret，
+就會安靜地繞過信任發布、回到長效金鑰。**3.0 起拿掉了**：`Publish to npm` 只走 OIDC，開頭先守門——
+環境變數（`NPM_TOKEN`、`NODE_AUTH_TOKEN`、`npm_config_*auth*`）或 `.npmrc`（`~/.npmrc`、工作目錄、
+`NPM_CONFIG_USERCONFIG` 指的那份）裡出現 npm token 就直接失敗，不讓 npm 拿它去認證。
 
-- 有 `NPM_TOKEN` → 寫 `.npmrc` 用 token，並 `export NPM_CONFIG_PROVENANCE=false`；沒有 → 走 OIDC
-  （OIDC 路徑不設這個變數，信任發布仍會自動簽 provenance）。
+仍在的對策，不要拆掉：
+
 - 迴圈**刻意不用 `set -e`**：單一套件失敗只記進 `failed` 陣列並繼續，全跑完再統一非零退出。
   否則一次失敗就要重跑很多趟才推得完。
 - 已存在的版本 `npm view` 得到就跳過而非報錯，重跑冪等。
 
-流程是：加平台包 → 暫時放 `NPM_TOKEN` secret 發一次 → 到 npmjs 幫新套件設信任發布 → **把 secret
-刪掉**，之後自動回到 OIDC。
+**新增平台包時**：首發由維護者在本機用自己的 npm 登入手動 `npm publish` 建立套件 → 到 npmjs 幫新套件
+設信任發布 → 之後由 `release.yml` 接手。**不要為了首發在 repo 加 secret，也不要把 token 分支加回來。**
 
 ### 不要再造 token 通道
 
@@ -77,7 +84,7 @@ workflow 只剩 `ci.yml` 與 `release.yml`。**主線走 OIDC 就好**，不要�
 - **`setup-node` 刻意不設 `registry-url`**：它會在 `.npmrc` 寫
   `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`，OIDC 情境下該變數不存在 → npm 拿「空 token」
   去驗證而不改走 OIDC，直接失敗（actions/setup-node#1551）。預設 registry 本來就是 npmjs.org。
-  同源理由：token 路徑用的是自訂的 `NPM_TOKEN`，**不是** `NODE_AUTH_TOKEN`。
+  `Publish to npm` 開頭的守門也會擋下 `NODE_AUTH_TOKEN` 與 setup-node 寫出來的 `.npmrc`。
 - **npm CLI 要 >= 11.5.1** 才支援信任發布，Node 22 內建 10.x，所以 job 裡有一步 `npm install -g npm@latest`。
 - **平台包必須先發，主套件最後發**，否則主套件的 `optionalDependencies` 解析不到。
 - **授權通知是硬性中止條件**：平台包夾了 `Magick.Native-Q8-*`，那是實質再散布，Apache-2.0 §4(d)
@@ -85,6 +92,10 @@ workflow 只剩 `ci.yml` 與 `release.yml`。**主線走 OIDC 就好**，不要�
   去 NuGet 快取拿那份通知（不寫死版本路徑——寫死的話相依一升版就會安靜失效），找不到就 throw；
   `release.yml` 另有一步驗成品確實帶到。**不要把它降級成印個警告**——這條原本是 RELEASING.md 上的
   人工檢查項，自動化的理由就是人工項遲早會被忘記。
+  **NuGet 的 tool 套件也是再散布**（`PackAsTool` 把相依與全平台原生檔打進 nupkg），同一份通知由
+  `PolyMigrate.Cli.csproj` 的 `_PackMagickNotice` target 以 `NOTICE.txt` 放進套件根目錄（版本取自
+  `RuntimeCopyLocalItems` 的 NuGet metadata），找不到就讓 `dotnet pack` 失敗。只有函式庫
+  `Cornhsu.PolyMigrate.Core` 是「相依由 NuGet 解析」，不需要。
 - **煙霧測試只跑 linux-x64**（runner 上唯一能直接執行的），至少守住「self-contained 產物開得起來」。
 
 ### 新增或移除平台時，要一起改的地方
@@ -97,20 +108,33 @@ workflow 只剩 `ci.yml` 與 `release.yml`。**主線走 OIDC 就好**，不要�
 
 ## 地雷
 
-### 對外契約自 1.0 起凍結，範圍比想像的大
+### 對外契約在同一個 major 內凍結（現在是 3.x），範圍比想像的大
 
-CLI 指令與參數、**exit code**、Phase 輸出檔案格式（CSV 欄位、frontmatter 欄位）、YAML config 欄位，
-四面都是契約。破壞任一面 = major。幾個容易誤判的角落：
+CLI 指令與參數（含預設值）、**exit code**、Phase 輸出檔案格式（CSV 欄位、frontmatter 欄位）、YAML config 欄位，
+四面都是契約。破壞任一面 = major。1.0～2.x 一直守著同一份契約；**3.0 是第一次為了改正 exit code 而升的 major**
+（probe 一個回答都沒拿到 = 2、部分沒拿到 = 1、npm 啟動腳本失敗 = 2、同步指令第一次 Ctrl-C = 130、孤兒頁清單改成每個 section 一份
+`orphan_slugs.<section>.txt`），完整對照表在 CHANGELOG 3.0.0 與 [docs/contracts.md](docs/contracts.md)。
+2.x 時這些都卡在「既有情境的 exit code 改變 = major」而只能先寫警告——下一次遇到同樣的取捨，
+做法一樣：patch 只動訊息，exit code 留到 major。幾個容易誤判的角落：
 
 - **exit code 是最多人依賴的那份契約**（CI 與 shell 腳本直接吃）：0 乾淨 / 1 warning / 2 error /
   130 中斷。對應只在 `Cli.Report()` 定義一次，`CliTests` 末段有驗收測試釘著。**新增指令時
   catch 用共用的 `IsHandled()`，不要各自挑幾種例外**——2.2.0 之前五個指令各抄一份且抄得不一致，
-  `extract`/`thumbs` 漏接取消，Ctrl-C 時直接崩潰而非乾淨回 130。
+  `extract`/`thumbs` 漏接取消，Ctrl-C 時直接崩潰而非乾淨回 130。**catch 接得到還不夠，指令也要真的看 token**：
+  2.2.0 補齊 catch 之後，同步指令（extract/thumbs/verify/slugs）仍不看 token，第一次 Ctrl-C 沒作用、
+  照常跑完回 0/1/2，直到 3.0 才把 token 穿進逐檔迴圈。新指令的長迴圈要逐項
+  `ct.ThrowIfCancellationRequested()`；Core 那一側提供收 token 的 public overload（3.0 起 Extract / Verify /
+  Thumbs / probe / fetch 都有），而且**以新增 overload 的方式加**——替既有方法加選用參數是二進位不相容。
+- **npm 啟動腳本自己失敗 = 2**（3.0 起；`bin/polymigrate.js` 的 `LAUNCHER_FAILURE_EXIT`）。2.x 回 1，
+  和「1 = warning」撞號，「0/1 放行」的 CI 會把「工具沒跑」當成通過。
 - **「新增一種 warning」是破壞性的**，即使檔案格式沒變。2.2.0 加了 `unlinked_page` warning，
   於是既有使用者什麼都沒改就從 exit 0 變 1。同理 2.2.1 的殘檔回報**刻意不計入 warning**——
   那會在 patch 版動到 exit code。
 - **`SiteConfigLoader` 對未知欄位報錯**，所以「移除一個 config 欄位」會讓設過它的 config 載入失敗
-  （2.0.0 移掉四個死欄位就是這樣升的 major）。
+  （2.0.0 移掉四個死欄位就是這樣升的 major）。**3.0 起載入時多驗一批欄位**（selector、regex、路徑形狀、
+  BCP-47、數值範圍、重複的 key、寫了 key 卻沒給值…；驗了什麼、沒驗什麼都列在 `docs/contracts.md`——不是每一種錯都驗得出來，
+  文件不要寫成「全部都驗」）。新增 config 欄位時，驗證寫進 `SiteConfigLoader`，
+  不要只在用到時才檢查；但**收緊既有欄位的驗證會讓原本能載入的 config 失敗**，那是 YAML 面的破壞，要等 major。
 - `reject_reason` 明定為**開放集合**：未來新增門檻會新增值，消費端須容忍沒見過的值——先講明，
   以後新增門檻才不必動 `config_version`。
 - CSV 一律 **UTF-8 含 BOM + CRLF**（人工覆核走 Excel，無 BOM 中文會亂碼）。這是契約，不是筆誤。
@@ -138,10 +162,14 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
 配對是**兩趟**：`hreflang` 先配完，啟發式才上場。合成一趟的話，宣告的關係會被字典序剛好排在
 前面的共用相簿搶走對象，等於讓推測贏過宣告。
 
-### `NuGet/login` 已釘 commit SHA
+### 所有 action 都釘 commit SHA
 
 `release.yml` 的 `NuGet/login@8d196754b4036150537f80ac539e15c2f1028841`（= v1.2.0，2026-08-25 安全硬化）。
 **不要改回 `@v1`**；上游出新版要更新時，四個姊妹 repo 一起換新 SHA。
+
+3.0 起 `actions/*`（checkout、setup-dotnet、setup-node、upload-artifact）也一樣釘 40 碼 SHA，後面以註解標版本
+（例如 `# v7.0.1`）——tag 可以被挪到任意 commit，SHA 不行。新增 `uses:` 時照這個寫法，不要寫 `@v7` 這種移動式 tag。
+`dependabot.yml` 的 `github-actions` 每月會開 PR 換新 SHA 並更新版本註解。
 
 ## 已知教訓（從 git log 挖的，都真的爆過）
 
@@ -172,8 +200,8 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
 
 ## 技術債與判讀留帳
 
-- **⚠ 尚未出貨的修補：arm64 啟動腳本與 README 徽章（2026-08-26 修好，等下次發版）**
-  兩個都已修進 `main`，但**使用者手上的 2.1.0～2.3.0 仍是壞的**，要推下一個 tag 才會到他們手上：
+- **已於 2.3.1 出貨：arm64 啟動腳本與 README 徽章（2026-08-26 修好）**
+  2.1.0～2.3.0 這兩處是壞的，升到 2.3.1 以上才會好（CHANGELOG 2.3.1 有記載）：
   - `bin/polymigrate.js` 的 `TARGETS` 原本只有四個平台，缺 `win32 arm64` / `linux arm64`。
     2.1.0 在 `release.yml`、`prepare.mjs`、`optionalDependencies` 三處都加了 arm64，**唯獨啟動
     腳本沒改**（該檔自 1.1.0 的 `1c8bf09` 起未曾變動）。症狀極隱蔽：平台包被 npm 正確裝好，
@@ -181,13 +209,10 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
   - `README.md` 的 License 徽章被 `8244632` 把整段「See also」貼進 alt text 裡，徽章不呈現、
     且底部缺 See also 一節。這份 README 隨 NuGet（`PackageReadmeFile`）與 npm 主套件出貨，
     所以壞掉的徽章會出現在套件頁上。已還原徽章並把該節補到 License 段之前（比照中文版位置）。
-- **四→六的平台數描述漂移**（arm64 是 2.1.0 加的，這幾處還停在四個；README 已於 2026-08-26 修）：
-  - `RELEASING.md`「npm 通路」段寫「四個 RID … 四個平台包」
-  - `npm/prepare.mjs` 檔頭註解寫「五個可直接 npm publish 的資料夾」（實為 6 平台包 + 1 主套件 = 7）
-  - `release.yml` 註解說 arm64「是 **2.0.2** 補上的」——沒有 v2.0.2 這個 tag，CHANGELOG 記的是 2.1.0
-- **已刪的 `npm-backfill.yml` 仍被文件提到**：`Directory.Build.props` 的 `<Version>` 註解與
-  CHANGELOG 2.2.1「內部」段都還寫著它。CHANGELOG 是歷史紀錄、留著合理；`Directory.Build.props`
-  那句可以順手改掉。
+- **四→六的平台數描述漂移、已刪的 `npm-backfill.yml` 殘留引用：已於 `e241ea9`、`4f890cd` 修正**
+  （`RELEASING.md`「npm 通路」段、`npm/prepare.mjs` 檔頭註解、`release.yml` 的「2.0.2」註解、
+  `Directory.Build.props` 的 `<Version>` 註解；都是文件或註解，不隨套件出貨）。
+  CHANGELOG 2.2.1「內部」段仍提到 `npm-backfill.yml`，那是歷史紀錄，留著合理。
 - **沒有 README 示範輸出的自動比對**。`ReadmeDriftTests` 只擋「README 列的指令 = `--help` 列的指令」
   （中英文各一），**不比對說明文字，也不比對貼在 README 裡的示範輸出**（刻意如此：逐字比對只會
   製造假警報，反而讓人把測試關掉）。姊妹 repo 有 `verify-readme-sample.ps1`（XamlContrast）與
@@ -205,7 +230,10 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
 - **註解與設計說明用繁體中文；公開 API 名稱、README、CLI `--help` 用英文。** 原始碼裡的
   `§X.Y` 指向 [docs/搬遷工具_評估與規劃書.md](docs/搬遷工具_評估與規劃書.md)。
 - 函式庫公開面是 semver 契約：新 helper 一律 `internal`，`PolyMigrator` facade 是唯一有文件的
-  進入點。測試靠 `InternalsVisibleTo`（`PolyMigrate.Core.Tests`）看得到內部型別。
+  進入點。測試靠 `InternalsVisibleTo`（`PolyMigrate.Core.Tests`）看得到內部型別；CLI（組件名 `polymigrate`）
+  也在 `InternalsVisibleTo` 裡——CLI 需要、但不該成為函式庫契約的細節（例如 `PolyMigrator` 收 `HttpClient`
+  的 probe / fetch 多載，只給測試注入用）走 internal，不要為了 CLI 擴大 public 面。要公開的話先想清楚形狀：
+  一旦公開就凍結（3.0 把 `ProbeResult` 公開成唯讀的 `ProbeReport`，建構子刻意留 internal）。
 - 站別知識放 YAML config，不要進程式碼。
 - 收尾：CHANGELOG 補上本版段落（**tag 推出去就發佈了，沒有反悔的機會**），
   改過輸出格式就更新 `docs/contracts.md`，改過相依就更新 `THIRD-PARTY-NOTICES.md`，

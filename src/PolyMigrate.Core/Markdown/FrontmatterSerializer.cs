@@ -17,6 +17,9 @@ internal static partial class FrontmatterSerializer
     private static readonly ISerializer Serializer = new SerializerBuilder()
         .WithEventEmitter(next => new ForceQuoteAmbiguousStringsEmitter(next))
         .DisableAliases()
+        // 明定 LF:YamlDotNet 預設用 Environment.NewLine,Windows 上 frontmatter 各行變成 CRLF,
+        // 而圍欄與內文是 LF——同一個檔混用兩種行尾,兩平台產出的位元組也不同(§3.10)
+        .WithNewLine("\n")
         .Build();
 
     /// <summary>序列化為含 "---" 圍欄的 frontmatter 區塊(尾含空行)。欄位序即輸出序。</summary>

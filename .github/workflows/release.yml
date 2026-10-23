@@ -11,11 +11,11 @@ jobs:
       contents: write  # 建 GitHub Release
       id-token: write   # Trusted Publishing:GitHub 簽發 OIDC token 與 NuGet 交換臨時金鑰
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0          # SourceLink 需要完整 git 歷史
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -91,9 +91,9 @@ jobs:
       contents: read
       id-token: write   # npm 信任發布:GitHub 簽發 OIDC token,npm 換短效金鑰並自動簽 provenance
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
@@ -101,7 +101,7 @@ jobs:
       # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`,而 OIDC 情境下
       # 該變數不存在 → npm 會拿「空 token」去驗證而不改走 OIDC,直接發布失敗
       # (actions/setup-node#1551)。預設 registry 本來就是 npmjs.org,不需要設。
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
@@ -152,35 +152,42 @@ jobs:
           for d in npm/dist/polymigrate-*/; do
             test -s "$d/NOTICE.txt" || { echo "::error::$d 少了 NOTICE.txt"; exit 1; }
             grep -q "ImageMagick" "$d/NOTICE.txt" || { echo "::error::$d 的 NOTICE.txt 內容不對"; exit 1; }
+            # 平台套件還夾了其他相依與 .NET runtime,它們的 MIT 聲明在 THIRD-PARTY-NOTICES.md
+            test -s "$d/THIRD-PARTY-NOTICES.md" || { echo "::error::$d 少了 THIRD-PARTY-NOTICES.md"; exit 1; }
           done
           test -s npm/dist/cornhsu-polymigrate/THIRD-PARTY-NOTICES.md
           echo "✔ 授權聲明已隨 $(ls -d npm/dist/polymigrate-*/ | wc -l) 個平台套件與主套件出貨"
 
-      # 認證方式自動切換,不需要為了「首發」與「之後」改兩次 workflow:
-      #   有 NPM_TOKEN secret  → 寫入 .npmrc 用 token(首次發布只能這樣,
-      #                          npm 的信任發布必須先有套件才設定得了)
-      #   沒有 NPM_TOKEN       → 走 OIDC 信任發布(零長效金鑰)
-      # 設定好信任發布後把 secret 刪掉,這裡就會自動改走 OIDC。
+      # 認證只走 npm 信任發布(OIDC):GitHub 簽發 OIDC token,npm 換短效金鑰並自動簽 provenance,
+      # 沒有任何長效金鑰。七個套件(主套件 + 六個平台包)都已存在、也都設好了信任發布。
+      # 2.1.0 首發用的 NPM_TOKEN 分支已經拿掉:它平常是休眠的,但只要有人加了同名 secret,
+      # 就會安靜地繞過信任發布、回到長效金鑰。新增平台包時的首發見 RELEASING.md。
       #
-      # 注意:不是用 NODE_AUTH_TOKEN。那個變數「設成空字串」會讓 npm 拿空 token
-      # 去驗證而不改走 OIDC,正是要避免的失敗模式(actions/setup-node#1551 同源)。
+      # 仍然成立的兩件事:
+      #   - 不要設 NODE_AUTH_TOKEN(也不要讓 setup-node 寫 registry-url):那個變數「設成空字串」
+      #     會讓 npm 拿空 token 去驗證而不改走 OIDC(actions/setup-node#1551)。
+      #   - token 認證和 provenance 互斥:workflow 有 id-token: write,npm 會自動嘗試簽 provenance,
+      #     認證若走 token,憑證申請就 403(CA_CREATE_SIGNING_CERTIFICATE_ERROR,2.1.0 實際踩到)。
+      # 所以下面先守門:環境或 .npmrc 裡出現 npm token 就直接失敗,不讓 npm 拿它去認證。
       - name: Publish to npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # 刻意不用 -e:單一套件失敗要讓迴圈跑完再統一回報(見下方 failed 陣列)
           set -uo pipefail
-          if [ -n "${NPM_TOKEN:-}" ]; then
-            echo "認證:token(首次發布)"
-            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-            # token 認證下關閉 provenance:workflow 有 id-token: write,npm 會自動
-            # 嘗試產生 provenance 簽章,但認證走的是 token → 憑證申請 403
-            # (CA_CREATE_SIGNING_CERTIFICATE_ERROR,2.1.0 實際踩到)。
-            # OIDC 路徑不設這個變數,信任發布仍會自動簽 provenance。
-            export NPM_CONFIG_PROVENANCE=false
-          else
-            echo "認證:OIDC 信任發布"
-          fi
+          # 只看有沒有,不印出內容
+          for v in $(compgen -e); do
+            case "${v,,}" in
+              npm_token|node_auth_token|npm_config_*auth*)
+                echo "::error::環境變數 $v 看起來是 npm token;npm 只走 OIDC 信任發布,請拿掉它"
+                exit 1 ;;
+            esac
+          done
+          for f in ~/.npmrc .npmrc "${NPM_CONFIG_USERCONFIG:-}"; do
+            if grep -qs '_auth' "$f"; then
+              echo "::error::$f 裡有 npm 認證設定(_auth / _authToken);npm 只走 OIDC 信任發布,請拿掉它"
+              exit 1
+            fi
+          done
+          echo "認證:OIDC 信任發布"
           # 冪等發布:已存在的版本跳過而不是報錯,某一包失敗時重跑不會被
           # 前面已發成功的那幾包擋住(cornhsu-parity v0.9.6 實際踩過)。
           # 2.1.0 又補上一課:失敗的那一包也不該擋住「排在它後面」的其餘套件,
@@ -210,7 +217,7 @@ jobs:
           if [ ${#failed[@]} -gt 0 ]; then
             echo "::error::${#failed[@]} 個套件未發布:${failed[*]}"
             echo "重跑本 job 即可(已發布的會自動跳過);若失敗原因是認證,"
-            echo "改用另一種方式(設定 / 刪除 NPM_TOKEN)後再跑。"
+            echo "先到 npmjs 確認該套件的信任發布設定(repo、workflow release.yml)再跑。"
             exit 1
           fi
           echo "✔ npm 全數發布完成"

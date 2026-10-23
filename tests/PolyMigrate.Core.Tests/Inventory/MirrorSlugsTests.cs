@@ -50,6 +50,53 @@ public class MirrorSlugsTests : IDisposable
     }
 
     [Theory]
+    [InlineData("v1.2-release.php.html", "v1.2-release")]   // 原本取第一個點之前 → v1
+    [InlineData("2019.05.01.php.html", "2019.05.01")]       // 原本 → 2019
+    [InlineData("2019.05.01.html", "2019.05.01")]           // 沒有動態副檔名的乾淨網址:.01 不是副檔名
+    [InlineData("v1.2-release.html", "v1.2-release")]
+    [InlineData("about.asp.html", "about")]
+    [InlineData("20260101.html", "20260101")]
+    // 第三輪審查 B4:老 PHP 站的 .php5 / .php3。e0a8e6f 只剝「全是字母」的副檔名,這兩種退化成 20260301.php5
+    // (9f41339 取第一個點之前,得到的是 20260301)。改成 1～8 個英數字、至少一個字母
+    [InlineData("a.abcdefgh.html", "a")]                    // 8 字以內:副檔名(最終驗證 D3)
+    [InlineData("a.abcdefghi.html", "a.abcdefghi")]         // 9 字:超過上限,當成 slug 的一部分
+    [InlineData("20260301.php5.html", "20260301")]
+    [InlineData("20260302.php3.html", "20260302")]
+    [InlineData("v1.2-release.php5.html", "v1.2-release")]
+    public void DottedSlug_StripsOnlyHtmlAndOneDynamicExtension_LikeExtract(string fileName, string slug)
+    {
+        // 與 extract 的 slug 同一把尺(RawPageParser 只剝 strip_extensions + .html):含點的 slug 原本被截在
+        // 第一個點,餵給 fetch-orphans --slugs 會去抓不存在的網址
+        AddMirrored("ch", "news", fileName);
+
+        Assert.Equal([slug], PolyMigrator.MirrorSlugs(Raw, "news"));
+    }
+
+    [Theory]
+    // 審查 minor 5:不帶 config 的啟發式(去 .html 再去一段全字母的副檔名)在這兩種站會與 extract 不一致——
+    // 手上有 config 的呼叫端(probe-orphans)改用與 RawPageParser 完全相同的規則
+    [InlineData("jane.doe.html", new[] { ".php" }, "jane.doe")]   // 乾淨網址站的 /people/jane.doe:啟發式會剝成 jane
+    [InlineData("foo.php.html", new string[0], "foo.php")]        // strip_extensions: [] 時 .php 是 slug 的一部分
+    [InlineData("a.php.html", new[] { ".php" }, "a")]
+    [InlineData("a.asp.html", new[] { ".php" }, "a.asp")]          // 不在 strip_extensions 裡的副檔名不剝
+    [InlineData("a.asp.html", new[] { ".php", ".asp" }, "a")]
+    public void WithStripExtensions_UsesExactlyTheExtractRule(string fileName, string[] stripExtensions, string slug)
+    {
+        AddMirrored("ch", "news", fileName);
+
+        Assert.Equal(new HashSet<string> { slug },
+            PolyMigrate.Core.Inventory.MirrorSlugs.ForLanguage(Raw, "ch", "news", stripExtensions));
+        var config = new PolyMigrate.Core.Configuration.SiteConfig
+        {
+            Site = new() { BaseUrl = "https://x.example" },
+            UrlPattern = new() { LangMap = new() { ["ch"] = "zh-Hant" }, DefaultLang = "zh-Hant", StripExtensions = [.. stripExtensions] },
+        };
+        var page = new PolyMigrate.Core.Extraction.RawPageParser(config.Site, config.UrlPattern)
+            .Parse(Raw, Path.Combine(Raw, "ch", "news", fileName));
+        Assert.Equal(slug, page.Slug);   // 防呆:與 extract 實際算出的 slug 相同
+    }
+
+    [Theory]
     [InlineData("C:\\Windows")]     // Path.Combine 遇到絕對路徑會丟掉前面的 rawDir
     [InlineData("/etc")]
     [InlineData("../../elsewhere")]
@@ -74,6 +121,20 @@ public class MirrorSlugsTests : IDisposable
         File.WriteAllText(Path.Combine(Raw, "news", "20260101.php.html"), "<html></html>");
 
         Assert.Equal(["20260101"], PolyMigrator.MirrorSlugs(Raw, "news", ""));
+    }
+
+    [Fact]
+    public void FileNameThatIsOnlyASuffix_NeverBecomesABlankLine()
+    {
+        // 目錄網址(/ch/news/)被鏡像成只剩尾綴的 .php.html:取主檔名會得到空字串,
+        // 而 slugs 的 stdout 是直接導成檔案再餵給 fetch-orphans 的——空行就是一筆假 slug
+        AddMirrored("ch", "news", "20260101.php.html", ".php.html", ".html");
+
+        var slugs = PolyMigrator.MirrorSlugs(Raw, "news");
+
+        Assert.NotNull(slugs);
+        Assert.Contains("20260101", slugs);
+        Assert.DoesNotContain("", slugs);
     }
 
     [Fact]

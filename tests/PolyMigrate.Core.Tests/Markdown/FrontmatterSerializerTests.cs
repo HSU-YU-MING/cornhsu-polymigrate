@@ -15,6 +15,21 @@ public class FrontmatterSerializerTests
     }
 
     [Fact]
+    public void Block_IsLfOnly_OnEveryPlatform()
+    {
+        // 原本 YamlDotNet 預設用 Environment.NewLine:Windows 上 frontmatter 各行是 CRLF,圍欄卻是 LF
+        var block = Serialize(
+            ("title", "供僧法會"),
+            ("flags", new List<string> { "needs_rebuild", "text_in_image" }),
+            ("images", new List<Dictionary<string, string>> { new() { ["local"] = "/media/a.jpg", ["alt"] = "" } }));
+
+        Assert.DoesNotContain('\r', block);
+        Assert.Equal(
+            "---\ntitle: 供僧法會\nflags:\n- needs_rebuild\n- text_in_image\nimages:\n- local: /media/a.jpg\n  alt: ''\n---\n\n",
+            block);
+    }
+
+    [Fact]
     public void NumericSlug_LeadingZeroPreserved()
     {
         // §2.6:PyYAML 與 js-yaml 對前導 0 判斷不一致 → 純數字型字串一律強制引號

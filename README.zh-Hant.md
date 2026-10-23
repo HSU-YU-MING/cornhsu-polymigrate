@@ -12,11 +12,18 @@
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
 
-**狀態:2.3。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
-並以一次真實的整站搬遷驗證(見下)。**CLI 介面與 Phase 輸出契約維持穩定**(自 1.0 未變):
-新功能升 minor、修正升 patch。2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
+**狀態:3.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
+並以一次真實的整站搬遷驗證(見下)。**CLI 介面、exit code、Phase 輸出契約與 YAML config 在同一個 major 內凍結**:
+新功能升 minor、修正升 patch,動到這四面的改動留到下一個 major。**3.0 就是這樣的一版**——幾個情境的 exit code
+改成符合 0 / 1 / 2 / 130 的契約(孤兒頁探測一個回答都沒拿到、npm 啟動腳本失敗、指令被中斷,都不再看起來像成功)、
+孤兒頁清單改成每個 section 一份(`orphan_slugs.<section>.txt`)、動畫 GIF / WebP 縮圖保留動畫,
+函式庫則多了 probe / fetch 入口與可取消的 overload。config 欄位、CSV 欄位、frontmatter 欄位都沒有變,
+但有寫壞的值(CSS selector、regex、不是單一路徑段的名稱、格式不對的網址或語言標記、寫了 key 卻沒給值…)的 config,
+現在任何指令一載入就擋下,不再等到哪一頁、哪個指令剛好用到才炸;孤兒頁探測有部分候選沒拿到回答時
+exit 1(清單照寫,但可能不完整)。**升級前請先看 CHANGELOG 3.0.0 的「升級必做」**。更早的沿革:2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
 收束到意圖中的進入點、移除未使用的 config 欄位;2.1 修補發佈管線(arm64 的 npm 平台包、
-符號套件);2.2 補上 `verify` 的盲點——沒有任何頁連過去的孤兒頁,因為巡檢是「跟著連結走」
+符號套件),不過 Windows / Linux 的 arm64 平台包要到 2.3.1 修好啟動腳本才真的跑得起來;
+2.2 補上 `verify` 的盲點——沒有任何頁連過去的孤兒頁,因為巡檢是「跟著連結走」
 所以永遠走不到,一直被回報成沒問題——並新增 `slugs` 指令。**升到 2.2 可能讓原本通過的
 `verify` 變成 exit 1**。2.3 開始讀原站自己宣告的 `hreflang`(見下),並輸出
 `hreflang_map.csv`。遷移說明見 [CHANGELOG](CHANGELOG.md)。
@@ -48,6 +55,7 @@
 - 不是指向自己
 - 解析後真的在你的鏡像裡,**含 host 要一致**——不少站的英文版在 `en.example.org`,
   只比路徑的話那一頁會變成自己的翻譯
+- 兩端都不是站級頁(如語言選擇頁——它不是誰的翻譯)
 - **不是「一堆同語言的頁搶同一個目標」**。這是最典型的壞法:一段 `<link>` 貼進全站模板,
   於是每一頁中文都宣告英文首頁是自己的英文版。一頁不可能是三頁的翻譯,所以那些宣告
   全部作廢,而不是變成一筆看起來很有把握的錯誤配對。
@@ -99,7 +107,7 @@ PolyMigrate 是一次已完成的真實搬遷(中英雙語佛寺網站)的產品
 
 ```
 npx cornhsu-polymigrate extract site.yaml   # 有 Node,不需要安裝 .NET
-dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET
+dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET 10
 ```
 
 > npm 版是自帶執行環境的原生執行檔,只下載你這個平台的那一份
@@ -110,12 +118,19 @@ dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
-polymigrate verify out/                     # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
+polymigrate verify .                        # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
-polymigrate probe-orphans site.yaml --section news --years 2021-2023
-polymigrate fetch-orphans site.yaml --section news
+polymigrate probe-orphans site.yaml --section news --years 2021-2023   # → orphan_slugs.news.txt
+polymigrate fetch-orphans site.yaml --section news                      # 讀 orphan_slugs.news.txt
 polymigrate slugs . --section news          # 列出 ./raw 底下已鏡像的 slug(可直接導向檔案)
 ```
+
+> **動畫 GIF / WebP 的縮圖保留每一格,但有上限。** 逐格縮放的記憶體與時間跟「格數 × 寬 × 高」成正比
+> (實測 400 格 1300×900 的 GIF 要 39 秒、3.2 GB)。所以總共超過 **5,000 萬像素**的動畫,或保留動畫的縮圖會比原檔大的,
+> 改用第一格縮圖——與 3.0 以前的結果相同(本來就不需要縮放的動畫則直接複製原檔)。剛好在上限時約 6 秒、記憶體峰值 250～400 MB,視內容而定(兩個 100 格 1000×500 的 GIF 實測分別約 250 MB 與 384 MB)。`thumbs` 的摘要會列出哪些檔用了第一格、為什麼;
+> 兩種情況都不算失敗,也不影響 exit code。
+> 靜態圖也有上限:超過 **179 MP**(Pillow 判定解壓縮炸彈的門檻——270 KB 的 GIF 就能宣告 20000×20000,
+> 整張解碼要 14.8 秒、1.6 GB)的圖不解碼,算縮圖失敗(exit 1)。100 MP 級的相機原圖遠在上限之內。
 
 > **`raw/` 是唯一不可再生的東西。** 以禮貌的請求間隔重爬一個站要花好幾個小時,
 > 而來源站很可能在你搬完的那一刻就被關掉——那時候你的鏡像就是世上僅存的一份。
@@ -123,15 +138,29 @@ polymigrate slugs . --section news          # 列出 ./raw 底下已鏡像的 sl
 > 來源站要收掉的話請另外備份。
 
 > 沒有 .NET?上面每個指令都可用 npm **免安裝**執行,前面加 `npx cornhsu-polymigrate` 即可:
-> `npx cornhsu-polymigrate extract site.yaml`、`npx cornhsu-polymigrate verify out/`,以此類推。
+> `npx cornhsu-polymigrate extract site.yaml`、`npx cornhsu-polymigrate verify .`,以此類推。
 
 一站一份 YAML config,站別知識全在裡面——完整註解的真實範例見
 [examples/ibps-austin.yaml](examples/ibps-austin.yaml)。
 
+```yaml
+config_version: 1
+site:
+  base_url: https://legacy.example.org
+url_pattern:
+  lang_map: { ch: zh-Hant, en: en }     # 語言數不限
+  default_lang: zh-Hant
+  strip_extensions: [.php]
+extract:
+  content: "section[id]:not(#header):not(#footer)"
+pairing:
+  fallback: [hreflang, slug_normalized, shared_media, date, title_similarity]
+```
+
 ## 當函式庫用
 
 CLI 只是 `Cornhsu.PolyMigrate.Core` 之上的薄殼。要在自己的 .NET 程式裡驅動搬遷,
-用 `PolyMigrator` facade 即可 —— 唯一有文件的進入點,不必碰內部實作型別:
+用 `PolyMigrator` facade 即可 —— 唯一有文件的進入點,不必碰底層的實作型別:
 
 ```
 dotnet add package Cornhsu.PolyMigrate.Core
@@ -146,7 +175,14 @@ if (report.HasErrors) { /* 有不安全路徑被跳過,見 path_issues.csv */ }
 
 var verify = PolyMigrator.Verify("out/");      // 不需 config,只讀 Phase 2 輸出
 Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
+
+// 孤兒頁(probe-orphans / fetch-orphans):不寫任何檔,要不要寫、寫到哪由你決定
+var probe = await migrator.ProbeOrphansAsync("out/", "news", 2021, 2023);
+if (probe.NoUsableAnswers) { /* 站根本沒回答:空清單不代表沒有孤兒頁 */ }
+else { await migrator.FetchOrphansAsync("out/", "news", probe.Found); }
 ```
+
+Extract、Verify、GenerateThumbnails 另有收 `CancellationToken` 的 overload(probe / fetch 的最後一個參數就是它)。
 
 ## 目錄
 
@@ -156,6 +192,7 @@ Console.WriteLine($"{verify.Errors} errors, {verify.Warnings} warnings");
 | `src/PolyMigrate.Cli` | `polymigrate` CLI(NuGet tool:`Cornhsu.PolyMigrate`) |
 | `tests/` | 單元/整合測試 + 離線 fixture 站與 golden 基準 |
 | `docs/contracts.md` | Phase 之間的檔案格式契約 |
+| `docs/hreflang_量測與決策.md` | 為什麼 `hreflang` 只「建議」配對——背後的量測與決策 |
 | `docs/搬遷工具_評估與規劃書.md` | 原始評估與規劃書(原始碼中滿地的 `§X.Y` 都指向這份) |
 
 ## 開發

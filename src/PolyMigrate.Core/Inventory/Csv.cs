@@ -39,7 +39,9 @@ internal static class Csv
     /// <summary>讀回本工具寫出的 CSV(RFC 4180,含引號跳脫;自動吃掉 BOM)。</summary>
     public static IEnumerable<IReadOnlyList<string>> ReadRows(string path)
     {
-        var text = File.ReadAllText(path, Encoding.UTF8).TrimStart('﻿');
+        // BOM 由 ReadAllText 處理:它會依 BOM 判斷編碼並把 BOM 本身去掉(原本這裡另外 TrimStart(BOM),是死碼,
+        // 第三輪審查);CsvTests.ReadRows_Utf8Bom_IsNotPartOfTheFirstField 釘住
+        var text = File.ReadAllText(path, Encoding.UTF8);
         var row = new List<string>();
         var field = new StringBuilder();
         var inQuotes = false;

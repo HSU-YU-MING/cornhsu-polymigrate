@@ -30,13 +30,51 @@ internal sealed partial class PageExtractor
         Formatting = { RemoveComments = true },
     });
 
-    public PageExtractor(SiteConfig config)
+    /// <param name="pageRoutes">鏡像裡每一頁的路由,見 <see cref="LinkRewriter"/>;null = 不知道,連結一律照頁的規則。</param>
+    public PageExtractor(SiteConfig config, IReadOnlySet<string>? pageRoutes = null)
     {
         _config = config;
         _titles = new TitleCleaner(config.Extract);
-        _links = new LinkRewriter(config.Site, config.UrlPattern);
+        _links = new LinkRewriter(config.Site, config.UrlPattern, pageRoutes);
         _classifier = new PageClassifier(config.Extract);
         _mediaPaths = new MediaPaths(config.Media);
+    }
+
+    /// <summary>
+    /// 這一批頁會用到的 config selector,先各檢查一次語法(壞了擲 <see cref="ConfigException"/>)。
+    ///
+    /// <para>放在寫任何檔之前:<c>type_rules</c> 的 selector 只在碰到該頁型時才用到,
+    /// 原本會在半途崩潰——前面的頁已經寫進 content/,清單檔卻一份都沒寫。
+    /// 這是第二道防線:經 <see cref="SiteConfigLoader"/> 載入的 config 在載入時就驗過全部 selector(3.0 起);
+    /// 這裡擋的是函式庫呼叫端直接在程式裡組、沒經過 loader 的 config,只檢查「這次真的會用到的」
+    /// (<c>extract.content</c> 每頁都用;<c>type_rules</c> 只看這批頁出現過的頁型),見 <see cref="CssSelectors"/>。
+    /// 頁型只靠路徑判定,不必先解析 HTML。</para>
+    /// </summary>
+    public void EnsureSelectorsValid(IReadOnlyCollection<RawPage> pages)
+    {
+        if (pages.Count == 0)
+        {
+            return;
+        }
+        CssSelectors.Ensure(_config.Extract.Content, "extract.content");
+        var types = pages.Select(p => _classifier.Classify(p.Section, p.Slug))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal);
+        foreach (var type in types)
+        {
+            if (_config.Extract.TypeRules.GetValueOrDefault(type) is not { } rules)
+            {
+                continue;
+            }
+            if (rules.TitleSelector is { } titleSelector)
+            {
+                CssSelectors.Ensure(titleSelector, $"extract.type_rules.{type}.title_selector");
+            }
+            foreach (var selector in rules.RemoveSelectors)
+            {
+                CssSelectors.Ensure(selector, $"extract.type_rules.{type}.remove_selectors");
+            }
+        }
     }
 
     public ExtractedPage Extract(RawPage page, string html, string mediaRoot)
@@ -110,11 +148,12 @@ internal sealed partial class PageExtractor
             }
 
             // 影片/PDF:轉 Markdown 會丟 iframe/video,改佔位符保留在原位置(含標題順序)
-            foreach (var iframe in node.QuerySelectorAll("iframe[src]").ToArray())
+            foreach (var iframe in node.QuerySelectorAll("iframe").ToArray())
             {
-                var src = iframe.GetAttribute("src")!;
+                var src = iframe.GetAttribute("src") ?? "";
                 var low = src.ToLowerInvariant().Split('?')[0];
                 if (low.Contains("youtube.com/embed", StringComparison.Ordinal)
+                    || low.Contains("youtube-nocookie.com/embed", StringComparison.Ordinal)   // 隱私強化模式
                     || low.Contains("youtu.be", StringComparison.Ordinal))
                 {
                     var inner =
@@ -142,7 +181,25 @@ internal sealed partial class PageExtractor
                     needFetch.Add(absPdf);
                     ReplaceWithPlaceholder(iframe, embeds.Count - 1);
                 }
-                // 其他 iframe(如 Google 行事曆)保留原樣
+                else
+                {
+                    // 其他 iframe(Google 地圖/行事曆/表單、Vimeo…)原樣保留 HTML。不能留在 DOM 裡等
+                    // ReverseMarkdown 處理:Unknown = Bypass 只輸出子節點,iframe 沒有子節點,整個會消失,
+                    // 而且沒有任何清單或 warning 記得它。不猜型別,所以不進 videos/documents。
+                    // 站內的 src 與 <a href> 走同一套路由改寫(外站不動、相對路徑以頁面網址解析):
+                    // 留著舊網址的話,同一頁的連結已改成新路由、iframe 卻還指著 .php,verify 會報 broken_link。
+                    // lazy-load 的 data-src(src 是 about:blank,捲到才由 JS 換上)同一套改寫(3.0 起):
+                    // 新站沿用 lazy-load 的 JS 時,它才是真正被載入的網址
+                    foreach (var attribute in (string[])["src", "data-src"])
+                    {
+                        if (iframe.GetAttribute(attribute) is { Length: > 0 } original)
+                        {
+                            iframe.SetAttribute(attribute, _links.Rewrite(original, page.SourceUrl));
+                        }
+                    }
+                    embeds.Add(iframe.OuterHtml);
+                    ReplaceWithPlaceholder(iframe, embeds.Count - 1);
+                }
             }
 
             foreach (var video in node.QuerySelectorAll("video").ToArray())
@@ -240,8 +297,14 @@ internal sealed partial class PageExtractor
     }
 
     /// <summary>
-    /// &lt;head&gt; 裡的 <c>&lt;link rel="alternate" hreflang&gt;</c>——全站唯一由作者「宣告」的
+    /// 頁面上的 <c>&lt;link rel="alternate" hreflang&gt;</c>——全站唯一由作者「宣告」的
     /// 語言版本對應,其餘配對線索(路徑、相簿、日期、標題)都是推測出來的。
+    ///
+    /// <para>讀的是<b>整份文件</b>,不只 <c>&lt;head&gt;</c>(這段註解原本寫「&lt;head&gt; 裡的」,與實作不符)。
+    /// 規範上 <c>rel=alternate</c> 的 link 只該出現在 head,但舊站常因 include 檔帶 BOM 或 head 裡夾了文字,
+    /// 讓 HTML5 解析器提早開 body,之後的 link 全落進 body——只讀 <c>doc.Head</c> 的話這類站的宣告會整批
+    /// 安靜地消失。代價是正文裡亂放的 link 也會被當成宣告(仍須過 <see cref="Pairing.HreflangIndex"/> 的門檻,
+    /// 而且只是建議)。要不要改成只讀 head 是待裁定的取捨,見 HreflangPipelineTests。</para>
     ///
     /// <para>刻意<b>不</b>認 <c>&lt;a hreflang&gt;</c>:那是「這個連結指向的東西是什麼語言」的標註,
     /// 不是「本頁的某語言版本在這裡」的宣告。內文裡一句「另見 &lt;a hreflang="en"&gt;英文說明&lt;/a&gt;」

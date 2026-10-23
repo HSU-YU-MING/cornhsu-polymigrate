@@ -34,13 +34,27 @@ const TARGETS = {
 const key = `${process.platform} ${process.arch}`;
 const target = TARGETS[key];
 
-if (!target) {
+// 啟動腳本自己失敗 = PolyMigrate 根本沒有執行 = error,所以是 2(3.0 起)。
+// 2.3.1 以前是 1,和 CLI 契約的「1 = 只有 warning」撞號:依「0/1 放行」的 CI 會把「工具沒跑」當成通過
+// (2.1.0~2.3.0 的 arm64 事故走的就是這條路)。訊息用英文(與 CLI 其他輸出一致),明講工具沒有執行。
+const LAUNCHER_FAILURE_EXIT = 2;
+
+function fail(...lines) {
   console.error(
-    `Cornhsu.PolyMigrate 沒有 ${key} 的預先建置版本。\n` +
-      `目前支援:${Object.keys(TARGETS).join("、")}\n` +
-      `其他平台請改用 .NET 版本:dotnet tool install -g Cornhsu.PolyMigrate`
+    [
+      `error: ${lines[0]} PolyMigrate did not run.`,
+      ...lines.slice(1),
+    ].join("\n")
   );
-  process.exit(1);
+  process.exit(LAUNCHER_FAILURE_EXIT);
+}
+
+if (!target) {
+  fail(
+    `no prebuilt binary for ${key}.`,
+    `Supported platforms: ${Object.keys(TARGETS).join(", ")}.`,
+    "On other platforms, use the .NET tool instead: dotnet tool install -g Cornhsu.PolyMigrate"
+  );
 }
 
 let binary;
@@ -50,19 +64,22 @@ try {
   const manifest = require.resolve(`${target.pkg}/package.json`);
   binary = path.join(path.dirname(manifest), "bin", target.bin);
 } catch {
-  console.error(
-    `找不到平台套件 ${target.pkg}。\n` +
-      `可能是安裝時加了 --no-optional,或安裝過程中斷。\n` +
-      `請重新安裝:npm install cornhsu-polymigrate`
+  fail(
+    `the platform package ${target.pkg} is not installed.`,
+    "It is an optional dependency: --no-optional / --omit=optional skips it, or the install was interrupted.",
+    "Reinstall: npm install cornhsu-polymigrate"
   );
-  process.exit(1);
 }
+
+// Ctrl-C:主控台的 Ctrl-C 同時送給這個 node 行程與子行程(Windows 的主控台群組、Unix 的前景行程群組都是如此)。
+// node 沒有 SIGINT 處理器的話會先被結束——Windows 上結束碼是 0xC000013A,子行程乾淨回的 130 傳不出去。
+// 掛一個什麼都不做的處理器,讓 node 等子行程自己收尾,再原樣轉傳它的 exit code。
+process.on("SIGINT", () => {});
 
 const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
 
 if (result.error) {
-  console.error(`無法執行 ${binary}:${result.error.message}`);
-  process.exit(1);
+  fail(`could not start ${binary}: ${result.error.message}.`);
 }
 
 // 被訊號中斷時 status 會是 null;轉成慣例的 128+signal,別讓 CI 誤判為成功

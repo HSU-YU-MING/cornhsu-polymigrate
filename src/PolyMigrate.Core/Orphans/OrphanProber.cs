@@ -4,6 +4,50 @@ using PolyMigrate.Core.Configuration;
 namespace PolyMigrate.Core.Orphans;
 
 /// <summary>
+/// 探測孤兒頁的結果(<see cref="OrphanProber.ProbeDetailedAsync"/>、<see cref="PolyMigrator.ProbeOrphansAsync(string, string, int, int, string?, Action{string}?, CancellationToken)"/>)。
+/// 分開統計「確定沒有」與「沒拿到回答」:伺服器掛了、被 WAF 擋、<c>base_url</c> 打錯時,<see cref="Found"/> 一樣是空的,
+/// 但那不代表沒有孤兒頁——看 <see cref="NoUsableAnswers"/>。3.0 起 public(2.x 是 internal 的 ProbeResult)。
+/// <para>建構子是 internal:結果只由探測產生。取得方式有兩種——
+/// 用 facade:<c>await PolyMigrator.FromConfigFile("site.yaml").ProbeOrphansAsync(root, "news", 2021, 2023)</c>
+/// (自己建 HttpClient、自己算已鏡像的 slug,規則與 CLI 的 <c>probe-orphans</c> 相同);或用底層型別、自己提供
+/// HttpClient 與已知 slug 集:<c>await new OrphanProber(config, httpClient).ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known)</c>
+/// (<c>known</c> 通常是 <see cref="OrphanProber.KnownSlugs(string, string, string, IReadOnlyList{string})"/>,
+/// HttpClient 用 <see cref="OrphanProber.CreateHttpClient"/> 建才會帶 User-Agent、cookie,而且不跟轉址)。</para>
+/// </summary>
+public sealed class ProbeReport
+{
+    /// <summary>只由探測產生;呼叫端拿到的都是填好的結果。</summary>
+    internal ProbeReport()
+    {
+    }
+
+    internal List<string> FoundList { get; } = [];
+
+    internal SortedDictionary<string, int> UnansweredByReason { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>命中的 slug,依探測順序(= <see cref="OrphanProber.ProbeAsync"/> 的回傳值)。</summary>
+    public IReadOnlyList<string> Found => FoundList;
+
+    /// <summary>探過的候選數(含後綴變體;每個候選最多兩次 HTTP 請求,這裡只算一次)。</summary>
+    public int Checks { get; internal set; }
+
+    /// <summary>
+    /// 沒拿到「有/沒有」回答的候選,依原因計數(<c>HTTP 503</c>、<c>connection error</c>、<c>timeout</c>…),鍵依 ordinal 排序。
+    /// 「確定沒有」的回答是 404、410、其他 2xx 與 3xx(不跟轉址);401/403/429/5xx、重試後仍 409、連線錯誤與逾時算沒拿到回答。
+    /// </summary>
+    public IReadOnlyDictionary<string, int> Unanswered => UnansweredByReason;
+
+    /// <summary><see cref="Unanswered"/> 的總數。</summary>
+    public int UnansweredCount => UnansweredByReason.Values.Sum();
+
+    /// <summary>
+    /// 一個回答都沒拿到(探了至少一個候選,而且全部沒拿到回答)。這時 <see cref="Found"/> 是空的,但不可讀成
+    /// 「沒有孤兒頁」:CLI 的 <c>probe-orphans</c> 在這個情況 exit 2、不覆寫既有清單。
+    /// </summary>
+    public bool NoUsableAnswers => Checks > 0 && UnansweredCount == Checks;
+}
+
+/// <summary>
 /// 孤兒頁探測(規格 probe_orphans.py;§2.6:索引移除但頁面還在)。
 /// 逐日期產生候選 slug(YYYYMMDD 與 MMDDYYYY 兩種格式都探,§2.6 日期混用坑),
 /// HEAD 探測原站;命中再探 A-D 後綴變體(A 沒有就不會有 B)。
@@ -32,33 +76,83 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
         }
     }
 
-    /// <summary>已抓到的 slug(raw/{lang}/{section}/ 檔名),探測時跳過。</summary>
+    /// <summary>
+    /// 已抓到的 slug(<c>raw/{lang}/{section}/</c> 的檔名),探測時跳過。
+    /// <para>這個多載不帶 config,所以檔名 → slug 用的是啟發式:去掉結尾的 <c>.html</c>,再去掉一段 1～8 個 ASCII 英數字、
+    /// 至少一個字母的副檔名(<c>.php</c>、<c>.php5</c>、<c>.asp</c>…;2.3.1 以前是取第一個點之前)。它與 <c>extract</c>
+    /// 的 slug 在這些情況不一致:乾淨網址站的 <c>jane.doe.html</c>(這裡得到 <c>jane</c>);<c>strip_extensions: []</c> 的
+    /// <c>foo.php.html</c>(這裡得到 <c>foo</c>);副檔名不在 <c>strip_extensions</c> 裡的(只列 <c>.php</c> 時的
+    /// <c>a.php5.html</c>、<c>a.asp.html</c>,這裡得到 <c>a</c>);大小寫不符的(<c>A.PHP.html</c>,這裡得到 <c>A</c>)。
+    /// 手上有 config 時用帶 <c>stripExtensions</c> 的多載,結果與 <c>extract</c> 及 CLI 的 <c>probe-orphans</c> 一致。</para>
+    /// </summary>
     public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section) =>
         Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section);
 
+    /// <summary>
+    /// 同上,但依 config 的 <c>url_pattern.strip_extensions</c> 剝檔名尾綴(傳 <c>config.UrlPattern.StripExtensions</c>):
+    /// 與 <c>extract</c> 寫出的 slug 完全相同的規則,CLI 的 <c>probe-orphans</c> 用的就是這個(3.0 起 public)。
+    /// </summary>
+    public static HashSet<string> KnownSlugs(string rawDir, string langPrefix, string section, IReadOnlyList<string> stripExtensions) =>
+        Inventory.MirrorSlugs.ForLanguage(rawDir, langPrefix, section, stripExtensions);
+
     public async Task<List<string>> ProbeAsync(
+        string langPrefix, string section, int yearFrom, int yearTo,
+        IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default) =>
+        (await ProbeDetailedAsync(langPrefix, section, yearFrom, yearTo, known, progress, ct)).FoundList;
+
+    /// <summary>
+    /// 同 <see cref="ProbeAsync"/>,另外分開統計「確定沒有」與「沒拿到回答」。
+    /// 兩者原本一律當成「不存在」:伺服器掛了、被 WAF 擋、base_url 打錯時,探測照樣「跑完、0 筆」,
+    /// 而空清單會被讀成「沒有孤兒頁」。CLI 靠這份統計決定清單能不能信、要不要寫(3.0 起 public)。
+    /// </summary>
+    public async Task<ProbeReport> ProbeDetailedAsync(
         string langPrefix, string section, int yearFrom, int yearTo,
         IReadOnlySet<string> known, Action<string>? progress = null, CancellationToken ct = default)
     {
-        var found = new List<string>();
+        var result = new ProbeReport();
+        var found = result.FoundList;
         var probed = 0;
+
+        async Task<bool> Exists(string slug)
+        {
+            var (answer, reason) = await ProbeOneAsync(langPrefix, section, slug, ct);
+            result.Checks++;
+            if (answer == Answer.None)
+            {
+                result.UnansweredByReason[reason!] = result.UnansweredByReason.GetValueOrDefault(reason!) + 1;
+            }
+            return answer == Answer.Exists;
+        }
+
         foreach (var candidate in DateCandidates(yearFrom, yearTo))
         {
-            if (known.Contains(candidate))
+            // 已鏡像 = 確定存在:本身不探,但後綴照探——後綴版是不是孤兒,與原頁有沒有鏡像無關
+            // (原本在這裡直接 continue,「原頁已鏡像、A 版是孤兒」永遠找不到,而那正是 probe 要找的)
+            var isKnown = known.Contains(candidate);
+            var exists = isKnown;
+            if (!isKnown)
             {
-                continue;
+                probed++;
+                exists = await Exists(candidate);
+                if (exists)
+                {
+                    found.Add(candidate);
+                    progress?.Invoke($"hit {candidate}");
+                }
             }
-            probed++;
-            if (await ExistsAsync(langPrefix, section, candidate, ct))
+            if (exists)
             {
-                found.Add(candidate);
-                progress?.Invoke($"hit {candidate}");
                 foreach (var suffix in Suffixes)
                 {
-                    if (await ExistsAsync(langPrefix, section, candidate + suffix, ct))
+                    var variant = candidate + suffix;
+                    if (known.Contains(variant))
                     {
-                        found.Add(candidate + suffix);
-                        progress?.Invoke($"hit {candidate}{suffix}");
+                        continue;   // 已鏡像:存在,不探、不列,「A 有才會有 B」的鏈繼續往下
+                    }
+                    if (await Exists(variant))
+                    {
+                        found.Add(variant);
+                        progress?.Invoke($"hit {variant}");
                     }
                     else
                     {
@@ -66,17 +160,32 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
                     }
                 }
             }
-            if (probed % 100 == 0)
+            if (!isKnown && probed % 100 == 0)
             {
                 progress?.Invoke($"probed {probed}, hits {found.Count}");
             }
         }
-        return found;
+        return result;
     }
 
-    private async Task<bool> ExistsAsync(string langPrefix, string section, string slug, CancellationToken ct)
+    private enum Answer
     {
-        var url = $"{_baseUrl}/{langPrefix}/{section}/{slug}{_extension}";
+        /// <summary>200。</summary>
+        Exists,
+
+        /// <summary>確定沒有:404、410、其他 2xx,以及 3xx(不跟轉址,轉址頁不算命中,見 <see cref="CreateHttpClient"/>)。</summary>
+        Absent,
+
+        /// <summary>沒拿到「有沒有」的回答:連線錯誤、逾時、重試後仍 409,以及 401/403/429/5xx 等其餘狀態。</summary>
+        None,
+    }
+
+    /// <returns>回答;<see cref="Answer.None"/> 時附上原因(<c>HTTP 503</c>、<c>connection error</c>、<c>timeout</c>)。</returns>
+    private async Task<(Answer Answer, string? Reason)> ProbeOneAsync(
+        string langPrefix, string section, string slug, CancellationToken ct)
+    {
+        var url = $"{_baseUrl}/{SitePaths.Join(langPrefix, section, slug)}{_extension}";   // 無語言前綴的站不可組出 //news/…
+        var reason = "";   // 走到迴圈外 = 最後一次是例外,原因一定已經填上
         for (var attempt = 0; attempt < 2; attempt++)
         {
             await Task.Delay(config.Site.Polite.DelayMs * (attempt + 1), ct);
@@ -84,19 +193,26 @@ public sealed class OrphanProber(SiteConfig config, HttpClient http)
             {
                 using var request = new HttpRequestMessage(HttpMethod.Head, url);
                 using var response = await http.SendAsync(request, ct);
-                if (response.StatusCode == System.Net.HttpStatusCode.Conflict && attempt == 0)
+                var status = (int)response.StatusCode;
+                if (status == 409 && attempt == 0)
                 {
                     continue;   // 409 = bot 防護,退避加倍再試一次
                 }
-                return response.StatusCode == System.Net.HttpStatusCode.OK;
+                return status switch
+                {
+                    200 => (Answer.Exists, null),
+                    404 or 410 or (>= 200 and < 400) => (Answer.Absent, null),
+                    _ => (Answer.None, $"HTTP {status}"),
+                };
             }
             catch (Exception ex) when (ex is HttpRequestException
                 || (ex is OperationCanceledException && !ct.IsCancellationRequested))
             {
                 // 連線層錯誤或請求逾時(非使用者取消):重試一次後放棄該候選,不掀掉整批探測
+                reason = ex is HttpRequestException ? "connection error" : "timeout";
             }
         }
-        return false;
+        return (Answer.None, reason);
     }
 
     /// <summary>

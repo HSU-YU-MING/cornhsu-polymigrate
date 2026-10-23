@@ -62,4 +62,62 @@ public class MultiLocaleTests : IDisposable
         var jpMd = File.ReadAllText(Path.Combine(_root, "content", "jp", "news", "a.md"));
         Assert.Contains("lang: ja", jpMd);
     }
+
+    [Fact]
+    public void SiteLevelPage_NeverEntersHeuristicPairing()
+    {
+        // 站級頁(無語言前綴的語言選擇頁,key 以 / 開頭)不是任何頁的翻譯,也不參與啟發式配對。
+        // 素材讓它與一頁英文孤頁標題完全相同(title_similarity = 1.0)、又同在「沒有 section」那一層——
+        // 它只要進了候選池,這一組就一定會被建議
+        var raw = Path.Combine(_root, "raw");
+        Directory.CreateDirectory(Path.Combine(raw, "en"));
+        File.WriteAllText(Path.Combine(raw, "index.php.html"),
+            "<html><head><title>Welcome</title></head><body><main>選擇語言</main></body></html>");
+        File.WriteAllText(Path.Combine(raw, "en", "welcome.php.html"),
+            "<html><head><title>Welcome</title></head><body><main>Welcome to the temple</main></body></html>");
+        var config = TrilingualConfig();
+        config.UrlPattern.LangMap = new Dictionary<string, string> { ["ch"] = "zh-Hant", ["en"] = "en" };
+        config.Pairing.Fallback = ["title_similarity"];
+
+        var report = new ExtractionPipeline(config)
+            .Run(new ExtractionPaths(raw, Path.Combine(_root, "media"), _root));
+
+        Assert.Equal(0, report.SuggestedPairs);
+        var rows = File.ReadAllLines(Path.Combine(_root, "content_inventory.csv"));
+        // translation_key,section,slug,has_zh_hant,has_en,suggested_type,final_type,flags,pair_status,suggested_pair,pair_evidence,…
+        Assert.StartsWith("/index,,index,True,False,page,,,site_level,,,", rows.Single(r => r.StartsWith("/index,")));
+        Assert.StartsWith("welcome,,welcome,False,True,page,,,missing,,,", rows.Single(r => r.StartsWith("welcome,")));
+    }
+
+    [Fact]
+    public void SingleLocaleSite_PairingColumnsLeftBlank()
+    {
+        // 單語站 = 只有一組對映的特例(§2.3):配對不適用,pair_status 留空(契約),
+        // 而不是把每一頁都標成 paired——那會讓人以為工具替它找到了另一語言的版本
+        AddRaw("ch/news/a.php.html");
+        AddRaw("ch/news/b.php.html");
+        AddRaw("index.php.html");       // 無前綴的站級頁,在多語站會是 site_level
+        var config = TrilingualConfig();
+        config.UrlPattern.LangMap = new Dictionary<string, string> { ["ch"] = "zh-Hant" };
+        config.Pairing.Fallback = ["title_similarity"];
+
+        var report = new ExtractionPipeline(config)
+            .Run(new ExtractionPaths(Path.Combine(_root, "raw"), Path.Combine(_root, "media"), _root));
+
+        Assert.Equal(3, report.PagesWritten);
+        Assert.Equal(0, report.SuggestedPairs);
+        Assert.Empty(report.OnlyInLocale);   // 「只有某語言」在單語站沒有意義
+
+        var rows = File.ReadAllLines(Path.Combine(_root, "content_inventory.csv"))
+            .Select(l => l.TrimStart('\uFEFF').Split(','))
+            .ToList();
+        var header = rows[0];
+        Assert.Equal(
+            ["translation_key", "section", "slug", "has_zh_hant", "suggested_type", "final_type", "flags",
+             "pair_status", "suggested_pair", "pair_evidence", "text_len_zh_hant", "image_count", "notes"],
+            header);
+        var pairStatus = Array.IndexOf(header, "pair_status");
+        Assert.Equal(3, rows.Count - 1);
+        Assert.All(rows.Skip(1), r => Assert.Equal("", r[pairStatus]));
+    }
 }

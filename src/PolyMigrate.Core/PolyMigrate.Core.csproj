@@ -14,6 +14,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="PolyMigrate.Core.Tests" />
+    <!-- CLI(組件名 polymigrate)也看得到 internal:CLI 需要的細節(例如 probe 有幾個候選沒拿到回答)
+         走 internal 成員,不必為了 CLI 擴大函式庫的 public 面(那是 semver 契約,新增成員就是 minor) -->
+    <InternalsVisibleTo Include="polymigrate" />
   </ItemGroup>
 
   <ItemGroup>

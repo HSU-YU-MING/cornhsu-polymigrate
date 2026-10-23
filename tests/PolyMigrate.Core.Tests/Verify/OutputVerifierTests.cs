@@ -180,6 +180,37 @@ public class OutputVerifierTests : IDisposable
         Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/gone");
     }
 
+    [Theory]
+    // 第三輪審查 V3:邊界只排除「前面連著字或 -」,不要求前面有空白——緊接在引號後、在內文開頭、
+    // 換行之後的 href/src 都要照樣檢查(要求空白的版本會漏掉前兩種)
+    [InlineData("src='/ch/news/gone' <p>x</p>")]                          // 內文開頭
+    [InlineData("<iframe title=\"t\"src=\"/ch/news/gone\"></iframe>")]   // 緊接在引號後
+    [InlineData("<img\nsrc=\"/ch/news/gone\">")]                          // 換行之後
+    public void HrefOrSrc_AfterAQuoteOrAtTheStart_IsStillChecked(string body)
+    {
+        AddPage("ch/a.md", body: body);
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Contains(report.Issues, i => i.Kind == "broken_link" && i.Detail == "/ch/news/gone");
+    }
+
+    [Theory]
+    [InlineData("data-src")]        // lazy-load 的 iframe / img
+    [InlineData("data-href")]
+    [InlineData("xsrc")]
+    public void AttributesThatOnlyEndInSrcOrHref_AreNotLinks(string attribute)
+    {
+        // href=/src= 的比對原本前面沒有邊界:data-src、data-href 也被當成站內連結檢查。
+        // 它們不是瀏覽器會載入的網址(要靠站上的 JS),報 broken_link 是假警報
+        AddPage("ch/a.md", body: $"<iframe {attribute}=\"/ch/news/nope\" src=\"/ch/a\"></iframe>");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Equal(0, report.Errors);
+        Assert.Equal(1, report.LinksChecked);   // 只剩真正的 src
+    }
+
     [Fact]
     public void MediaRef_WithQueryString_ResolvesToFile()
     {
@@ -191,6 +222,76 @@ public class OutputVerifierTests : IDisposable
 
         Assert.Empty(report.Issues);
         Assert.Equal(1, report.MediaChecked);
+    }
+
+    [Theory]
+    [InlineData("/media/files/a.pdf#page=3")]       // PDF 直接跳頁
+    [InlineData("/media/files/a.pdf?dl=1#page=3")]
+    public void MediaRef_FragmentIsNotPartOfTheFileName(string reference)
+    {
+        AddMedia("files/a.pdf");
+        AddPage("ch/a.md", body: $"[講義]({reference})");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Empty(report.Issues);
+        Assert.Equal(1, report.MediaChecked);
+    }
+
+    [Fact]
+    public void KnownMissingImage_ReferencedWithAQueryString_IsStillAWarning()
+    {
+        // missing_images.csv 記的是不帶 query 的網路路徑;內文多了 ?v=2 的同一張原站壞圖仍是「已知」,
+        // 不可因為快取參數就從 warning 升成 error(exit 1 → 2)。回報的 detail 保留原寫法
+        Directory.CreateDirectory(Path.Combine(_root, "media"));
+        PolyMigrate.Core.Inventory.Csv.Write(Path.Combine(_root, "missing_images.csv"),
+        [
+            new[] { "source_page", "missing_image" },
+            new[] { "https://example.org/ch/a.php", "/media/known.jpg" },
+        ]);
+        AddPage("ch/a.md", body: "![](/media/known.jpg?v=2)");
+
+        var report = RunIgnoringUnlinked();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal((Severity.Warning, "known_missing_media", "/media/known.jpg?v=2"),
+            (issue.Severity, issue.Kind, issue.Detail));
+    }
+
+    [Fact]
+    public void CrlfLineEndings_VerifyTheSameAsLf()
+    {
+        // 輸出被 git(autocrlf)或 Windows 編輯器轉成 CRLF 很常見,而 Windows 上 extract 寫的
+        // frontmatter 本身就是 CRLF(contracts.md「通用規則」)。圍欄與欄位比對若不先正規化行尾,
+        // 這些頁會全部變成 invalid_frontmatter
+        AddMedia("ok.jpg");
+        var path = Path.Combine(_root, "content", "ch", "news", "a.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            "---\r\nsource_url: https://example.org/ch/news/a.php\r\nlang: zh-Hant\r\nslug: a\r\n"
+            + "translation_key: news/a\r\ntitle: 標題\r\npage_type: article\r\n"
+            + "images:\r\n- local: /media/ok.jpg\r\n  alt: ''\r\n---\r\n\r\n[b](/ch/news/b)\r\n");
+        _pages.Add("ch/news/a.md");
+        AddPage("ch/news/b.md");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Empty(report.Issues);
+        Assert.Equal(1, report.LinksChecked);
+        Assert.Equal(1, report.MediaChecked);   // frontmatter images[].local 一樣讀得到
+    }
+
+    [Fact]
+    public void NoContentDirectory_LeavesTheGivenDirectoryUntouched()
+    {
+        // 最常見的指錯是把 raw/(不可再生的鏡像)當成輸出根目錄:回報 no_content,
+        // 但不在那裡留下 verify_report.csv 或任何東西
+        File.WriteAllText(Path.Combine(_root, "index.php.html"), "<html></html>");
+
+        var report = new OutputVerifier().Run(_root, mediaDir: null);
+
+        Assert.Equal("no_content", Assert.Single(report.Issues).Kind);
+        Assert.Equal(["index.php.html"], Directory.GetFileSystemEntries(_root).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -214,6 +315,183 @@ public class OutputVerifierTests : IDisposable
         var lines = File.ReadAllLines(Path.Combine(_root, "verify_report.csv"));
         Assert.Contains("severity,page,kind,detail", lines[0]);
         Assert.Contains(lines, l => l.Contains("broken_link"));
+    }
+
+    [Fact]
+    public void ReportCsv_SortedBySeverityThenPageThenDetail_WithWireSeverityStrings()
+    {
+        // 決定性輸出(§3.10):同一份輸出重跑必須逐位元組相同,排序規則就是契約的一部分。
+        // 素材刻意讓每一個排序鍵都有作用:warning 那頁(ch/a)字典序最前、
+        // ch/b 的兩個 detail 依發現順序是 /zzz 在前
+        Directory.CreateDirectory(Path.Combine(_root, "media"));
+        File.WriteAllText(Path.Combine(_root, "missing_images.csv"),
+            "\uFEFFsource_page,missing_image\r\nhttps://example.org/ch/a.php,/media/known.jpg\r\n");
+        AddPage("ch/a.md", body: "![](/media/known.jpg)");
+        AddPage("ch/b.md", body: "[x](/zzz) [y](/aaa)");
+        AddPage("ch/c.md", body: "[z](/mmm)");
+
+        RunIgnoringUnlinked();
+
+        var lines = File.ReadAllText(Path.Combine(_root, "verify_report.csv")).Split("\r\n");
+        Assert.Equal(
+        [
+            "severity,page,kind,detail",
+            "error,ch/b.md,broken_link,/aaa",
+            "error,ch/b.md,broken_link,/zzz",
+            "error,ch/c.md,broken_link,/mmm",
+            "warning,ch/a.md,known_missing_media,/media/known.jpg",
+            "",
+        ], lines);
+    }
+
+    [Fact]
+    public void NoContentDirectory_IsASingleError()
+    {
+        // 指錯目錄(例如 verify raw/ 而不是輸出根目錄)必須是 error,不是「0 頁、全部通過」
+        var report = new OutputVerifier().Run(_root, Path.Combine(_root, "media"));
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal(Severity.Error, issue.Severity);
+        Assert.Equal("no_content", issue.Kind);
+        Assert.Equal("", issue.Page);
+        Assert.Equal($"content directory not found: {Path.Combine(_root, "content")}", issue.Detail);
+        Assert.Equal(1, report.Errors);
+        Assert.Equal(0, report.PagesChecked);
+    }
+
+    [Theory]
+    [InlineData("沒有圍欄,直接是內文\n")]
+    [InlineData("---\ntitle: 只有開頭圍欄\n\n內文\n")]
+    [InlineData("\n---\ntitle: 圍欄前有空行\n---\n\n內文\n")]
+    public void MissingFrontmatterFence_IsInvalidFrontmatter(string content)
+    {
+        var path = Path.Combine(_root, "content", "ch", "a.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+
+        var report = RunIgnoringUnlinked();
+
+        // 只報一筆、不再追加 missing_field:沒有 frontmatter 就沒有欄位可查
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal((Severity.Error, "ch/a.md", "invalid_frontmatter", "no frontmatter block"),
+            (issue.Severity, issue.Page, issue.Kind, issue.Detail));
+    }
+
+    [Fact]
+    public void BrokenYamlInFrontmatter_IsInvalidFrontmatter_NotACrash()
+    {
+        // 手改壞的 frontmatter 不得讓整個巡檢崩潰,其餘頁照樣檢查
+        var path = Path.Combine(_root, "content", "ch", "a.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "---\ntitle: [沒有收尾\nslug: a\n---\n\n內文\n");
+        AddPage("ch/b.md", body: "[gone](/nope)");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Contains(report.Issues, i => i is { Page: "ch/a.md", Kind: "invalid_frontmatter", Severity: Severity.Error });
+        Assert.DoesNotContain(report.Issues, i => i.Page == "ch/a.md" && i.Kind == "missing_field");
+        Assert.Contains(report.Issues, i => i is { Page: "ch/b.md", Kind: "broken_link" });
+        Assert.Equal(2, report.PagesChecked);
+    }
+
+    [Theory]
+    [InlineData("title:\n")]          // 空值(YAML null)
+    [InlineData("title: ''\n")]       // 空字串
+    [InlineData("title: [a, b]\n")]   // 不是字串
+    public void RequiredFieldPresentButNotANonEmptyString_IsMissingField(string titleLine)
+    {
+        var path = Path.Combine(_root, "content", "ch", "a.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            "---\nsource_url: https://example.org/ch/a.php\nlang: zh-Hant\nslug: a\n"
+            + "translation_key: a\n" + titleLine + "page_type: page\n---\n\n內文\n");
+        _pages.Add("ch/a.md");
+
+        var report = RunIgnoringUnlinked();
+
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal(("missing_field", "title"), (issue.Kind, issue.Detail));
+    }
+
+    [Fact]
+    public void EmptyFrontmatterBlock_EveryRequiredFieldMissing()
+    {
+        // 圍欄在、內容空(YAML 解出 null):每個必填欄位都要報,而不是當成「沒問題」或崩潰
+        var path = Path.Combine(_root, "content", "ch", "a.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "---\n\n---\n\n內文\n");
+        _pages.Add("ch/a.md");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Equal(
+            ["source_url", "lang", "slug", "translation_key", "title", "page_type"],
+            report.Issues.Where(i => i.Kind == "missing_field").Select(i => i.Detail));
+        Assert.Equal(6, report.Errors);
+    }
+
+    [Fact]
+    public void MediaDirectoryAbsent_MediaChecksSkipped_NotReportedAsMissing()
+    {
+        // 只拿到 content/ 沒拿到 media/(媒體另外部署)時,不可把每一張圖都報成 missing_media
+        AddPage("ch/a.md", body: "![](/media/x.jpg) [b](/ch/b)");
+        AddPage("ch/b.md");
+
+        var absent = new OutputVerifier().Run(_root, Path.Combine(_root, "nope"), "/media/", _pages);
+        var none = new OutputVerifier().Run(_root, mediaDir: null, "/media/", _pages);
+
+        foreach (var report in (VerifyReport[])[absent, none])
+        {
+            Assert.True(report.MediaChecksSkipped);
+            Assert.Equal(0, report.MediaChecked);
+            Assert.Empty(report.Issues);
+            Assert.Equal(1, report.LinksChecked);   // 連結檢查照做
+        }
+    }
+
+    [Fact]
+    public void MediaDirectoryPresent_ChecksAreNotSkipped()
+    {
+        AddMedia("x.jpg");
+        AddPage("ch/a.md", body: "![](/media/x.jpg)");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.False(report.MediaChecksSkipped);
+        Assert.Equal(1, report.MediaChecked);
+    }
+
+    [Fact]
+    public void CustomMediaPrefix_DecidesWhatCountsAsMedia()
+    {
+        // --media-prefix 決定哪些引用拿去對磁碟:/assets/ 底下的才是媒體,
+        // 其餘 "/" 開頭的(包括 /media/...)一律當站內連結驗
+        AddMedia("ok.jpg");
+        AddPage("ch/a.md", body: "![](/assets/ok.jpg) ![](/assets/gone.jpg) ![](/media/ok.jpg)");
+
+        var report = new OutputVerifier().Run(_root, Path.Combine(_root, "media"), "/assets/", _pages);
+
+        Assert.Equal(2, report.MediaChecked);
+        Assert.Equal(1, report.LinksChecked);
+        Assert.Equal(2, report.Errors);
+        Assert.Contains(report.Issues, i => i is { Kind: "missing_media", Detail: "/assets/gone.jpg" });
+        Assert.Contains(report.Issues, i => i is { Kind: "broken_link", Detail: "/media/ok.jpg" });
+    }
+
+    [Fact]
+    public void KnownMissingCsv_WithoutTrailingNewline_StillRecognized()
+    {
+        // 人工在 Excel 編過再存回的 missing_images.csv 常常沒有結尾換行;最後一列不能因此被吃掉,
+        // 否則一張已知的原站壞圖會從 warning 升成 error(exit 1 → 2)
+        Directory.CreateDirectory(Path.Combine(_root, "media"));
+        File.WriteAllText(Path.Combine(_root, "missing_images.csv"),
+            "source_page,missing_image\r\nhttps://example.org/ch/a.php,/media/a.jpg\r\nhttps://example.org/ch/a.php,/media/b.jpg");
+        AddPage("ch/a.md", body: "![](/media/a.jpg) ![](/media/b.jpg)");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Equal(0, report.Errors);
+        Assert.Equal(2, report.Warnings);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -279,6 +557,109 @@ public class OutputVerifierTests : IDisposable
         var report = RunWithOrphanCheck();
 
         Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void EntryOnlyReference_IsPercentDecodedLikeLinks()
+    {
+        // 最終驗證 B4:只算入口的引用也要做百分號解碼——中日韓頁只經編碼過的 data-src 進入時,不可誤報孤島
+        AddPage("ch/index.md", body: "<iframe data-src=\"/ch/news/%E7%A6%AA%E4%BF%AE\"></iframe>", pageType: "page");
+        AddPage("ch/news/禪修.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Fact]
+    public void EntryOnlySelfReference_IsNotAnEntry()
+    {
+        // 最終驗證 B3:只算入口的引用指向自己,與 <a href> 一樣不算入口
+        AddPage("ch/news/p.md", body: "<iframe data-src=\"/ch/news/p\"></iframe>");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Contains(report.Issues, i => i.Kind == "unlinked_page" && i.Page == "ch/news/p.md");
+    }
+
+    [Fact]
+    public void DataSrcToMedia_IsStillCheckedForMissingFiles()
+    {
+        // 最終驗證 I2(r4-c):data-* 指向 /media/ 的引用原本(9d17071)照樣檢查 missing_media、算進 media refs;
+        // ac4c010 一併略過了。lazy-load 的圖在 JS 跑完後確實會被載入,缺檔就是新站上的破圖,不能從報告消失。
+        // 只有「站內頁」的 data-* 引用不檢查壞連結(它們不會被改寫,指著舊網址是常態)
+        AddMedia("present.jpg");
+        AddPage("ch/a.md", body: "<img data-src=\"/media/missing1.jpg\" src=\"/media/present.jpg\">"
+            + "<iframe data-src=\"/media/missing2.pdf\" src=\"about:blank\"></iframe>");
+
+        var report = RunIgnoringUnlinked();
+
+        Assert.Equal(3, report.MediaChecked);
+        Assert.Equal(
+            ["/media/missing1.jpg", "/media/missing2.pdf"],
+            report.Issues.Where(i => i.Kind == "missing_media").Select(i => i.Detail).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void SrcInsideADataAttributeValue_IsNeitherCheckedNorAnEntry()
+    {
+        // 最終驗證 I3(r4-d):data-* 屬性的值裡含有 src='…' 時,有邊界的比對會在值的中間找到它——
+        // 9d17071 那條沒有邊界的比對整段吃掉 data-src="…",從來不會看到裡面的 src。結果檢查集合比 9d 還大,
+        // r4-d 由 exit 0 變 2,與「只會變少」相反。只檢查「也是無邊界比對起點」的位置,檢查集合因此是 9d 的子集
+        AddPage("ch/a.md", body: "<iframe data-src=\"x src='/ch/gone'\"></iframe>", pageType: "listing");
+        AddPage("ch/news/p6.md", pageType: "page");
+        AddPage("ch/b.md", body: "<a title=\"x\" data-src=\"/a?b= src='/ch/news/p6'\">y</a>", pageType: "listing");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.DoesNotContain(report.Issues, i => i.Kind == "broken_link");
+        // p6 只出現在 data-src 值的中間:不是入口(與 9d17071 相同,r4-c)
+        Assert.Contains(report.Issues, i => i.Kind == "unlinked_page" && i.Page == "ch/news/p6.md");
+    }
+
+    [Fact]
+    public void PageOnlyReachedThroughDataSrc_StillCountsAsLinked_ButIsNotCheckedAsALink()
+    {
+        // 第三輪審查 B3:75fbf30 讓 data-src 不再被當成連結檢查(不報假的 broken_link),但也連帶不再算入口——
+        // 只被 lazy-load iframe 指到的頁開始報 unlinked_page,verify 由 0 變 1。入口照 9d17071 算,只是不檢查壞連結
+        AddPage("ch/index.md", body: "<iframe data-src=\"/ch/news/d\" src=\"about:blank\"></iframe>"
+            + "<iframe data-src=\"/ch/news/nope\"></iframe>", pageType: "page");
+        AddPage("ch/news/d.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);   // d 不是孤島;/ch/news/nope 也不報 broken_link
+    }
+
+    [Fact]
+    public void PageOnlyEmbeddedByAnIframe_CountsAsLinked()
+    {
+        // 現況(待維護者裁定,見決策紀錄「被 iframe 嵌入算不算有入口」):iframe 的 src 與 <a href> 一樣
+        // 算進入口。修 H3 之前保留的 iframe 根本不在 Markdown 裡,這種頁原本報 unlinked_page(exit 1),
+        // 現在不報(exit 0)。改判的話這條要一起改
+        AddPage("ch/index.md", body: "<iframe src=\"/ch/forms/signup\"></iframe>", pageType: "page");
+        AddPage("ch/forms/signup.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+    }
+
+    [Theory]
+    // extract 改寫內文連結時刻意保留 query 與 fragment(LinkRewriterTests.QueryAndFragment_Preserved),
+    // 所以 verify 一定會看到這種連結:它們連到的是那一頁,不是壞連結,那一頁也不是孤島
+    [InlineData("/ch/news/b#comments")]
+    [InlineData("/ch/news/b?page=2")]
+    [InlineData("/ch/news/b/?page=2#top")]
+    public void InternalLink_WithQueryOrFragment_ResolvesToThePage(string href)
+    {
+        AddPage("ch/index.md", body: $"[b]({href})", pageType: "page");
+        AddPage("ch/news/b.md");
+
+        var report = RunWithOrphanCheck();
+
+        Assert.Empty(report.Issues);
+        Assert.Equal(1, report.LinksChecked);
     }
 
     [Fact]

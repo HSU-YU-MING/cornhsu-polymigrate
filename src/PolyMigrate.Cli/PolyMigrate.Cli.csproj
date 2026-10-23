@@ -16,4 +16,43 @@
     <ProjectReference Include="..\PolyMigrate.Core\PolyMigrate.Core.csproj" />
   </ItemGroup>
 
+  <!-- ── 第三方授權聲明(只有 tool 套件需要) ──
+       PackAsTool 會把 publish 輸出整包放進 tools/net10.0/any/:所有相依的 DLL 與原生檔(含
+       Magick.Native-Q8-*,內含 ImageMagick)都夾在 nupkg 裡,所以 tool 套件本身就是 Magick.NET 與
+       ImageMagick 的再散布。Magick.NET 為 Apache-2.0、套件內附 Notice.txt,§4(d) 要求該通知隨附。
+       函式庫 Cornhsu.PolyMigrate.Core 不同:它只宣告相依、由使用者那端的 NuGet 解析,所以不加在
+       Directory.Build.props。npm 平台套件的同一件事由 npm/prepare.mjs 處理。 -->
+  <ItemGroup>
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <!-- 掛在 TargetsForTfmSpecificContentInPackage:這是 NuGet 文件化的擴充點(PackAsTool 自己的
+       PackTool 也掛在這裡),在指定 TargetFramework 的那一輪執行,解析得到 RuntimeCopyLocalItems;
+       pack 帶 no-build 時也會跑(release.yml 就是這樣 pack 的)。 -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackMagickNotice</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <!-- Magick.NET 的版本取自實際還原結果(Magick.NET-Q8-AnyCPU.dll 那一項的 NuGet metadata),不寫死:
+       相依一升版,寫死的路徑就會安靜地失效。找不到就讓 pack 失敗,不是印個警告帶過——
+       跟 npm/prepare.mjs 同一個規則。 -->
+  <Target Name="_PackMagickNotice" DependsOnTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_PolyMigrateMagickAsset Include="@(RuntimeCopyLocalItems)" Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' == 'Magick.NET-Q8-AnyCPU'" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_PolyMigrateMagickVersion>@(_PolyMigrateMagickAsset->'%(NuGetPackageVersion)'->Distinct())</_PolyMigrateMagickVersion>
+      <_PolyMigrateMagickNotice>$([MSBuild]::NormalizePath('$(NuGetPackageRoot)', 'magick.net-q8-anycpu', '$(_PolyMigrateMagickVersion.ToLowerInvariant())', 'Notice.txt'))</_PolyMigrateMagickNotice>
+    </PropertyGroup>
+
+    <Error Condition="'$(_PolyMigrateMagickVersion)' == ''"
+           Text="還原結果裡沒有 Magick.NET-Q8-AnyCPU,拿不到它的 Notice.txt。若影像相依換掉了,請同步更新 THIRD-PARTY-NOTICES.md 與這個 target,別直接把它拿掉" />
+    <Error Condition="'$(_PolyMigrateMagickVersion)' != '' and !Exists('$(_PolyMigrateMagickNotice)')"
+           Text="找不到 $(_PolyMigrateMagickNotice) — tool 套件夾帶了 Magick.NET 與 ImageMagick 的原生檔,Apache-2.0 §4(d) 要求隨附此通知,不能略過" />
+
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(_PolyMigrateMagickNotice)" PackagePath="NOTICE.txt" />
+    </ItemGroup>
+  </Target>
+
 </Project>

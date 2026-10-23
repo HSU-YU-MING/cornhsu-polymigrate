@@ -22,6 +22,20 @@ public class PathSafetyTests
         Assert.Contains("invalid character", PathSafety.Check(path));
 
     [Theory]
+    // 其餘 Windows 禁用字元與控制字元(contracts.md「非法字元或控制字元」):Linux 寫得出來、
+    // Windows 寫不出來的檔名,必須在每個平台都一樣地拒寫
+    [InlineData("content/ch/a<b.md")]
+    [InlineData("content/ch/a>b.md")]
+    [InlineData("content/ch/a\"b.md")]
+    [InlineData("content/ch/a\\b.md")]
+    [InlineData("content/ch/a*b.md")]
+    [InlineData("content/ch/tab\there.md")]
+    [InlineData("content/ch/nul\0byte.md")]
+    [InlineData("content/ch/del\u007f.md")]
+    public void OtherWindowsInvalidAndControlCharacters_Rejected(string path) =>
+        Assert.StartsWith("invalid character in ", PathSafety.Check(path));
+
+    [Theory]
     [InlineData("content/ch./x.md", "ch.")]           // 目錄段尾點:Windows 會默默剝掉 → 路徑不一致
     [InlineData("content/ch /x.md", "ch ")]
     public void TrailingDotOrSpace_Rejected(string path, string segment)
@@ -71,5 +85,14 @@ public class PathSafetyTests
     {
         Assert.Null(PathSafety.CheckLength(@"C:\out\" + new string('a', 100)));
         Assert.Contains("260", PathSafety.CheckLength(@"C:\out\" + new string('a', 300)));
+    }
+
+    [Fact]
+    public void OverlongPath_BoundaryIsTheClassic259CharacterMaximum()
+    {
+        // 傳統 Windows MAX_PATH 260 含結尾的 NUL,路徑本身最多 259 字元:259 照常、260 起才 warning。
+        // 這條 warning 會讓 extract 從 exit 0 變 1,差一個字元就是 exit code 契約上的差別
+        Assert.Null(PathSafety.CheckLength(new string('a', 259)));
+        Assert.Equal("path length 260 exceeds classic Windows limit (260)", PathSafety.CheckLength(new string('a', 260)));
     }
 }
