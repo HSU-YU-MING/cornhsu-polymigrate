@@ -55,6 +55,9 @@
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" Visible="false" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="All" />
+    <!-- ExcludeAssets="runtime":SourceLink 只在建置時跑,但它(經 Microsoft.Build.Tasks.Git)宣告了
+         System.IO.Hashing 的相依,不排除的話那顆 DLL 會被複製進輸出、打包進 tool 套件與 npm 執行檔——
+         程式碼一行都沒用到它,卻成了我們再散布的第三方元件。sourcelink.json 照樣產生。 -->
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="All" ExcludeAssets="runtime" />
   </ItemGroup>
 </Project>
