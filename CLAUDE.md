@@ -89,6 +89,10 @@ workflow 只剩 `ci.yml` 與 `release.yml`。**主線走 OIDC 就好**，不要�
   去 NuGet 快取拿那份通知（不寫死版本路徑——寫死的話相依一升版就會安靜失效），找不到就 throw；
   `release.yml` 另有一步驗成品確實帶到。**不要把它降級成印個警告**——這條原本是 RELEASING.md 上的
   人工檢查項，自動化的理由就是人工項遲早會被忘記。
+  **NuGet 的 tool 套件也是再散布**（`PackAsTool` 把相依與全平台原生檔打進 nupkg），同一份通知由
+  `PolyMigrate.Cli.csproj` 的 `_PackMagickNotice` target 以 `NOTICE.txt` 放進套件根目錄（版本取自
+  `RuntimeCopyLocalItems` 的 NuGet metadata），找不到就讓 `dotnet pack` 失敗。只有函式庫
+  `Cornhsu.PolyMigrate.Core` 是「相依由 NuGet 解析」，不需要。
 - **煙霧測試只跑 linux-x64**（runner 上唯一能直接執行的），至少守住「self-contained 產物開得起來」。
 
 ### 新增或移除平台時，要一起改的地方

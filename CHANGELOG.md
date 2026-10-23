@@ -319,6 +319,9 @@ IO 錯誤一律 2;未知指令 2。
 
 ### 打包
 
+- **tool 套件現在附 `NOTICE.txt` 與第三方授權聲明。** `Cornhsu.PolyMigrate` 把相依與 Magick.NET 的全平台原生檔
+  (內含 ImageMagick)整包打進 nupkg,本身就是再散布,但 2.x 沒附 Magick.NET 的 `Notice.txt`(Apache-2.0 §4(d) 要求)。
+  現在套件根目錄有 `NOTICE.txt` 與 `THIRD-PARTY-NOTICES.md`;npm 平台套件也多帶一份 `THIRD-PARTY-NOTICES.md`。
 - **tool 套件與 npm 執行檔不再夾帶 `System.IO.Hashing.dll`。** 它是建置期才用的 SourceLink 帶進來的相依,
   程式碼沒有用到;現在只在建置時參考、不複製進輸出。
 

@@ -86,9 +86,11 @@ rm -rf ./artifacts                             # artifacts/ 在 .gitignore 裡;�
 - [ ] 破壞性變更(major)在 CHANGELOG 寫明遷移方式
 - [ ] 相依套件有增刪或改版 → [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) 跟著更新
 
-> **授權通知已自動處理,不需人工確認。** npm 平台套件夾了 `Magick.Native-Q8-*`,
-> 那是實質的再散布,Apache-2.0 §4(d) 要求隨附 Magick.NET 的 `Notice.txt`。
-> `npm/prepare.mjs` 會依 `project.assets.json` 解析出的實際版本去 NuGet 快取取那份通知,
-> 放進每個平台套件,**找不到就中止建置**;release.yml 另有一步驗成品確實帶到。
+> **授權通知已自動處理,不需人工確認。** tool 套件(`PackAsTool` 把相依與原生檔整包打進 nupkg)
+> 與 npm 平台套件(self-contained 執行檔)都夾了 `Magick.Native-Q8-*`,那是實質的再散布,
+> Apache-2.0 §4(d) 要求隨附 Magick.NET 的 `Notice.txt`。兩條通路都依實際還原到的版本去 NuGet 快取
+> 取那份通知,連同 `THIRD-PARTY-NOTICES.md` 放進套件,**找不到就中止**:tool 套件由
+> `PolyMigrate.Cli.csproj` 的 `_PackMagickNotice` target 讓 `dotnet pack` 失敗;npm 由 `npm/prepare.mjs`
+> 中止建置,release.yml 另有一步驗成品確實帶到。
 > 原本這是這張清單上的一條人工項目——而人工項目遲早會被忘記,那正是把它自動化的理由。
-> NuGet 通路不受影響(相依由 NuGet 解析、授權隨套件走)。
+> 只有函式庫 `Cornhsu.PolyMigrate.Core` 不需要(相依由使用者端的 NuGet 解析、授權隨各套件走)。
