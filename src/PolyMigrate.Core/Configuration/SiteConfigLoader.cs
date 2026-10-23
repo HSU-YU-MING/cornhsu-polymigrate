@@ -235,9 +235,10 @@ public static class SiteConfigLoader
         // User-Agent 與 Cookie 以 TryAddWithoutValidation 放進標頭:換行、控制字元與非 ASCII(.NET 送請求時拒絕
         // 非 ASCII 的標頭值)都會讓每一個請求送不出去,probe 把它算成「連線錯誤」,一路錯到「一個回答都沒拿到」。
         // 只收可列印的 ASCII(0x20～0x7E;審查建議 3)
-        if (Present(errors, site.UserAgent, "site.user_agent") is { } userAgent && !userAgent.All(IsPrintableAscii))
+        // HTAB 例外:RFC 9110 的 field-value 允許它(field 內的空白字元),2.3.1 也照常送得出去(最終驗證建議 5)
+        if (Present(errors, site.UserAgent, "site.user_agent") is { } userAgent && !userAgent.All(ch => ch == '\t' || IsPrintableAscii(ch)))
         {
-            errors.Add("site.user_agent must contain only printable ASCII (HTTP headers can't carry line breaks, control characters or non-ASCII text).");
+            errors.Add("site.user_agent must contain only printable ASCII or tabs (HTTP headers can't carry line breaks, other control characters or non-ASCII text).");
         }
         if (site.AuthWorkaround is { } auth)
         {
