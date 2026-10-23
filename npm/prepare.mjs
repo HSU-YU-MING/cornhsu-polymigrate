@@ -39,10 +39,12 @@ await mkdir(distDir, { recursive: true });
 const exists = async (p) => access(p).then(() => true, () => false);
 
 // ── 第三方授權聲明 ──
-// NuGet 通路不需要這一段:相依由 NuGet 解析,每個套件的授權隨它自己走。
-// npm 不一樣——這裡出的是 self-contained 執行檔,Magick.Native-Q8-* 是「夾在裡面」
-// 一起散布的,而 Magick.NET 為 Apache-2.0 且其套件內含 Notice.txt,§4(d) 要求
-// 該通知隨附於再散布。
+// 這裡出的是 self-contained 執行檔:所有相依的 DLL、Magick.Native-Q8-*(內含 ImageMagick)
+// 與 .NET runtime 都「夾在裡面」一起散布。Magick.NET 為 Apache-2.0 且其套件內含 Notice.txt,
+// §4(d) 要求該通知隨附於再散布。
+// NuGet 那邊只有函式庫 Cornhsu.PolyMigrate.Core 是「相依由 NuGet 解析」;tool 套件
+// Cornhsu.PolyMigrate(PackAsTool)同樣把相依與原生檔打包進 nupkg,同一份通知由
+// src/PolyMigrate.Cli/PolyMigrate.Cli.csproj 的 _PackMagickNotice target 放進套件根目錄。
 //
 // 找不到就中止建置,不是印個警告帶過。原本這是 RELEASING.md 上的一條人工檢查項,
 // 而人工檢查項遲早會被忘記——「安靜地沒做到」正是把它自動化要消滅的失敗方式。
@@ -86,9 +88,10 @@ for (const t of TARGETS) {
   const out = path.join(distDir, t.pkg);
   await cp(src, path.join(out, "bin"), { recursive: true });
 
-  // 帶著原生檔散布的是平台套件,所以通知要放在這裡,不是只放主套件。
-  // LICENSE 與 README 由 npm 自動收錄,NOTICE.txt 不會 → 必須列進 files。
+  // 帶著原生檔與 .NET runtime 散布的是平台套件,所以通知要放在這裡,不是只放主套件。
+  // LICENSE 與 README 由 npm 自動收錄,NOTICE.txt 與 THIRD-PARTY-NOTICES.md 不會 → 必須列進 files。
   await writeFile(path.join(out, "NOTICE.txt"), magick.text);
+  await cp(path.join(root, "THIRD-PARTY-NOTICES.md"), path.join(out, "THIRD-PARTY-NOTICES.md"));
   await cp(path.join(root, "LICENSE"), path.join(out, "LICENSE"));
 
   await writeFile(
@@ -107,7 +110,7 @@ for (const t of TARGETS) {
         author: "許彧銘 Hsu Yu-Ming (https://cornhsu.com/)",
         os: [t.os],
         cpu: [t.cpu],
-        files: ["bin/", "NOTICE.txt"],
+        files: ["bin/", "NOTICE.txt", "THIRD-PARTY-NOTICES.md"],
       },
       null,
       2
@@ -137,8 +140,8 @@ manifest.optionalDependencies = Object.fromEntries(
 await writeFile(path.join(mainOut, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
 
 await cp(path.join(root, "README.md"), path.join(mainOut, "README.md"));
-// 使用者裝的是主套件,所以「有哪些第三方、各是什麼授權」要在這裡看得到;
-// 原生檔的 Apache-2.0 通知則隨平台套件走(上面)。
+// 使用者裝的是主套件,所以「有哪些第三方、各是什麼授權」也要在這裡看得到;
+// 原生檔的 Apache-2.0 通知(與同一份聲明)則隨平台套件走(上面)。
 await cp(path.join(root, "THIRD-PARTY-NOTICES.md"), path.join(mainOut, "THIRD-PARTY-NOTICES.md"));
 await cp(path.join(root, "LICENSE"), path.join(mainOut, "LICENSE"));
 

@@ -152,6 +152,8 @@ jobs:
           for d in npm/dist/polymigrate-*/; do
             test -s "$d/NOTICE.txt" || { echo "::error::$d 少了 NOTICE.txt"; exit 1; }
             grep -q "ImageMagick" "$d/NOTICE.txt" || { echo "::error::$d 的 NOTICE.txt 內容不對"; exit 1; }
+            # 平台套件還夾了其他相依與 .NET runtime,它們的 MIT 聲明在 THIRD-PARTY-NOTICES.md
+            test -s "$d/THIRD-PARTY-NOTICES.md" || { echo "::error::$d 少了 THIRD-PARTY-NOTICES.md"; exit 1; }
           done
           test -s npm/dist/cornhsu-polymigrate/THIRD-PARTY-NOTICES.md
           echo "✔ 授權聲明已隨 $(ls -d npm/dist/polymigrate-*/ | wc -l) 個平台套件與主套件出貨"
