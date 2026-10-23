@@ -119,4 +119,25 @@ public class NpmLauncherTests : CliTestBase
         AssertLauncherFailure(stderr);
         Assert.Contains("could not start ", stderr);
     }
+
+    [Fact]
+    public async Task CtrlC_LeavesTheLauncherAlive_SoTheChildsExitCodeIsPassedOn()
+    {
+        // 主控台的 Ctrl-C 同時送給 node 與子行程。node 沒有 SIGINT 處理器的話會先被結束——Windows 上結束碼是
+        // 0xC000013A,子行程乾淨回的 130 傳不出去(最終驗證建議 7)。真的按 Ctrl-C 在測試裡做不到:
+        // 這裡把 spawnSync 換成假的,記下子行程執行當下 node 有沒有掛上 SIGINT 處理器,並模擬子行程回 130
+        foreach (var key in new[] { "win32-x64", "win32-arm64", "linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64" })
+        {
+            Write($"node_modules/@cornhsu/polymigrate-{key}/package.json", $"{{ \"name\": \"@cornhsu/polymigrate-{key}\" }}");
+        }
+
+        var (exit, stdout, _) = await Node(
+            new Dictionary<string, string> { ["NODE_PATH"] = PathOf("node_modules") }, "-e",
+            "const cp = require('node:child_process');"
+            + " cp.spawnSync = () => { console.log('sigint-listeners=' + process.listenerCount('SIGINT')); return { status: 130, signal: null }; };"
+            + $" process.argv = [process.argv[0], 'polymigrate', 'extract', 'site.yaml']; require({Quote(Launcher)});");
+
+        Assert.Equal("sigint-listeners=1\n", stdout);
+        Assert.Equal(130, exit);
+    }
 }

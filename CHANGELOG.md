@@ -131,7 +131,7 @@ IO 錯誤一律 2;未知指令 2。
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `verify` | 無 issue | 只有 warning | 有 error(含保留的 iframe 指向沒搬的站內頁);`--allow-unlinked` 檔不存在 | 第一次 Ctrl-C |
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | 第一次 Ctrl-C |
-| npm 啟動腳本 | 原樣轉傳 PolyMigrate 的 exit code;被訊號中斷時為 128+訊號編號 | — | **啟動腳本自己失敗** | SIGINT(128+2) |
+| npm 啟動腳本 | 原樣轉傳 PolyMigrate 的 exit code;被訊號中斷時為 128+訊號編號 | — | **啟動腳本自己失敗** | Ctrl-C:轉傳 PolyMigrate 的 130(Windows 也是,見下) |
 
 與 2.3.1 相比,exit code 改變的情境(**粗體**為往上升、可能讓原本通過的流程變紅):
 
@@ -141,6 +141,7 @@ IO 錯誤一律 2;未知指令 2。
 | **`probe-orphans` 一個回答都沒拿到** | 0 | 2 |
 | **`probe-orphans` 部分候選沒拿到回答** | 0(有 `warning:`) | 1 |
 | **npm 啟動腳本自己失敗** | 1 | 2 |
+| 經 npm 執行時按 Ctrl-C(Windows) | `0xC000013A`(node 先被結束) | 130(PolyMigrate 收尾後轉傳) |
 | **`verify`:保留的 iframe 指向沒搬過來的站內頁** | 0/1(iframe 不在 Markdown 裡) | 2 |
 | **`fetch-orphans` 沒給 `--slugs`,只有 2.x 的 `orphan_slugs.txt`** | 照讀(0/1) | 2(訊息講明怎麼改名) |
 | **沒給 `--out` / `--slugs`,`--section` 含 `/` 等** | 照跑 | 2 |

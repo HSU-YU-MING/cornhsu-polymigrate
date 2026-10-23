@@ -71,6 +71,11 @@ try {
   );
 }
 
+// Ctrl-C:主控台的 Ctrl-C 同時送給這個 node 行程與子行程(Windows 的主控台群組、Unix 的前景行程群組都是如此)。
+// node 沒有 SIGINT 處理器的話會先被結束——Windows 上結束碼是 0xC000013A,子行程乾淨回的 130 傳不出去。
+// 掛一個什麼都不做的處理器,讓 node 等子行程自己收尾,再原樣轉傳它的 exit code。
+process.on("SIGINT", () => {});
+
 const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
 
 if (result.error) {

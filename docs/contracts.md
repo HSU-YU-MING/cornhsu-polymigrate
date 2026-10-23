@@ -326,6 +326,9 @@ config 的 CSS selector(`extract.content`、每一個 `type_rules.*.title_select
 
 經 npm(`npx cornhsu-polymigrate`、全域安裝的 `polymigrate`)執行時,中間多一層啟動腳本 `bin/polymigrate.js`:
 PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編號(SIGINT → 130)。
+按 Ctrl-C 時,啟動腳本掛了一個什麼都不做的 SIGINT 處理器,自己不會先被結束:由 PolyMigrate 收尾、回 130,再原樣轉傳。
+(2.3.1 以前在 Windows 上 node 會先被主控台的 Ctrl-C 結束,結束碼是 `0xC000013A` 而不是 130。3.0 的行為依 node 與
+.NET 的主控台事件處理推論,並以測試釘住「子行程執行時處理器已掛上、子行程的 130 原樣轉傳」;沒有在真的主控台上按鍵驗證。)
 **啟動腳本自己失敗**(平台不在支援表、平台包沒裝、執行檔起不來)時 PolyMigrate 根本沒有執行,
 回 **2**,stderr 以 `error:` 開頭並註明 `PolyMigrate did not run.`。
 (2.3.1 以前回 1,與上表的「1 = 只有 warning」撞號;3.0 改成 2。)
