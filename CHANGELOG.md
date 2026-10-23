@@ -329,6 +329,8 @@ IO 錯誤一律 2;未知指令 2。
 
 - **npm 發佈只走 OIDC 信任發布。** `release.yml` 裡 2.1.0 首發用、之後一直休眠的 `NPM_TOKEN` 分支拿掉了——
   只要有人加了同名 secret,它就會繞過信任發布、回到長效金鑰。環境或 `.npmrc` 裡出現 npm token 時,發佈步驟直接失敗。
+- **CI 與發佈用的 `actions/*` 全部改釘 commit SHA**(checkout、setup-dotnet、setup-node、upload-artifact,註解標版本)。
+  2.3.1 只釘了 `NuGet/login`;移動式 tag 可以被上游挪到任意 commit。
 
 ## 2.3.1
 

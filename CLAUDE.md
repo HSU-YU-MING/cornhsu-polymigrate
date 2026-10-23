@@ -162,10 +162,14 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
 配對是**兩趟**：`hreflang` 先配完，啟發式才上場。合成一趟的話，宣告的關係會被字典序剛好排在
 前面的共用相簿搶走對象，等於讓推測贏過宣告。
 
-### `NuGet/login` 已釘 commit SHA
+### 所有 action 都釘 commit SHA
 
 `release.yml` 的 `NuGet/login@8d196754b4036150537f80ac539e15c2f1028841`（= v1.2.0，2026-08-25 安全硬化）。
 **不要改回 `@v1`**；上游出新版要更新時，四個姊妹 repo 一起換新 SHA。
+
+3.0 起 `actions/*`（checkout、setup-dotnet、setup-node、upload-artifact）也一樣釘 40 碼 SHA，後面以註解標版本
+（例如 `# v7.0.1`）——tag 可以被挪到任意 commit，SHA 不行。新增 `uses:` 時照這個寫法，不要寫 `@v7` 這種移動式 tag。
+`dependabot.yml` 的 `github-actions` 每月會開 PR 換新 SHA 並更新版本註解。
 
 ## 已知教訓（從 git log 挖的，都真的爆過）
 
