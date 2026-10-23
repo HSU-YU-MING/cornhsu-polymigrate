@@ -170,7 +170,8 @@ public sealed class ThumbnailGenerator(SiteConfig config)
     /// 單格(或其他格式、讀不起來的)回 false、<paramref name="firstFrameReason"/> 為 null,由呼叫端走一般的單張路徑。
     /// 確定是多格、但決定不保留動畫時也回 false,並在 <paramref name="firstFrameReason"/> 寫明原因(呼叫端改用第一格):
     /// 格數 × 畫布超過 <see cref="AnimationPixelBudget"/>(審查實測 400 格要 39 秒、3.2 GB),
-    /// 或保留動畫的縮圖比原檔大(縮圖的意義是更小;審查實測 298 格的錄影 1.8 MB → 4.18 MB)。
+    /// 或保留動畫的縮圖比原檔大(縮圖的意義是更小;審查實測 298 格的錄影 1.8 MB → 4.18 MB)——
+    /// 但動畫本來就不需要縮放、也不必轉正時,原檔本身就是最小的縮圖,直接複製(回 true,算保留動畫)。
     /// <para>2.3.1 以前一律 <c>new MagickImage(file)</c>,只讀第一格:動畫縮圖變成靜止的第一格,而且沒有任何提示
     /// (決策檔 L4 選項 A)。先 <c>Coalesce</c>:GIF 的後續格常只存「跟上一格不同的那一塊」,不補成完整畫面就縮,
     /// 各格的位置與大小會對不上(Coalesce 之後每格的畫布都從 (0,0) 起,AutoOrient 與 Resize 會跟著轉、跟著縮,
@@ -220,6 +221,9 @@ public sealed class ThumbnailGenerator(SiteConfig config)
             return false;
         }
         var format = frames[0].Format;
+        // 原檔已經是合格縮圖:畫布不超過 max_width,也沒有要轉正的格(Coalesce 之前看,才是原檔本來的樣子)
+        var fitsAsIs = frames.All(f => Math.Max(f.Page.Width, f.Width) <= (uint)thumbs.MaxWidth
+            && f.Orientation is OrientationType.Undefined or OrientationType.TopLeft);
         frames.Coalesce();
         foreach (var frame in frames)
         {
@@ -236,6 +240,13 @@ public sealed class ThumbnailGenerator(SiteConfig config)
         if (animatedBytes > originalBytes)
         {
             File.Delete(tmp);
+            if (fitsAsIs)
+            {
+                // 不需要縮放的小動畫重新編碼反而變大(例如無損 WebP):原檔本身就是最小、而且保留動畫的縮圖,
+                // 直接複製,不退回第一格(最終驗證可接受項)
+                File.Copy(file, tmp, overwrite: true);
+                return true;
+            }
             firstFrameReason = $"the animated thumbnail ({animatedBytes} bytes) would be larger than the original ({originalBytes} bytes)";
             return false;
         }

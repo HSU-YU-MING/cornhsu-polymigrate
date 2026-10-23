@@ -539,6 +539,31 @@ public class ThumbnailGeneratorTests : IDisposable
     }
 
     [Fact]
+    public void AnimationThatNeedsNoScaling_AndGrowsWhenReencoded_IsCopiedAsIs()
+    {
+        // 畫布本來就不超過 max_width、也不必轉正的動畫:原檔本身就是合格的縮圖。重新編碼反而變大時,
+        // 原本退回第一格(動畫沒了);直接複製原檔才是最小、而且保留動畫的結果(最終驗證可接受項)
+        using (var animation = new MagickImageCollection())
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                var frame = new MagickImage(MagickColors.White, 800, 400) { AnimationDelay = (uint)(10 + i) };
+                frame.Draw(new ImageMagick.Drawing.Drawables().FillColor(MagickColors.Black).Rectangle(i * 36, 40, i * 36 + 24, 360));
+                frame.Settings.SetDefine(MagickFormat.WebP, "lossless", true);
+                animation.Add(frame);
+            }
+            animation.Write(MediaPath("bars.webp"), MagickFormat.WebP);
+        }
+
+        var report = RunWith(maxWidth: 1000);   // 800 寬,不需要縮
+
+        Assert.Equal(1, report.AnimationsKept);
+        Assert.Empty(report.AnimationsAsFirstFrame);
+        Assert.Equal(File.ReadAllBytes(MediaPath("bars.webp")), File.ReadAllBytes(Path.Combine(OutDir, "bars.webp")));
+        Assert.False(File.Exists(Path.Combine(OutDir, "bars.webp.tmp")));
+    }
+
+    [Fact]
     public void TruncatedAnimatedGif_StillGetsAFirstFrameThumbnail_LikeBefore()
     {
         // 舊站鏡像裡下載到一半的 GIF 很常見。多格讀取(MagickImageCollection)對截斷的檔直接擲例外,
