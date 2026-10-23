@@ -52,23 +52,26 @@ tool 套件約 **100 MB**（內含 Magick.NET 全平台原生檔），這個大�
 
 **只有 CLI 上 npm。** `Cornhsu.PolyMigrate.Core` 是給 .NET 開發者的函式庫，受眾本來就在 NuGet。
 
-### 兩種認證需求互卡（2.1.0 實際踩到，加新平台包時會再遇到）
+### npm 認證只走 OIDC 信任發布（3.0 拿掉了 token 分支）
 
-npm 的 **OIDC 信任發布無法建立全新套件**——套件要先存在，才設定得了信任發布。所以每次新增一個
-平台包，那一包的首發只能用 `NPM_TOKEN`。但**既有且已設信任發布的套件，用 token 發會撞 provenance
-簽章 403**（`CA_CREATE_SIGNING_CERTIFICATE_ERROR`）：workflow 有 `id-token: write`，npm 就會自動
-嘗試簽 provenance，而認證走的是 token → 憑證申請被拒。
+npm 的 **OIDC 信任發布無法建立全新套件**——套件要先存在，才設定得了信任發布。2.1.0 加 arm64 平台包時
+因此在 `release.yml` 開過一條 `NPM_TOKEN` 分支給首發用；而**既有且已設信任發布的套件，用 token 發會撞
+provenance 簽章 403**（`CA_CREATE_SIGNING_CERTIFICATE_ERROR`：workflow 有 `id-token: write`，npm 會自動
+嘗試簽 provenance，認證卻走 token → 憑證申請被拒），所以那條分支還得 `export NPM_CONFIG_PROVENANCE=false`。
 
-`release.yml` 已經內建對策，不要拆掉：
+七個套件都已存在、都設好信任發布之後，那條分支只剩風險：平常休眠，但只要有人加了同名 secret，
+就會安靜地繞過信任發布、回到長效金鑰。**3.0 起拿掉了**：`Publish to npm` 只走 OIDC，開頭先守門——
+環境變數（`NPM_TOKEN`、`NODE_AUTH_TOKEN`、`npm_config_*auth*`）或 `.npmrc`（`~/.npmrc`、工作目錄、
+`NPM_CONFIG_USERCONFIG` 指的那份）裡出現 npm token 就直接失敗，不讓 npm 拿它去認證。
 
-- 有 `NPM_TOKEN` → 寫 `.npmrc` 用 token，並 `export NPM_CONFIG_PROVENANCE=false`；沒有 → 走 OIDC
-  （OIDC 路徑不設這個變數，信任發布仍會自動簽 provenance）。
+仍在的對策，不要拆掉：
+
 - 迴圈**刻意不用 `set -e`**：單一套件失敗只記進 `failed` 陣列並繼續，全跑完再統一非零退出。
   否則一次失敗就要重跑很多趟才推得完。
 - 已存在的版本 `npm view` 得到就跳過而非報錯，重跑冪等。
 
-流程是：加平台包 → 暫時放 `NPM_TOKEN` secret 發一次 → 到 npmjs 幫新套件設信任發布 → **把 secret
-刪掉**，之後自動回到 OIDC。
+**新增平台包時**：首發由維護者在本機用自己的 npm 登入手動 `npm publish` 建立套件 → 到 npmjs 幫新套件
+設信任發布 → 之後由 `release.yml` 接手。**不要為了首發在 repo 加 secret，也不要把 token 分支加回來。**
 
 ### 不要再造 token 通道
 
@@ -81,7 +84,7 @@ workflow 只剩 `ci.yml` 與 `release.yml`。**主線走 OIDC 就好**，不要�
 - **`setup-node` 刻意不設 `registry-url`**：它會在 `.npmrc` 寫
   `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`，OIDC 情境下該變數不存在 → npm 拿「空 token」
   去驗證而不改走 OIDC，直接失敗（actions/setup-node#1551）。預設 registry 本來就是 npmjs.org。
-  同源理由：token 路徑用的是自訂的 `NPM_TOKEN`，**不是** `NODE_AUTH_TOKEN`。
+  `Publish to npm` 開頭的守門也會擋下 `NODE_AUTH_TOKEN` 與 setup-node 寫出來的 `.npmrc`。
 - **npm CLI 要 >= 11.5.1** 才支援信任發布，Node 22 內建 10.x，所以 job 裡有一步 `npm install -g npm@latest`。
 - **平台包必須先發，主套件最後發**，否則主套件的 `optionalDependencies` 解析不到。
 - **授權通知是硬性中止條件**：平台包夾了 `Magick.Native-Q8-*`，那是實質再散布，Apache-2.0 §4(d)

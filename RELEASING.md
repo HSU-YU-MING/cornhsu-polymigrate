@@ -71,12 +71,17 @@ rm -rf ./artifacts                             # artifacts/ 在 .gitignore 裡;�
   由 `npm/prepare.mjs` 組成主套件 `cornhsu-polymigrate`(只含啟動腳本)+ 六個平台包
   (`@cornhsu/polymigrate-*`,掛 `optionalDependencies`,npm 依 os/cpu 只下載當前平台那份)。
 - **只有 CLI 上 npm**;`Cornhsu.PolyMigrate.Core` 是給 .NET 開發者的函式庫,受眾在 NuGet。
-- 認證自動切換:有 `NPM_TOKEN` secret → token(首次發布只能這樣,信任發布需先有套件才設定得了);
-  沒有 → OIDC 信任發布(零長效金鑰)。設定好信任發布後把 secret 刪掉即自動改走 OIDC。
+- 認證只走 OIDC 信任發布(零長效金鑰)。七個套件(`cornhsu-polymigrate` 與六個 `@cornhsu/polymigrate-*`)
+  都已存在、信任發布都已設定。workflow 沒有 token 通道:環境或 `.npmrc` 裡出現 npm token 時,
+  `Publish to npm` 那一步直接失敗。
 - 發布冪等:已存在的版本跳過而非報錯,某包失敗重跑不會被前面已成功的擋住。
 
-一次性設定:在 npmjs.org 為 `cornhsu-polymigrate` 與 `@cornhsu/polymigrate-*` 設 trusted publisher
+一次性設定(已完成):在 npmjs.org 為 `cornhsu-polymigrate` 與 `@cornhsu/polymigrate-*` 設 trusted publisher
 (repo `HSU-YU-MING/cornhsu-polymigrate`、workflow `release.yml`)。
+
+**新增平台包時**,npm 的信任發布無法建立全新套件——套件要先存在才設定得了。那一包的首發由維護者
+在本機用自己的 npm 登入手動 `npm publish` 建立,接著到 npmjs 為它設信任發布,之後就由 `release.yml` 接手。
+**不要為了首發在 repo 加 `NPM_TOKEN` secret**:workflow 已經不讀它(2.1.0 那條 token 分支在 3.0.0 拿掉了)。
 
 ## 發布前檢查清單
 
