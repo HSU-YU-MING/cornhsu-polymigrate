@@ -131,6 +131,36 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(low, high);
     }
 
+    /// <summary>在 IHDR 之後插一個 tIME chunk(PNG 規格:年 2 位元組、月日時分秒各 1 位元組,CRC 涵蓋型別與資料)。</summary>
+    private static void InsertTimeChunk(string path, DateTime time)
+    {
+        var bytes = File.ReadAllBytes(path);
+        byte[] typeAndData =
+        [
+            .. "tIME"u8.ToArray(),
+            (byte)(time.Year >> 8), (byte)time.Year, (byte)time.Month, (byte)time.Day,
+            (byte)time.Hour, (byte)time.Minute, (byte)time.Second,
+        ];
+        var crc = Crc32(typeAndData);
+        byte[] chunk = [0, 0, 0, 7, .. typeAndData, (byte)(crc >> 24), (byte)(crc >> 16), (byte)(crc >> 8), (byte)crc];
+        const int afterIhdr = 8 + 12 + 13;   // 簽章 8 + IHDR(長度 4、型別 4、資料 13、CRC 4)
+        File.WriteAllBytes(path, [.. bytes[..afterIhdr], .. chunk, .. bytes[afterIhdr..]]);
+    }
+
+    private static uint Crc32(byte[] data)
+    {
+        var crc = 0xFFFFFFFFu;
+        foreach (var b in data)
+        {
+            crc ^= b;
+            for (var k = 0; k < 8; k++)
+            {
+                crc = (crc & 1) != 0 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+            }
+        }
+        return ~crc;
+    }
+
     /// <summary>PNG 的 chunk 型別與(文字 chunk 的)關鍵字,依出現順序。</summary>
     private static List<string> PngChunks(string path)
     {
@@ -164,6 +194,13 @@ public class ThumbnailGeneratorTests : IDisposable
         WriteNoisy(name, format);
         var source = MediaPath(name);
         var thumbPath = Path.Combine(OutDir, name);
+        if (format == MagickFormat.Png)
+        {
+            // 真實世界的 PNG 常帶 tIME(相機、編輯器寫的),Magick 會把它帶到縮圖上;Magick 自己從頭寫的 PNG 沒有,
+            // 用那種來源的話「只排除 date」也照樣過(最終驗證 mutation P2 存活)。所以來源補一個 tIME
+            InsertTimeChunk(source, new DateTime(2019, 5, 1, 8, 30, 0));
+            Assert.Contains("tIME", PngChunks(source));
+        }
 
         File.SetLastWriteTimeUtc(source, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         Run();
