@@ -159,7 +159,8 @@ polymigrate slugs . --section news          # slugs already mirrored under ./raw
 > frame costs memory and time in proportion to frames × width × height (measured: a 400-frame
 > 1300×900 GIF took 39 s and 3.2 GB). So an animation over **50 megapixels** in total, or one whose
 > animated thumbnail would be larger than the original, gets a first-frame thumbnail instead — the
-> same result as before 3.0 (an animation that needs no scaling is copied as-is instead). At the limit it takes about 6 s and 250 MB. The `thumbs` summary lists
+> same result as before 3.0 (an animation that needs no scaling is copied as-is instead). At the limit it takes about 6 s and a 250–400 MB memory peak, depending on the content
+> (two 100-frame 1000×500 GIFs measured 250 MB and 384 MB). The `thumbs` summary lists
 > which files got a first frame and why; neither case is a failure or changes the exit code.
 
 > **`raw/` is the one thing you cannot regenerate.** Re-crawling a site takes hours at a
