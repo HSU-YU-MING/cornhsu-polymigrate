@@ -39,11 +39,25 @@ git push origin v1.0.0-preview.1
 ## 本機乾跑(不發佈,驗證封裝可裝可跑)
 
 ```sh
-dotnet pack -c Release -o ./artifacts
-dotnet tool install --global --add-source ./artifacts Cornhsu.PolyMigrate
-polymigrate --version && polymigrate --help
-dotnet tool uninstall --global Cornhsu.PolyMigrate
+v=0.0.0-local.$(date +%s)                      # 每次一個沒用過的版本號(理由見下)
+dotnet pack -c Release -o ./artifacts -p:Version=$v
+dotnet tool install --tool-path ./artifacts/tool --add-source ./artifacts Cornhsu.PolyMigrate --version $v
+./artifacts/tool/polymigrate --version && ./artifacts/tool/polymigrate --help
+rm -rf ./artifacts                             # artifacts/ 在 .gitignore 裡;只裝在這裡,不必 uninstall
 ```
+
+三個陷阱,都踩得到:
+
+- **不指定 `--version` 會裝到 nuget.org 上的正式版。** 本機 pack 不帶 `-p:Version` 時是 `0.0.0-dev`(預覽版),
+  `--add-source` 只是**多加**一個來源,`dotnet tool install` 照樣挑 nuget.org 上最新的正式版(例如 2.3.1)——
+  驗到的根本不是剛 pack 的東西。
+- **同一個版本號第二次 pack,裝到的是舊的那一份。** `dotnet tool install` 先看 `~/.nuget/packages` 的快取,
+  已經有 `cornhsu.polymigrate/<版本>` 就不會去讀新 pack 的 nupkg。所以每次用唯一的版本號(上面用 Unix 時間);
+  也不要用真的版本號(例如 `3.0.0`)乾跑:本機的假 3.0.0 會留在快取裡,之後裝正式的 3.0.0 時拿到的是它。
+- **`--global` 會撞到使用者已安裝的版本**:全域裝了 2.3.1 時 `install --global` 直接失敗,改用 `--tool-path`
+  裝在 `./artifacts/tool`,不動到全域。
+
+留在 `~/.nuget/packages/cornhsu.polymigrate/` 底下的 `0.0.0-local.*` 不影響任何正式版本,要清可以整個刪掉。
 
 > tool 套件約 100 MB——內含 Magick.NET 全平台原生二進位(EXIF 轉正縮圖用)。
 > 若要瘦身,backlog 有「把 thumbs 拆成選配套件」一項。
