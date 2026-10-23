@@ -161,6 +161,48 @@ public class ConfigLoadValidationTests
     }
 
     [Fact]
+    public void AliasAsAValue_DoesNotThrowOffTheKeyTracking()
+    {
+        // 別名(*t)當值時也要算「這個 key 的值讀完了」:否則下一個 key 會被當成值,之後整張表錯位,
+        // 真正重複的 blog 就抓不到(最終驗證 mutation K3「別名不推進 key / 值狀態」存活)
+        // 區塊寫法:YamlDotNet 在 flow mapping 裡會把「*t,」的逗號讀成別名的一部分
+        var yaml = Yaml(extract: "  section_types:\n    news: &t article\n    events: *t\n    blog: page\n    blog: event\n");   // 第二個 blog 在第 13 行
+
+        Assert.Equal(
+            "site.yaml: config is invalid:\n"
+            + "  - extract.section_types: 'blog' appears more than once (line 13); the later value would silently replace the earlier one.",
+            Error(yaml));
+    }
+
+    [Fact]
+    public void AnchoredMapReusedByAlias_IsNotADuplicate()
+    {
+        var config = SiteConfigLoader.Load(Yaml(extract:
+            "  type_rules:\n    article: &rules { title_selector: \"h3\", remove_selectors: [h5] }\n    event: *rules\n"));
+
+        Assert.Equal("h3", config.Extract.TypeRules["event"].TitleSelector);
+    }
+
+    [Fact]
+    public void QuotedAndUnquotedSpellingOfTheSameKey_IsADuplicate()
+    {
+        // YAML 裡 "news" 與 news 是同一個 key:引號不算差別
+        var yaml = Yaml(extract: "  section_types: { \"news\": article, news: event }\n");
+
+        Assert.Contains("  - extract.section_types: 'news' appears more than once (line 9);", Error(yaml));
+    }
+
+    [Fact]
+    public void KeysThatDifferOnlyInCase_AreNotDuplicates()
+    {
+        // key 分大小寫(YAML 本身如此,section 名稱也是逐字比對):News 與 news 是兩個 section
+        var config = SiteConfigLoader.Load(Yaml(extract: "  section_types: { News: article, news: event }\n"));
+
+        Assert.Equal("article", config.Extract.SectionTypes["News"]);
+        Assert.Equal("event", config.Extract.SectionTypes["news"]);
+    }
+
+    [Fact]
     public void SameKeyInDifferentMaps_IsNotADuplicate()
     {
         var config = SiteConfigLoader.Load(Yaml(extract:
