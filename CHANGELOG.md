@@ -21,6 +21,7 @@
 2. **檢查 CI / 排程怎麼解讀 exit code**(見「exit code 對照表」),尤其是「0/1 放行」的流程:`probe-orphans` 一個回答都沒拿到、
    npm 啟動腳本自己失敗,現在都是 **2**;`probe-orphans` 有部分候選沒拿到回答時是 **1**(2.x 是 0);`verify` 可能因為保留下來的 iframe 由 0/1 變 **2**;同步指令按一次 Ctrl-C 就是 **130**。
 3. **重產動畫縮圖。** `thumbs` 會跳過已存在的縮圖:要拿到保留動畫的 GIF / WebP 縮圖,先刪掉 `media_thumb/` 裡的 `.gif` / `.webp` 再跑一次。
+   另外,超過 **179 MP** 的靜態圖(解壓縮炸彈)現在不解碼、算縮圖失敗,`thumbs` 因此可能由 0 變 1(見「破壞性變更」)。
 4. **部署 `redirects.nginx.conf` 之前重新 `nginx -t`。** 含非 ASCII 或特殊字元的舊網址改寫成解碼後的路徑,寫法與排序都會變。
 5. **Windows 使用者:重跑 `extract` 後,每一個 `.md` 的行尾都會改變**(frontmatter 改成 `\n`),第一次 commit 會是整片的行尾 diff。
 6. **先載入一次 config,修掉寫壞的值。** 3.0 起載入 config 時多驗了一批欄位(CSS selector、`strip_title_prefix` 的 regex、
@@ -114,6 +115,15 @@
   一律 `ConfigException` → exit 2,與 selector 的錯誤一起在同一則訊息裡逐行列出、點名欄位。用到時的檢查保留為第二道防線
   (標題清理器照樣編譯 regex,而且改成容忍 `title_noise` / `title_markers` 的 null 項目)。
   **遷移**:照訊息修好或拿掉那些值(見「升級必做」第 6 條)。`examples/ibps-austin.yaml` 與測試用的 config 都不受影響。
+- **`thumbs` 不解碼超過 179 MP 的靜態圖,記成縮圖失敗(`thumbs` 可能由 exit 0 變 1)。** 小檔、巨大尺寸的圖(解壓縮炸彈)
+  不經過動畫預算:一格 20000x20000 的 GIF 只有 270 KB,2.3.1 起照樣整張解碼,實測 14.8 秒、峰值 1.6 GB(約每像素 4 位元組);
+  宣告 65535x65535 的檔可以把機器拖垮。現在解碼前只讀標頭(Ping)拿尺寸,寬 × 高超過 **178,956,970 像素(約 179 MP)**
+  ——Pillow 擲 DecompressionBombError 的門檻(2 × 89,478,485)——就不解碼,記進 failed:
+  `[fail] one.gif :: 20000x20000 (400 MP) exceeds the 179 MP still-image limit`。以同樣的比例,179 MP 約 720 MB;
+  100 MP 級的相機原圖(11648x8736 約 101.8 MP)照常處理。改用第一格的動畫也照這個上限檢查那一格。
+  **刻意不「複製原檔、不做縮圖」**:那等於把一張幾億像素的圖放在頁面以為是縮圖的位置,交給每個訪客的瀏覽器去解碼。
+  動畫預算的訊息一併改用同一套單位(`3 frames of 2000x500 (3 MP) exceed the 50 MP animation budget`)。
+  **遷移**:用影像工具先把那張圖縮小到 179 MP 以內再跑 `thumbs`,或接受它沒有縮圖。
 - **函式庫:config 的 CSS selector 寫壞時擲 `ConfigException`**(2.x:AngleSharp 的 `DomException`)。影響
   `PolyMigrator.Extract`、`ExtractionPipeline.Run`、`OrphanFetcher.FetchAsync` 與新的 `PolyMigrator.FetchOrphansAsync`。
   **遷移**:改接 `ConfigException`(訊息點名寫壞的欄位)。
@@ -126,7 +136,7 @@ IO 錯誤一律 2;未知指令 2。
 | 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
 |---|---|---|---|---|
 | `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | 第一次 Ctrl-C |
-| `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | 第一次 Ctrl-C |
+| `thumbs` | 全部建立或已存在 | 任一張失敗(含超過 179 MP 的靜態圖) | 媒體目錄不存在 | 第一次 Ctrl-C |
 | `probe-orphans` | 跑完、每個候選都拿到回答(不論命中幾筆) | **部分候選沒拿到回答**(清單照寫,可能不完整) | `--years` 不合法;**一個回答都沒拿到**;沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `verify` | 無 issue | 只有 warning | 有 error(含保留的 iframe 指向沒搬的站內頁);`--allow-unlinked` 檔不存在 | 第一次 Ctrl-C |
@@ -139,6 +149,7 @@ IO 錯誤一律 2;未知指令 2。
 |---|---|---|
 | **同步指令(`extract` / `thumbs` / `verify` / `slugs`)按一次 Ctrl-C** | 照常跑完,0/1/2 | 130 |
 | **`probe-orphans` 一個回答都沒拿到** | 0 | 2 |
+| **`thumbs`:靜態圖超過 179 MP(解壓縮炸彈)** | 0(整張解碼,20000x20000 要 14.8 秒、1.6 GB) | 1(不解碼,記成失敗) |
 | **`probe-orphans` 部分候選沒拿到回答** | 0(有 `warning:`) | 1 |
 | **npm 啟動腳本自己失敗** | 1 | 2 |
 | 經 npm 執行時按 Ctrl-C(Windows) | `0xC000013A`(node 先被結束) | 130(PolyMigrate 收尾後轉傳) |

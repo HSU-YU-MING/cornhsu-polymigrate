@@ -318,7 +318,7 @@ config 的 CSS selector(`extract.content`、每一個 `type_rules.*.title_select
 | 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
 |---|---|---|---|---|
 | `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | Ctrl-C |
-| `thumbs` | 全部建立或已存在 | 任一張失敗 | 媒體目錄不存在 | Ctrl-C |
+| `thumbs` | 全部建立或已存在 | 任一張失敗(含寬 × 高超過 178,956,970 像素〔約 179 MP〕的靜態圖:解碼前只讀標頭就擋下,不做縮圖) | 媒體目錄不存在 | Ctrl-C |
 | `probe-orphans` | 跑完、每個候選都拿到回答(不論命中幾筆) | 部分候選沒拿到回答(清單照寫,可能不完整) | `--years` 不合法;一個回答都沒拿到(不寫清單,見上);沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | Ctrl-C |

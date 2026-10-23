@@ -456,7 +456,7 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(0, report.AnimationsKept);
         var (path, reason) = Assert.Single(report.AnimationsAsFirstFrame);
         Assert.Equal("big.gif", path);
-        Assert.Equal("3 frames of 2000x500 exceed the animation budget of 2000000 pixels", reason);
+        Assert.Equal("3 frames of 2000x500 (3 MP) exceed the 2 MP animation budget", reason);
         using var thumb = new MagickImageCollection(Path.Combine(OutDir, "big.gif"));
         Assert.Equal(1000u, Assert.Single(thumb).Width);   // 與 2.3.1 相同:第一格
     }
@@ -482,7 +482,7 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(0, report.Failed);
         var (path, reason) = Assert.Single(report.AnimationsAsFirstFrame);
         Assert.Equal("liar.gif", path);
-        Assert.Equal($"3 frames up to 2000x500 (the file declares {screenW}x{screenH}) exceed the animation budget of 1500000 pixels", reason);
+        Assert.Equal($"3 frames up to 2000x500 ({(screenW == 1 ? "2" : "3")} MP; the file declares {screenW}x{screenH}) exceed the 1.5 MP animation budget", reason);
     }
 
     [Fact]
@@ -526,6 +526,79 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal("dead.gif", Assert.Single(report.Failures).Path);
         Assert.Empty(report.AnimationsAsFirstFrame);
         Assert.Equal(0, report.Created);
+    }
+
+    // ── 靜態圖的像素上限:解壓縮炸彈 ─────────────────────────────────────────────────────
+    // 小檔、巨大尺寸的圖(一格 20000x20000 的 GIF 只有 270 KB)不經過動畫預算:2.3.1 起照樣整張解碼,
+    // 實測 14.8 秒、峰值 1.6 GB;65535x65535 這種宣告可以把機器拖垮
+
+    [Fact]
+    public void StillImageOverTheLimit_IsAFailure_WithoutDecoding()
+    {
+        // 解碼前先 Ping 拿尺寸;超過上限就不解碼,與其他縮圖失敗一樣記進 failed(不複製原檔:那等於把炸彈交給每個訪客的瀏覽器)
+        using (var image = new MagickImage(MagickColors.White, 2000, 1000))
+        {
+            image.Write(MediaPath("huge.png"), MagickFormat.Png);
+        }
+        var generator = new ThumbnailGenerator(TestConfigs.IbpsLike()) { StillPixelLimit = 1_000_000 };
+
+        var report = generator.Run(MediaDir, OutDir);
+
+        Assert.Equal(0, report.Created);
+        Assert.Equal(1, report.Failed);
+        Assert.Equal(("huge.png", "2000x1000 (2 MP) exceeds the 1 MP still-image limit"), Assert.Single(report.Failures));
+        Assert.False(File.Exists(Path.Combine(OutDir, "huge.png")));
+        Assert.False(File.Exists(Path.Combine(OutDir, "huge.png.tmp")));
+    }
+
+    [Fact]
+    public void StillImageExactlyAtTheLimit_IsProcessedAsUsual()
+    {
+        WriteJpeg("edge.jpg", 1000, 1000);   // 剛好 100 萬像素
+        var generator = new ThumbnailGenerator(TestConfigs.IbpsLike()) { StillPixelLimit = 1_000_000 };
+
+        var report = generator.Run(MediaDir, OutDir);
+
+        Assert.Equal(1, report.Created);
+        Assert.Equal(0, report.Failed);
+    }
+
+    [Fact]
+    public void DefaultStillLimit_IsPillowsDecompressionBombThreshold()
+    {
+        // 2 × 89,478,485 = 178,956,970(約 179 MP),Pillow 擲 DecompressionBombError 的門檻。
+        // 100 MP 級的相機原圖(11648x8736 約 101.8 MP)照常處理;改它要一起改 CHANGELOG 與 README
+        Assert.Equal(178_956_970, new ThumbnailGenerator(TestConfigs.IbpsLike()).StillPixelLimit);
+        Assert.True(11648L * 8736 <= new ThumbnailGenerator(TestConfigs.IbpsLike()).StillPixelLimit);
+    }
+
+    [Fact]
+    public void DecompressionBombWithAHugeDeclaredSize_FailsFast_WithTheDefaultLimit()
+    {
+        // 一張 70 位元組的 PNG 宣告 65535x65535(42.9 億像素):只讀標頭就擋下,不配置任何像素
+        File.WriteAllBytes(MediaPath("bomb.png"), BombPng(65535, 65535));
+
+        var report = Run();
+
+        Assert.Equal(1, report.Failed);
+        Assert.Equal(("bomb.png", "65535x65535 (4294.8 MP) exceeds the 179 MP still-image limit"), Assert.Single(report.Failures));
+    }
+
+    /// <summary>只有標頭的灰階 1 位元 PNG:IHDR 宣告的尺寸 + 一個空的 IDAT。檔案極小,真的解碼會配置巨量記憶體。</summary>
+    private static byte[] BombPng(int width, int height)
+    {
+        static byte[] Chunk(string type, byte[] data)
+        {
+            byte[] typeAndData = [.. System.Text.Encoding.ASCII.GetBytes(type), .. data];
+            var crc = Crc32(typeAndData);
+            return [(byte)(data.Length >> 24), (byte)(data.Length >> 16), (byte)(data.Length >> 8), (byte)data.Length,
+                .. typeAndData, (byte)(crc >> 24), (byte)(crc >> 16), (byte)(crc >> 8), (byte)crc];
+        }
+        byte[] ihdr = [(byte)(width >> 24), (byte)(width >> 16), (byte)(width >> 8), (byte)width,
+            (byte)(height >> 24), (byte)(height >> 16), (byte)(height >> 8), (byte)height, 1, 0, 0, 0, 0];
+        byte[] emptyZlib = [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01];
+        return [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0d, 0x0a, 0x1a, 0x0a,
+            .. Chunk("IHDR", ihdr), .. Chunk("IDAT", emptyZlib), .. Chunk("IEND", [])];
     }
 
     [Fact]

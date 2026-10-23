@@ -1,3 +1,4 @@
+using System.Globalization;
 using ImageMagick;
 using PolyMigrate.Core.Configuration;
 
@@ -46,6 +47,44 @@ public sealed class ThumbnailGenerator(SiteConfig config)
     /// <summary>超過就退回第一格的像素預算;測試用小值才不必真的產生 5,000 萬像素的動畫。</summary>
     internal long AnimationPixelBudget { get; init; } = DefaultAnimationPixelBudget;
 
+    /// <summary>
+    /// 靜態圖(與改用第一格的動畫)的像素上限預設值:2 × 89,478,485 = 178,956,970(約 179 MP),
+    /// Pillow 擲 DecompressionBombError 的門檻。
+    /// <para>小檔、巨大尺寸的圖(解壓縮炸彈)不經過動畫預算:一格 20000x20000 的 GIF 只有 270 KB,2.3.1 起照樣整張解碼,
+    /// 實測 14.8 秒、峰值 1.6 GB(約每像素 4 位元組);65535x65535 這種宣告可以把機器拖垮。179 MP 以同樣的比例約 720 MB,
+    /// 而 100 MP 級的相機原圖(11648x8736 約 101.8 MP)照常處理。超過的在解碼前就擋下(只 Ping 標頭),記成縮圖失敗。</para>
+    /// </summary>
+    internal const long DefaultStillPixelLimit = 178_956_970;
+
+    /// <summary>靜態圖的像素上限;測試用小值才不必真的產生巨大的圖。</summary>
+    internal long StillPixelLimit { get; init; } = DefaultStillPixelLimit;
+
+    /// <summary>以百萬像素(MP)表示,動畫預算與靜態圖上限的訊息共用:<c>400 MP</c>、<c>1.5 MP</c>、<c>4294.8 MP</c>。</summary>
+    private static string Megapixels(long pixels) =>
+        (pixels / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + " MP";
+
+    /// <summary>
+    /// 解碼前只讀標頭(Ping)拿尺寸;超過 <see cref="StillPixelLimit"/> 回傳失敗訊息(例如
+    /// <c>20000x20000 (400 MP) exceeds the 179 MP still-image limit</c>),否則 null。
+    /// 標頭讀不起來時也回 null,照舊交給解碼(壞檔照舊是一般的 failed)。
+    /// </summary>
+    private string? StillImageTooLarge(string file)
+    {
+        MagickImageInfo info;
+        try
+        {
+            info = new MagickImageInfo(file);
+        }
+        catch (MagickException)
+        {
+            return null;
+        }
+        var pixels = (long)info.Width * info.Height;
+        return pixels > StillPixelLimit
+            ? $"{info.Width}x{info.Height} ({Megapixels(pixels)}) exceeds the {Megapixels(StillPixelLimit)} still-image limit"
+            : null;
+    }
+
     public ThumbnailReport Run(string mediaDir, string outDir, Action<string>? progress = null) =>
         Run(mediaDir, outDir, progress, CancellationToken.None);
 
@@ -82,6 +121,14 @@ public sealed class ThumbnailGenerator(SiteConfig config)
                 var animated = TryWriteAnimated(file, tmp, thumbs, out var firstFrameReason);
                 if (!animated)
                 {
+                    // 解壓縮炸彈:超過靜態圖上限的不解碼,記成縮圖失敗(不複製原檔——那等於把一張幾億像素的圖
+                    // 放在頁面以為是縮圖的位置,交給每個訪客的瀏覽器去解碼)
+                    if (StillImageTooLarge(file) is { } tooLarge)
+                    {
+                        report.Failed++;
+                        report.Failures.Add((relative.Replace('\\', '/'), tooLarge));
+                        continue;
+                    }
                     using var image = new MagickImage(file);
                     image.AutoOrient();   // EXIF 轉正,必須在縮放前
                     Downscale(image, thumbs);
@@ -202,9 +249,9 @@ public sealed class ThumbnailGenerator(SiteConfig config)
                 var maxWidth = Math.Max(width, info.Max(f => f.Width));
                 var maxHeight = Math.Max(height, info.Max(f => f.Height));
                 var size = maxWidth == width && maxHeight == height
-                    ? $"of {width}x{height}"
-                    : $"up to {maxWidth}x{maxHeight} (the file declares {width}x{height})";
-                firstFrameReason = $"{info.Count} frames {size} exceed the animation budget of {AnimationPixelBudget} pixels";
+                    ? $"of {width}x{height} ({Megapixels(pixels)})"
+                    : $"up to {maxWidth}x{maxHeight} ({Megapixels(pixels)}; the file declares {width}x{height})";
+                firstFrameReason = $"{info.Count} frames {size} exceed the {Megapixels(AnimationPixelBudget)} animation budget";
                 return false;
             }
         }

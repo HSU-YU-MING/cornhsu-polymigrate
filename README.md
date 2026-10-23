@@ -162,6 +162,9 @@ polymigrate slugs . --section news          # slugs already mirrored under ./raw
 > same result as before 3.0 (an animation that needs no scaling is copied as-is instead). At the limit it takes about 6 s and a 250–400 MB memory peak, depending on the content
 > (two 100-frame 1000×500 GIFs measured 250 MB and 384 MB). The `thumbs` summary lists
 > which files got a first frame and why; neither case is a failure or changes the exit code.
+> Still images get a limit too: one over **179 megapixels** (Pillow's decompression-bomb threshold —
+> a 270 KB GIF can declare 20000×20000, and decoding it took 14.8 s and 1.6 GB) is not decoded at all and
+> counts as a failed thumbnail (exit 1). 100-megapixel camera originals are well within it.
 
 > **`raw/` is the one thing you cannot regenerate.** Re-crawling a site takes hours at a
 > polite request rate, and the source site may be switched off the moment you finish

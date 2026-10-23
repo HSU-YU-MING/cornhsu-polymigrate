@@ -97,6 +97,53 @@ public class ThumbsCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task DecompressionBomb_IsAFailure_ExitsOne_OthersStillDone()
+    {
+        // 小檔、巨大尺寸(70 位元組的 PNG 宣告 65535x65535):解碼前就擋下,與其他縮圖失敗一樣 exit 1、[fail] 列出原因。
+        // 2.3.1 會整張解碼(20000x20000 實測 14.8 秒、1.6 GB),更大的直接拖垮機器
+        var config = Write("site/site.yaml", Config());
+        WriteJpeg("site/media/ok.jpg");
+        var bomb = PathOf("site/media/bomb.png");
+        File.WriteAllBytes(bomb, BombPng(65535, 65535));
+
+        var r = await Run("thumbs", config);
+
+        Assert.Equal(1, r.Exit);
+        Assert.Contains("  created : 1\n", r.Out);
+        Assert.Contains("  failed  : 1\n", r.Out);
+        Assert.Contains("  [fail] bomb.png :: 65535x65535 (4294.8 MP) exceeds the 179 MP still-image limit\n", r.Out);
+        Assert.False(File.Exists(PathOf("site/media_thumb/bomb.png")));
+    }
+
+    private static byte[] BombPng(int width, int height)
+    {
+        static uint Crc32(byte[] data)
+        {
+            var crc = 0xFFFFFFFFu;
+            foreach (var b in data)
+            {
+                crc ^= b;
+                for (var k = 0; k < 8; k++)
+                {
+                    crc = (crc & 1) != 0 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+                }
+            }
+            return ~crc;
+        }
+        static byte[] Chunk(string type, byte[] data)
+        {
+            byte[] typeAndData = [.. System.Text.Encoding.ASCII.GetBytes(type), .. data];
+            var crc = Crc32(typeAndData);
+            return [(byte)(data.Length >> 24), (byte)(data.Length >> 16), (byte)(data.Length >> 8), (byte)data.Length,
+                .. typeAndData, (byte)(crc >> 24), (byte)(crc >> 16), (byte)(crc >> 8), (byte)crc];
+        }
+        byte[] ihdr = [(byte)(width >> 24), (byte)(width >> 16), (byte)(width >> 8), (byte)width,
+            (byte)(height >> 24), (byte)(height >> 16), (byte)(height >> 8), (byte)height, 1, 0, 0, 0, 0];
+        return [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0d, 0x0a, 0x1a, 0x0a,
+            .. Chunk("IHDR", ihdr), .. Chunk("IDAT", [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]), .. Chunk("IEND", [])];
+    }
+
+    [Fact]
     public async Task CorruptImage_ExitsOne_OthersStillDone()
     {
         var config = Write("site/site.yaml", Config());
