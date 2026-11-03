@@ -224,6 +224,11 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
   先 `dotnet build` 再 `--no-build` 跑——直接 `dotnet run ... 2>&1` 會把 NuGet 警告混進輸出）。
 - **tool 套件約 100 MB**（Magick.NET 全平台原生檔）。backlog 有「把 `thumbs` 拆成選配套件」一項，
   尚未做。
+- **Magick.NET 15 起沒有 Intel macOS（`osx-x64`）的原生檔**，而且 `dotnet publish -r osx-x64` 不會警告，
+  只是產物裡少一個 `Magick.Native-*`。所以 darwin-x64 平台包照發、其他指令照常，`thumbs` 在那裡由
+  `Cli.IsNativeLibraryMissing` 接成 exit 2 加說明（2026-11 使用者選的做法；另兩個選項是停在 14.x、整個拿掉
+  darwin-x64）。CI 的 `macos-latest` 是 Apple Silicon 測不到，`ProcessExitCodeTests` 用「複製 CLI、拿掉原生檔」
+  模擬。**別的指令哪天也用到影像庫時，它在 Intel Mac 上也會走這條路**——那時要決定是不是也接受。
 - **相依掃描 2026-08-23 實掃：0 漏洞。** NuGet audit 警告（NU1901–NU1904）在
   `Directory.Build.props` 刻意不升級為錯誤，所以掃描結果要自己看，不會靠建置失敗提醒你。
 - 本機還留著已合併的 `feat/hreflang-pairing` 分支，無害。

@@ -27,8 +27,8 @@ on how it is packaged:
 | .NET runtime | MIT | Copyright (c) .NET Foundation and Contributors | https://github.com/dotnet/runtime | npm only |
 
 The copyright lines are taken from each project's own licence file (Magick.NET: its package
-metadata) at the versions this release resolves: AngleSharp 1.7.2, ReverseMarkdown 6.2.1,
-YamlDotNet 18.1.0, Magick.NET 14.16.0. The exact versions inside a given package are listed
+metadata) at the versions this release resolves: AngleSharp 1.9.0, ReverseMarkdown 6.3.0,
+YamlDotNet 18.1.0, Magick.NET 15.0.0. The exact versions inside a given package are listed
 in its `polymigrate.deps.json`.
 
 The .NET runtime contains third-party code of its own; its notices are at

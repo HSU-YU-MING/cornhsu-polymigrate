@@ -112,6 +112,8 @@ dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET 10
 
 > npm 版是自帶執行環境的原生執行檔,只下載你這個平台的那一份
 > (win32 / linux / darwin,各有 x64 與 arm64)。
+> 唯一的例外是 Intel Mac(darwin-x64)上不能跑 `thumbs`:它用的影像庫 Magick.NET 15
+> 不再提供 Intel Mac 的版本,會印出原因並以 exit 2 結束。其他指令照常;要在 Intel Mac 上產生縮圖,請用 3.0.x。
 > 搬站多半是一次性任務 —— 為了跑一次而裝一整套 SDK,摩擦成本太高,
 > 所以工具主動走到你所在的生態。
 

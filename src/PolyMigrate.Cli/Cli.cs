@@ -741,7 +741,26 @@ public static class Cli
     /// DOM 呼叫漏接——那時應該補的是那一處的轉換與測試,而不是依賴這一行。</para>
     /// </summary>
     private static bool IsHandled(Exception ex) =>
-        ex is OperationCanceledException or ConfigException or AngleSharp.Dom.DomException || IsIoError(ex);
+        ex is OperationCanceledException or ConfigException or AngleSharp.Dom.DomException || IsIoError(ex)
+        || IsNativeLibraryMissing(ex);
+
+    /// <summary>
+    /// 影像庫的原生檔載入不了。Magick.NET 15 起不提供 Intel macOS(osx-x64)的原生檔,那裡的 thumbs
+    /// 第一次碰到影像庫就擲 <see cref="DllNotFoundException"/>(也可能包在型別初始化的例外裡,所以往內層找)。
+    /// 沒接的話是未處理例外,macOS 上 exit 134,不在 0/1/2/130 契約內。只有 thumbs 用到 Magick,但放在共用的
+    /// <see cref="IsHandled"/>:哪天別的指令也用到影像庫,不必再記得補。驗收測試見 ProcessExitCodeTests。
+    /// </summary>
+    private static bool IsNativeLibraryMissing(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is DllNotFoundException)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /// <summary>
     /// 共同錯誤 → 訊息 + exit code(§3.8)。exit code 契約只在這裡定義一次;
@@ -756,6 +775,15 @@ public static class Cli
                 return 130;
             case ConfigException:
                 Console.Error.WriteLine(ex.Message);
+                return 2;
+            case var _ when IsNativeLibraryMissing(ex):
+                // 原始訊息是 dlopen 的一長串路徑,看不出「這個平台不支援」;改說人話,原文留在最後一行供回報
+                Console.Error.WriteLine(
+                    "error: thumbs needs ImageMagick's native library, which could not be loaded on this platform"
+                    + $" ({System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}).\n"
+                    + "  Magick.NET 15 no longer ships one for Intel macOS (osx-x64); there, use PolyMigrate 3.0.x for thumbs,\n"
+                    + "  or run thumbs on Apple Silicon, Windows or Linux. Other commands are unaffected.\n"
+                    + $"  ({ex.GetBaseException().Message})");
                 return 2;
             default:
                 Console.Error.WriteLine($"error: {ex.Message}");

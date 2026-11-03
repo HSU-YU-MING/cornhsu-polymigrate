@@ -25,7 +25,12 @@ public class ProcessExitCodeTests : CliTestBase
     private static Task<(int Exit, string Out, string Err)> Spawn(params string[] args) => SpawnIn(null, args);
 
     /// <param name="workingDirectory">行程的目前目錄;null = 沿用測試行程的。</param>
-    private static async Task<(int Exit, string Out, string Err)> SpawnIn(string? workingDirectory, params string[] args)
+    private static Task<(int Exit, string Out, string Err)> SpawnIn(string? workingDirectory, params string[] args) =>
+        SpawnCli(CliDll, workingDirectory, args);
+
+    /// <param name="cliDll">要跑的 polymigrate.dll;預設那份以外的,是為了模擬缺檔而另外複製的一份。</param>
+    private static async Task<(int Exit, string Out, string Err)> SpawnCli(
+        string cliDll, string? workingDirectory, params string[] args)
     {
         var psi = new ProcessStartInfo(DotnetHost())
         {
@@ -34,7 +39,7 @@ public class ProcessExitCodeTests : CliTestBase
             UseShellExecute = false,
             WorkingDirectory = workingDirectory ?? "",
         };
-        psi.ArgumentList.Add(CliDll);
+        psi.ArgumentList.Add(cliDll);
         foreach (var arg in args)
         {
             psi.ArgumentList.Add(arg);
@@ -149,5 +154,34 @@ public class ProcessExitCodeTests : CliTestBase
 
         Assert.Equal(2, exit);
         Assert.Contains("Unknown command: frobnicate", stderr);
+    }
+
+    [Fact]
+    public async Task Thumbs_WithoutImageMagicksNativeLibrary_ExitsTwo_InsteadOfCrashing()
+    {
+        // Magick.NET 15 起沒有 Intel macOS(osx-x64)的原生檔:那裡的 thumbs 第一次碰影像庫就擲 DllNotFoundException,
+        // 沒接的話是未處理例外(exit 134),不在契約內。CI 沒有 Intel Mac,所以把 CLI 複製一份、拿掉所有
+        // Magick.Native-* 來模擬——任何平台缺了原生檔,走的都是同一條路。要在子行程裡跑:測試行程早就載入過影像庫了
+        var cliDir = Path.Combine(Root, "cli");
+        foreach (var file in Directory.EnumerateFiles(AppContext.BaseDirectory, "*", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(file).StartsWith("Magick.Native", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var target = Path.Combine(cliDir, Path.GetRelativePath(AppContext.BaseDirectory, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+        var config = Write("site/site.yaml", Config());
+        // 內容無所謂:載入原生檔失敗發生在解碼之前
+        Write("site/media/a.jpg", "not an image");
+
+        var (exit, stdout, stderr) = await SpawnCli(Path.Combine(cliDir, "polymigrate.dll"), null, "thumbs", config);
+
+        Assert.Equal(2, exit);
+        Assert.Contains("error: thumbs needs ImageMagick's native library", stderr);
+        Assert.Contains("Other commands are unaffected.", stderr);
+        Assert.DoesNotContain("Thumbs done.", stdout);
     }
 }
