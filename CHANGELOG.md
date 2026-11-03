@@ -2,7 +2,12 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
-## Unreleased
+## 4.0.0 — 2026-11-03
+
+**Major:縮圖用的影像庫升到 Magick.NET 15,帶進 ImageMagick 的安全修正;代價是 Intel Mac 上不能再跑 `thumbs`。**
+四面契約裡只動到 **exit code** 的一個情境:Intel Mac(`osx-x64`)上的 `thumbs` 由 0／1 變成 2。
+其他平台、其他指令、CLI 參數、輸出檔格式、YAML config 欄位、函式庫的 public API 都沒有改;
+不在 Intel Mac 上跑 `thumbs` 的使用者,升級不必改任何東西。
 
 ### ⚠️ 升級必做
 

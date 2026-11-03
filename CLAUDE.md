@@ -108,12 +108,14 @@ workflow 只剩 `ci.yml` 與 `release.yml`。**主線走 OIDC 就好**，不要�
 
 ## 地雷
 
-### 對外契約在同一個 major 內凍結（現在是 3.x），範圍比想像的大
+### 對外契約在同一個 major 內凍結（現在是 4.x），範圍比想像的大
 
 CLI 指令與參數（含預設值）、**exit code**、Phase 輸出檔案格式（CSV 欄位、frontmatter 欄位）、YAML config 欄位，
 四面都是契約。破壞任一面 = major。1.0～2.x 一直守著同一份契約；**3.0 是第一次為了改正 exit code 而升的 major**
 （probe 一個回答都沒拿到 = 2、部分沒拿到 = 1、npm 啟動腳本失敗 = 2、同步指令第一次 Ctrl-C = 130、孤兒頁清單改成每個 section 一份
 `orphan_slugs.<section>.txt`），完整對照表在 CHANGELOG 3.0.0 與 [docs/contracts.md](docs/contracts.md)。
+**4.0 只為一個情境升 major**：Magick.NET 15 不提供 Intel macOS 原生檔，Intel Mac 上 `thumbs` 由 0／1 變 2
+（見下面「Magick.NET 15 起沒有 Intel macOS」那條）。平台支援縮水造成的 exit code 改變，照樣算 major。
 2.x 時這些都卡在「既有情境的 exit code 改變 = major」而只能先寫警告——下一次遇到同樣的取捨，
 做法一樣：patch 只動訊息，exit code 留到 major。幾個容易誤判的角落：
 
