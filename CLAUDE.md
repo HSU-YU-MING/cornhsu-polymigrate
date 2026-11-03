@@ -213,12 +213,15 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
   （`RELEASING.md`「npm 通路」段、`npm/prepare.mjs` 檔頭註解、`release.yml` 的「2.0.2」註解、
   `Directory.Build.props` 的 `<Version>` 註解；都是文件或註解，不隨套件出貨）。
   CHANGELOG 2.2.1「內部」段仍提到 `npm-backfill.yml`，那是歷史紀錄，留著合理。
-- **沒有 README 示範輸出的自動比對**。`ReadmeDriftTests` 只擋「README 列的指令 = `--help` 列的指令」
-  （中英文各一），**不比對說明文字，也不比對貼在 README 裡的示範輸出**（刻意如此：逐字比對只會
-  製造假警報，反而讓人把測試關掉）。姊妹 repo 有 `verify-readme-sample.ps1`（XamlContrast）與
-  `verify-readme-facts.ps1`（Parity），**這個 repo 兩者都沒有**。所以：
+- **沒有 README 示範輸出的自動比對**。`ReadmeDriftTests` 擋兩件事：「README 列的指令 = `--help` 列的指令」，
+  以及「README 的 YAML 設定範例用真的 `SiteConfigLoader` 載入得了、中英文兩份（註解除外）相同」（中英文各一）。
+  **不比對說明文字**（刻意如此：逐字比對只會製造假警報，反而讓人把測試關掉）。
+  姊妹 repo 有 `verify-readme-sample.ps1`（XamlContrast）與 `verify-readme-facts.ps1`（Parity），
+  **這個 repo 兩者都沒有，因為目前沒有東西給它們比**（2026-11-03 查過）：兩份 README 都沒有手貼的
+  console 輸出；case study 的數字來自真實站的一次搬遷，CI 重現不了。所以：
   **動過 console 輸出、case study 數字或版本敘述，就要人工比對 README 的兩份語言版本。**
-  要補這類腳本的話照姊妹 repo 的形狀做（腳本放 `scripts/`、CI 呼叫、附 `-Update` 一鍵重貼）。
+  哪天 README 貼了實跑輸出，再照姊妹 repo 的形狀補腳本（放 `scripts/`、CI 呼叫、附 `-Update` 一鍵重貼、
+  先 `dotnet build` 再 `--no-build` 跑——直接 `dotnet run ... 2>&1` 會把 NuGet 警告混進輸出）。
 - **tool 套件約 100 MB**（Magick.NET 全平台原生檔）。backlog 有「把 `thumbs` 拆成選配套件」一項，
   尚未做。
 - **相依掃描 2026-08-23 實掃：0 漏洞。** NuGet audit 警告（NU1901–NU1904）在

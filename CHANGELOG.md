@@ -16,6 +16,12 @@
 - **Magick.NET 15 不再提供 Intel macOS(`osx-x64`)的原生檔。** tool 套件與 npm 的 `@cornhsu/polymigrate-darwin-x64`
   因此沒有 `Magick.Native-Q8-x64.dll.dylib`:Intel Mac 上 `thumbs` 會在載入影像庫時中止(未處理的 `DllNotFoundException`),
   其他指令不受影響。Apple Silicon(`osx-arm64`)與 Windows、Linux 照舊。
+### 內部
+
+- 新增測試:README 的 YAML 設定範例必須用真的 `SiteConfigLoader` 載入得了,中英文兩份(註解除外)必須相同。
+  這段範例是使用者第一個照抄的 config,而它真的過期過:2.0.0 移除死欄位時,README 還寫著已移除的
+  `pairing.strategy: symmetric_path`,照抄就載入失敗(當時人工在同一個 commit 補上)。
+  中文 README 自 3.0 開發期起有自己的一份,要同步的地方從一處變兩處。
 
 ## 3.0.0 — 2026-10-23
 
