@@ -24,7 +24,7 @@ public class ThumbnailGeneratorTests : IDisposable
         if (exifOrientation is { } o)
         {
             // ImageMagick 寫檔時以 image.Orientation 同步 EXIF profile 的方向值,兩者須同設才會持久化
-            image.Orientation = (OrientationType)o;
+            image.Orientation = (Orientation)o;
             var exif = new ExifProfile();
             exif.SetValue(ExifTag.Orientation, o);
             image.SetProfile(exif);
@@ -45,7 +45,7 @@ public class ThumbnailGeneratorTests : IDisposable
         Assert.Equal(1, report.Created);
         using var thumb = new MagickImage(Path.Combine(OutDir, "ch", "news", "images", "phone.jpg"));
         Assert.Equal((20u, 40u), (thumb.Width, thumb.Height));   // 40x20 轉正後 20x40
-        Assert.True(thumb.Orientation is OrientationType.TopLeft or OrientationType.Undefined);
+        Assert.True(thumb.Orientation is Orientation.TopLeft or Orientation.Undefined);
     }
 
     [Fact]

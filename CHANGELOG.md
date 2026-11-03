@@ -2,6 +2,21 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## Unreleased
+
+### 相依
+
+- **Magick.NET 14.16.0 → 15.0.0**(縮圖用的影像庫;內含的 ImageMagick 由 7.1.2-29 升到 7.1.2-33,
+  帶進 ImageMagick 這段期間的安全修正,例如 XMP profile 的無窮迴圈與記憶體洩漏、bzip2 壓縮影像的 stack 越界寫入、EXR 解碼器的 heap 越界寫入)。
+  程式碼只配合 15.0 的改名(`OrientationType` → `Orientation`)。縮圖的輸出與訊息不變:同一批素材
+  (EXIF 方向 1～8、CMYK／灰階／漸進式 JPEG、透明 PNG、靜態與動畫的 GIF／WebP、局部格 GIF、超過動畫預算、宣告尺寸比影格小、
+  壞掉與截斷的 GIF、解壓縮炸彈)以兩版各跑一次,34 張縮圖逐位元組相同,摘要與 exit code 相同。
+  唯一不同的是解不開的圖在 `[fail]` 那行引用的 ImageMagick 原文,裡面的原始碼行號會跟著 ImageMagick 版本變
+  (例如 `jpeg.c/ReadOneJPEGImage/1546` → `1555`;14.x 的修補版本來也會變)。
+- **Magick.NET 15 不再提供 Intel macOS(`osx-x64`)的原生檔。** tool 套件與 npm 的 `@cornhsu/polymigrate-darwin-x64`
+  因此沒有 `Magick.Native-Q8-x64.dll.dylib`:Intel Mac 上 `thumbs` 會在載入影像庫時中止(未處理的 `DllNotFoundException`),
+  其他指令不受影響。Apple Silicon(`osx-arm64`)與 Windows、Linux 照舊。
+
 ## 3.0.0 — 2026-10-23
 
 **Major:修正一輪產品 bug,並把 2.x 期間因為會動到凍結面而留待裁定的改動一次做完。**

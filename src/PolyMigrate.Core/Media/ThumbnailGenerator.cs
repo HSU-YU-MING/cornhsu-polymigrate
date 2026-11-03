@@ -270,7 +270,7 @@ public sealed class ThumbnailGenerator(SiteConfig config)
         var format = frames[0].Format;
         // 原檔已經是合格縮圖:畫布不超過 max_width,也沒有要轉正的格(Coalesce 之前看,才是原檔本來的樣子)
         var fitsAsIs = frames.All(f => Math.Max(f.Page.Width, f.Width) <= (uint)thumbs.MaxWidth
-            && f.Orientation is OrientationType.Undefined or OrientationType.TopLeft);
+            && f.Orientation is Orientation.Undefined or Orientation.TopLeft);
         frames.Coalesce();
         foreach (var frame in frames)
         {
