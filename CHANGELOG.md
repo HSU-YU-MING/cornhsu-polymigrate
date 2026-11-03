@@ -2,6 +2,15 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## Unreleased
+
+### 內部
+
+- 新增測試:README 的 YAML 設定範例必須用真的 `SiteConfigLoader` 載入得了,中英文兩份(註解除外)必須相同。
+  這段範例是使用者第一個照抄的 config,而它真的過期過:2.0.0 移除死欄位時,README 還寫著已移除的
+  `pairing.strategy: symmetric_path`,照抄就載入失敗(當時人工在同一個 commit 補上)。
+  中文 README 自 3.0 開發期起有自己的一份,要同步的地方從一處變兩處。
+
 ## 3.0.0 — 2026-10-23
 
 **Major:修正一輪產品 bug,並把 2.x 期間因為會動到凍結面而留待裁定的改動一次做完。**
