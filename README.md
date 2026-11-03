@@ -142,6 +142,9 @@ dotnet tool install -g Cornhsu.PolyMigrate  # .NET 10
 
 > The npm build ships a self-contained native binary and only downloads the one
 > matching your platform (win32 / linux / darwin, each in x64 and arm64).
+> One exception: `thumbs` doesn't run on Intel Macs (darwin-x64), because Magick.NET 15,
+> the image library behind it, no longer ships a build for them; it exits 2 with an explanation.
+> Every other command works there; for thumbnails on an Intel Mac, use 3.0.x.
 > Migrating a site is usually a one-off job — installing a whole SDK for a single
 > run is friction most people won't accept, so the tool meets you where you are.
 
