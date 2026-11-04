@@ -230,7 +230,10 @@ CI 的 Windows runner 預設 `autocrlf=true`，CRLF checkout 會改變 raw strin
   只是產物裡少一個 `Magick.Native-*`。所以 darwin-x64 平台包照發、其他指令照常，`thumbs` 在那裡由
   `Cli.IsNativeLibraryMissing` 接成 exit 2 加說明（2026-11 使用者選的做法；另兩個選項是停在 14.x、整個拿掉
   darwin-x64）。CI 的 `macos-latest` 是 Apple Silicon 測不到，`ProcessExitCodeTests` 用「複製 CLI、拿掉原生檔」
-  模擬。**別的指令哪天也用到影像庫時，它在 Intel Mac 上也會走這條路**——那時要決定是不是也接受。
+  模擬。**2026-11-04 在真的 Intel Mac 上驗過已發佈的 4.0.0**（GitHub 的 `macos-15-intel`，i7-8700B，run 41791583431）：NuGet 與 npm 的 `thumbs`
+  都是 exit 2 加說明、沒有產出縮圖，`extract`、`verify` 照常，3.0.0 做得出縮圖；Apple 晶片的對照組三個都做得出縮圖。
+  這是一次性的驗證，不是常駐的檢查：CI 的 test matrix 還是沒有 Intel Mac。
+  **別的指令哪天也用到影像庫時，它在 Intel Mac 上也會走這條路**——那時要決定是不是也接受。
 - **相依掃描 2026-08-23 實掃：0 漏洞。** NuGet audit 警告（NU1901–NU1904）在
   `Directory.Build.props` 刻意不升級為錯誤，所以掃描結果要自己看，不會靠建置失敗提醒你。
 - 本機還留著已合併的 `feat/hreflang-pairing` 分支，無害。
