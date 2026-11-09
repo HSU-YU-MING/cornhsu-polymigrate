@@ -57,6 +57,10 @@ took — with a rule-based confidence label instead of a percentage. Existing ou
 *New command: `polymigrate templates` groups mirrored pages by layout skeleton and reports, per template, how much text
 `extract.content` captures and a suggested content selector — before you run a full extract.*
 
+**套件說明與標籤**:NuGet 與 npm 的描述改成講清楚「把老舊的多語言網站搬成靜態站」,標籤換成找這類工具的人會搜的字
+(`website-migration`、`html-to-markdown`、`hugo`、`hreflang`、`301-redirects`…;只寫 `migration` 的話,NuGet 上那個字被 EF Core migrations 佔滿)。
+npm 描述拿掉「the only one that pairs」:同類工具裡已經有做配對的。不影響任何行為。
+
 ## 4.0.0 — 2026-11-03
 
 **Major:縮圖用的影像庫升到 Magick.NET 15,帶進 ImageMagick 的安全修正;代價是 Intel Mac 上不能再跑 `thumbs`。**

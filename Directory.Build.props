@@ -39,7 +39,8 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
-    <PackageTags>i18n;migration;multilingual;static-site;markdown;bilingual</PackageTags>
+    <!-- 標籤對準「找網站搬遷工具的人」會搜的字:只寫 migration 的話,NuGet 上那個字被 EF Core migrations 佔滿 -->
+    <PackageTags>website-migration;site-migration;content-migration;cms-migration;legacy-website;html-to-markdown;static-site;static-site-generator;hugo;eleventy;astro;multilingual;i18n;hreflang;redirects;301-redirects;web-scraping</PackageTags>
 
     <!-- 可除錯性:讓使用者能 step-in 進原始碼 -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

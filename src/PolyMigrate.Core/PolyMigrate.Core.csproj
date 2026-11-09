@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <PackageId>Cornhsu.PolyMigrate.Core</PackageId>
-    <Description>Core library of PolyMigrate — the i18n-first static-site migrator. Extraction, bilingual pairing, and inventory components.</Description>
+    <Description>The library behind PolyMigrate, the .NET tool for migrating legacy multilingual websites to static sites: HTML-to-frontmatter-Markdown extraction, language-version pairing, redirect maps and offline output verification.</Description>
     <IsPackable>true</IsPackable>
 
     <!-- 把 /// 註解打包進 nupkg,函式庫消費者才有 IntelliSense。

@@ -8,7 +8,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>polymigrate</ToolCommandName>
     <PackageId>Cornhsu.PolyMigrate</PackageId>
-    <Description>The i18n-first static-site migrator. Config-driven, offline-rerunnable legacy-site to static-site migration with built-in bilingual page pairing.</Description>
+    <Title>PolyMigrate — multilingual website migration tool</Title>
+    <Description>A .NET tool for migrating a legacy multilingual website (PHP, ASP, any CMS) to a static site. Mirror HTML becomes frontmatter Markdown for Hugo, Eleventy or Astro; language versions are paired automatically (hreflang, slugs, shared media, dates) and what cannot be paired is listed for review; 301 redirect maps are written for nginx, Netlify and Cloudflare Pages; links, media and redirects are verified offline. Config-driven and re-runnable offline.</Description>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 

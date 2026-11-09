@@ -1,12 +1,17 @@
 {
   "name": "cornhsu-polymigrate",
   "version": "0.0.0-placeholder",
-  "description": "The i18n-first static-site migrator — the only one that pairs your multilingual pages automatically. Mirrors a legacy site into frontmatter Markdown, auto-matches language versions, and honestly lists what it could not pair.",
+  "description": "Migrate a legacy multilingual website to a static site: mirror HTML becomes frontmatter Markdown for Hugo, Eleventy or Astro, language versions are paired automatically, 301 redirect maps are generated, and links, media and redirects are verified offline.",
   "keywords": [
     "i18n",
     "internationalization",
     "multilingual",
+    "website-migration",
     "site-migration",
+    "cms-migration",
+    "html-to-markdown",
+    "hreflang",
+    "redirects",
     "static-site",
     "markdown",
     "web-scraping",
