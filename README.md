@@ -177,6 +177,7 @@ dotnet tool install -g Cornhsu.PolyMigrate  # .NET 10
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
 polymigrate verify .                        # link/media/frontmatter/unlinked-page audit, CI exit codes
+polymigrate verify . --redirects _redirects # + redirect table: missing targets, chains, loops, conflicts
 polymigrate thumbs site.yaml                # EXIF-corrected, width-capped thumbnails
 polymigrate probe-orphans site.yaml --section news --years 2021-2023   # -> orphan_slugs.news.txt
 polymigrate fetch-orphans site.yaml --section news                      # reads orphan_slugs.news.txt

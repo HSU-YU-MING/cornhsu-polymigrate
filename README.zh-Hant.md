@@ -143,6 +143,7 @@ dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET 10
 dotnet tool install -g Cornhsu.PolyMigrate
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
 polymigrate verify .                        # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
+polymigrate verify . --redirects _redirects # 再加轉址表:目標不存在、連鎖、迴圈、同來源兩個目標
 polymigrate thumbs site.yaml                # EXIF 轉正縮圖
 polymigrate probe-orphans site.yaml --section news --years 2021-2023   # → orphan_slugs.news.txt
 polymigrate fetch-orphans site.yaml --section news                      # 讀 orphan_slugs.news.txt

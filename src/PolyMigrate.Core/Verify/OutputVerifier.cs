@@ -22,6 +22,12 @@ public sealed class VerifyReport
 
     public bool MediaChecksSkipped { get; init; }
 
+    /// <summary>檢查過的轉址規則數(4.1 起,只在給了轉址表時才檢查;沒給是 0)。</summary>
+    public int RedirectsChecked { get; init; }
+
+    /// <summary>轉址表裡刻意略過的規則數:萬用字元、具名參數、非 3xx(改寫、自訂錯誤頁)。</summary>
+    public int RedirectsSkipped { get; init; }
+
     public int Errors => Issues.Count(i => i.Severity == Severity.Error);
 
     public int Warnings => Issues.Count(i => i.Severity == Severity.Warning);
@@ -60,8 +66,19 @@ public sealed partial class OutputVerifier
     /// <para>方法開頭刻意不另外檢查:第一頁之前就是一個檢查點(<c>content/</c> 不存在時什麼都不做、立刻結束)。</para>
     /// </summary>
     public VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix,
-        IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct)
+        IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct) =>
+        Run(outDir, mediaDir, mediaPrefix, allowUnlinked, redirects: null, ct);
+
+    /// <summary>
+    /// 同上,另外離線檢查一份轉址表(4.1 起):目標頁存在、沒有連鎖轉址、沒有迴圈、同一個來源沒有兩個目標。
+    /// <paramref name="redirects"/> 是 <c>redirect_map.csv</c>(副檔名 .csv)或 <c>_redirects</c> 格式的檔案;null = 不檢查。
+    /// 刻意做成選用:預設就檢查的話,轉址表剛好有連鎖的既有使用者什麼都沒改就從 exit 0 變 1(新增一種 warning 是破壞性的)。
+    /// </summary>
+    public VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix,
+        IReadOnlyCollection<string>? allowUnlinked, string? redirects, CancellationToken ct)
     {
+        // 轉址表讀不到、格式不對:在巡檢任何一頁之前就停(IO 錯誤 → exit 2),不要巡完整站才說
+        var table = redirects is null ? null : Redirects.RedirectRules.Load(redirects);
         var contentDir = Path.Combine(outDir, "content");
         if (!Directory.Exists(contentDir))
         {
@@ -189,6 +206,10 @@ public sealed partial class OutputVerifier
         }
 
         issues.AddRange(FindOrphans(pageRoutes, referenced, allowUnlinked));
+        if (table is not null)
+        {
+            issues.AddRange(CheckRedirects(table, routes, mediaPrefix));
+        }
 
         Checkpoint("write", ct);
         WriteReport(outDir, issues);
@@ -199,7 +220,101 @@ public sealed partial class OutputVerifier
             LinksChecked = linksChecked,
             MediaChecked = mediaChecked,
             MediaChecksSkipped = !checkMedia,
+            RedirectsChecked = table?.Rules.Count ?? 0,
+            RedirectsSkipped = table?.Skipped ?? 0,
         };
+    }
+
+    /// <summary>
+    /// 轉址表的離線檢查。比對單位是「去掉尾斜線、解碼後的路徑」(與內部連結檢查同一套正規化);
+    /// 帶 query 的來源(<c>/news.php?id=3</c>)保留 query,它只會被同樣帶 query 的網址打到。
+    /// <list type="bullet">
+    /// <item><c>redirect_conflict</c>(error):同一個來源兩條規則、目標不同——伺服器只會用其中一條,哪條看平台。</item>
+    /// <item><c>redirect_loop</c>(error):跟著轉會回到走過的地方(含轉到自己),瀏覽器最後報「重新導向次數過多」。每個迴圈報一次。</item>
+    /// <item><c>redirect_chain</c>(warning):目標本身又是另一條規則的來源。到得了,但多一跳——舊網址的搜尋權重每跳都打折,
+    /// 而且多半是搬兩次的殘留,直接指到終點就好。</item>
+    /// <item><c>redirect_target_missing</c>(error):目標是站內頁、卻不在 <c>content/</c> 裡,也不是另一條規則的來源 → 404。</item>
+    /// </list>
+    /// 外站目標(http/https 完整網址)與媒體路徑不檢查存在與否:離線無從得知。
+    /// </summary>
+    private static IEnumerable<VerifyIssue> CheckRedirects(Redirects.RedirectTable table, HashSet<string> routes, string mediaPrefix)
+    {
+        foreach (var line in table.Unreadable)
+        {
+            yield return new VerifyIssue(Severity.Error, $"{table.Name}:{line}", "redirect_unreadable",
+                "expected: source target [status]");
+        }
+
+        var bySource = new Dictionary<string, Redirects.RedirectRule>(StringComparer.Ordinal);
+        foreach (var rule in table.Rules)
+        {
+            var key = RedirectKey(rule.Source);
+            if (!bySource.TryGetValue(key, out var first))
+            {
+                bySource[key] = rule;
+            }
+            else if (RedirectKey(first.Target) != RedirectKey(rule.Target))
+            {
+                yield return new VerifyIssue(Severity.Error, $"{table.Name}:{rule.Line}", "redirect_conflict",
+                    $"{rule.Source} → {rule.Target}, but line {first.Line} sends it to {first.Target}");
+            }
+        }
+
+        var reportedLoops = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var rule in bySource.Values.OrderBy(r => r.Line))
+        {
+            if (IsExternal(rule.Target))
+            {
+                continue;
+            }
+            var path = new List<string> { rule.Source, rule.Target };
+            var visited = new List<string> { RedirectKey(rule.Source) };
+            string? current = RedirectKey(rule.Target);
+            while (!visited.Contains(current) && bySource.TryGetValue(current, out var next))
+            {
+                visited.Add(current);
+                path.Add(next.Target);
+                // 終點在外站:到此為止(B → 外站 仍讓 A → B 成為連鎖,不是「B 不存在」)
+                current = IsExternal(next.Target) ? null : RedirectKey(next.Target);
+                if (current is null)
+                {
+                    break;
+                }
+            }
+            if (current is not null && visited.Contains(current))
+            {
+                // 迴圈裡的每一條都會走到這裡:以迴圈成員(排序後)當身分,同一個迴圈只報一次
+                var cycle = visited.SkipWhile(k => k != current).Order(StringComparer.Ordinal);
+                if (reportedLoops.Add(string.Join('\n', cycle)))
+                {
+                    yield return new VerifyIssue(Severity.Error, $"{table.Name}:{rule.Line}", "redirect_loop", string.Join(" → ", path));
+                }
+                continue;
+            }
+            if (path.Count > 2)
+            {
+                yield return new VerifyIssue(Severity.Warning, $"{table.Name}:{rule.Line}", "redirect_chain", string.Join(" → ", path));
+                continue;   // 終點存不存在,由終點前那一條規則自己回報
+            }
+            if (!rule.Target.StartsWith(mediaPrefix, StringComparison.Ordinal) && !routes.Contains(ResolveRoute(rule.Target, routes)))
+            {
+                yield return new VerifyIssue(Severity.Error, $"{table.Name}:{rule.Line}", "redirect_target_missing",
+                    $"{rule.Source} → {rule.Target}");
+            }
+        }
+    }
+
+    private static bool IsExternal(string target) =>
+        Uri.TryCreate(target, UriKind.Absolute, out var u) && u.Scheme is "http" or "https";
+
+    /// <summary>轉址的比對鍵:解碼、去尾斜線、去 #fragment;query 保留(見 <see cref="CheckRedirects"/>)。</summary>
+    private static string RedirectKey(string url)
+    {
+        var noFragment = url.Split('#')[0];
+        var q = noFragment.IndexOf('?');
+        var (path, query) = q < 0 ? (noFragment, "") : (noFragment[..q], noFragment[q..]);
+        path = Uri.UnescapeDataString(path).TrimEnd('/');
+        return (path.Length == 0 ? "/" : path) + query;
     }
 
     private void Checkpoint(string label, CancellationToken ct)
