@@ -27,7 +27,7 @@ public static class Cli
     private const string FetchUsage =
         "polymigrate fetch-orphans <config.yaml> --section <name> [--slugs <file>] [--root <dir>]";
     private const string VerifyUsage =
-        "polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/] [--allow-unlinked <file>]";
+        "polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/] [--allow-unlinked <file>] [--redirects <file>]";
     private const string SlugsUsage =
         "polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]";
 
@@ -126,6 +126,8 @@ public static class Cli
                           only reach by typing the URL. Unlinked pages are warnings.
                           Default media dir: <output-dir>/media (media checks skipped if absent).
                           --allow-unlinked: file of pages to exempt, one per line (# comments ok).
+                          --redirects: also check a redirect table (redirect_map.csv, or a
+                          _redirects file): missing targets, chains, loops, conflicting rules.
                     {Synopsis(SlugsUsage)}
                           List slugs already mirrored under <root>/raw, sorted, one per line on stdout
                           (the summary goes to stderr, so stdout stays pipeable). During a
@@ -245,6 +247,7 @@ public static class Cli
         string? outDir = null;
         string? mediaDir = null;
         string? allowUnlinkedFile = null;
+        string? redirectsFile = null;
         var mediaPrefix = "/media/";
         for (var i = 0; i < args.Length; i++)
         {
@@ -258,6 +261,9 @@ public static class Cli
                     break;
                 case "--allow-unlinked" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
                     allowUnlinkedFile = args[++i];
+                    break;
+                case "--redirects" when i + 1 < args.Length && !args[i + 1].StartsWith('-'):
+                    redirectsFile = args[++i];
                     break;
                 default:
                     if (outDir is not null || args[i].StartsWith('-'))
@@ -281,8 +287,15 @@ public static class Cli
             mediaDir = Path.GetFullPath(mediaDir ?? Path.Combine(outDir, "media"));
             var allowUnlinked = ReadAllowUnlinked(allowUnlinkedFile);
 
+            var redirects = redirectsFile is null ? null : Path.GetFullPath(redirectsFile);
+            if (redirects is not null && !File.Exists(redirects))
+            {
+                Console.Error.WriteLine($"Redirect table not found: {redirects}");
+                return 2;
+            }
+
             var report = new PolyMigrate.Core.Verify.OutputVerifier()
-                .Run(outDir, mediaDir, mediaPrefix, allowUnlinked, ct);
+                .Run(outDir, mediaDir, mediaPrefix, allowUnlinked, redirects, ct);
 
             // content/ 不存在時巡檢一開始就停:報告檔不寫、媒體也沒檢查——摘要要照實講,
             // 不能印一個從未寫出的報告路徑,或「media refs : 0」這種看起來像檢查過、零筆的數字
@@ -295,6 +308,12 @@ public static class Cli
                 noContent ? "  media checks    : skipped (content directory not found)"
                 : report.MediaChecksSkipped ? "  media checks    : skipped (media directory not found)"
                 : $"  media refs      : {report.MediaChecked}");
+            // 只在給了 --redirects 時印:沒給的人輸出逐行不變
+            if (redirects is not null)
+            {
+                Console.WriteLine($"  redirects       : {report.RedirectsChecked} rules checked, {report.RedirectsSkipped} skipped "
+                    + $"(wildcards, placeholders, non-3xx; {Path.GetFileName(redirects)})");
+            }
             Console.WriteLine($"  errors          : {report.Errors}");
             Console.WriteLine($"  warnings        : {report.Warnings}");
             Console.WriteLine(noContent

@@ -220,6 +220,22 @@ UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**(0 筆時為空檔);ordinal 
 | `known_missing_media` | warning | 原始引用字串(已記錄於 `missing_images.csv`) |
 | `broken_link` | error | 原始引用字串 |
 | `unlinked_page` | warning | `not linked from any content page (menus are not checked)` |
+| `redirect_target_missing` | error | `來源 → 目標`:目標是站內頁,卻不在 `content/` 裡、也不是另一條規則的來源(→ 404) |
+| `redirect_chain` | warning | `A → B → … → 終點`:目標本身又是另一條規則的來源(多一跳;搜尋權重每跳打折) |
+| `redirect_loop` | error | `A → B → … → A`(含轉到自己);同一個迴圈只報一次 |
+| `redirect_conflict` | error | 同一個來源有兩條規則、目標不同:`來源 → 目標, but line N sends it to 另一個目標` |
+| `redirect_unreadable` | error | `expected: source target [status]`(`_redirects` 的某一行少了目標;csv 的某一列來源或目標空白) |
+
+`redirect_*` 只在給了 `--redirects <file>` 時檢查(4.1 起,**選用**:預設就查的話,轉址表剛好有連鎖的既有使用者
+什麼都沒改就會從 exit 0 變 1)。page 欄是 `<轉址表檔名>:<行號>`(行號從 1 起、含表頭與註解行)。
+轉址表兩種格式,依副檔名分:`.csv` 是 `redirect_map.csv`(讀 `old_url` 與 `new_path` 兩欄,
+`old_url` 取路徑與 query);其他副檔名當 `_redirects`(Netlify / Cloudflare Pages:`來源 目標 [狀態碼]`,
+`#` 開頭是註解)。比對時解碼、去尾斜線、去 `#fragment`;帶 query 的來源保留 query。
+**略過不查**(計入摘要的 skipped):來源含 `*` 或 `:參數`、目標含 `:splat`(一條規則對應很多網址,離線無從展開)、
+狀態碼不是 3xx(200 是改寫、404 是自訂錯誤頁)。**查不到的**:外站目標(http/https 完整網址)存不存在、
+`/media/` 底下的目標、伺服器上其他設定(nginx、平台的轉址規則)會不會先攔下。
+轉址表檔案不存在 → exit 2(`Redirect table not found`);`.csv` 沒有 `old_url` / `new_path` 欄 → exit 2。
+兩者都在巡檢任何一頁之前就停、不寫報告檔。
 
 exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_page` 之後,
 原本 exit 0 的專案可能變成 exit 1。
@@ -322,7 +338,7 @@ config 的 CSS selector(`extract.content`、每一個 `type_rules.*.title_select
 | `thumbs` | 全部建立或已存在 | 任一張失敗(含寬 × 高超過 178,956,970 像素〔約 179 MP〕的靜態圖:解碼前只讀標頭就擋下,不做縮圖) | 媒體目錄不存在;影像庫的原生檔載入不了(Intel Mac〔`osx-x64`〕一律如此,4.0 起) | Ctrl-C |
 | `probe-orphans` | 跑完、每個候選都拿到回答(不論命中幾筆) | 部分候選沒拿到回答(清單照寫,可能不完整) | `--years` 不合法;一個回答都沒拿到(不寫清單,見上);沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
-| `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在 | Ctrl-C |
+| `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在;`--redirects` 檔不存在或格式不對(4.1 起) | Ctrl-C |
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | Ctrl-C |
 
 經 npm(`npx cornhsu-polymigrate`、全域安裝的 `polymigrate`)執行時,中間多一層啟動腳本 `bin/polymigrate.js`:

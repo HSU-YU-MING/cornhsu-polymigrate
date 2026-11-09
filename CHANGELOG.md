@@ -2,6 +2,23 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
+## 未發佈
+
+**新功能:`verify --redirects <file>`,離線檢查轉址表。** 原本 `verify` 不讀轉址表,而轉址表是搬遷最容易手改出錯的檔案。
+給 `redirect_map.csv` 或 `_redirects`(Netlify / Cloudflare Pages)就多查四件事,逐條點名行號:
+
+- `redirect_target_missing`(error):目標是站內頁、卻不在 `content/` 裡 → 上線就是 404;
+- `redirect_loop`(error):轉一圈回到原點,或轉到自己;
+- `redirect_conflict`(error):同一個來源兩條規則、目標不同;
+- `redirect_chain`(warning):目標又是另一條規則的來源,多一跳。
+
+萬用字元、具名參數、非 3xx(改寫、自訂錯誤頁)略過、列在摘要;外站目標離線查不到,不查。
+**選用**:沒給 `--redirects` 的人,`verify` 的輸出與 exit code 逐位元不變。函式庫:`PolyMigrator.Verify` 與
+`OutputVerifier.Run` 各多一個帶 `redirects` 的多載(以新增多載的方式加,沒有替既有方法加參數),
+`VerifyReport` 多 `RedirectsChecked`、`RedirectsSkipped`。
+*New: `verify --redirects <file>` checks a redirect table (`redirect_map.csv` or a `_redirects` file) offline for missing
+targets, loops, conflicting rules (errors) and chains (warning). Opt-in: nothing changes unless the flag is given.*
+
 ## 4.0.0 — 2026-11-03
 
 **Major:縮圖用的影像庫升到 Magick.NET 15,帶進 ImageMagick 的安全修正;代價是 Intel Mac 上不能再跑 `thumbs`。**
