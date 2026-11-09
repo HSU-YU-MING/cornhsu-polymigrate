@@ -54,6 +54,9 @@ the pairing to you. PolyMigrate:
   in slugs (`20240121` vs `01212024`), title similarity,
 - **keeps your review decisions** in a file you own (`pairing.decisions`), so confirmed pairs,
   rejected suggestions and one-language pages stay settled across re-runs,
+- **shows the runners-up** in `pair_candidates.csv`: the top candidates for every page still under review, each
+  with a rule-based confidence label (`declared`, `exact_slug`, `corroborated`, `single_signal`, `title_only`)
+  instead of a made-up percentage — including candidates another page already took,
 - **honestly reports what it cannot pair**, producing a review-ready gap inventory instead of
   guessing wrong.
 

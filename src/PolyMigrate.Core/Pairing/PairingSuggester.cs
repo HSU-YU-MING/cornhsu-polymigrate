@@ -76,33 +76,74 @@ internal sealed class PairingSuggester(SiteConfig config)
                 // 同 section 是啟發式的護欄:共用相簿、同日期、標題像,跨 section 太容易巧合。
                 // hreflang 不受這條限制——它是作者宣告的,而語言版本換 section 是真的會發生
                 // (中文在 /ch/news/、英文在 /en/press/),那正是對稱路徑配不起來的原因之一。
-                var candidates = pool.Where(b =>
-                        !taken.Contains(b.TranslationKey)
-                        && b.TranslationKey != a.TranslationKey
-                        && b.Locale != a.Locale
-                        && (b.Section == a.Section || HreflangToken(a, b) is not null)
-                        && (!requireHreflang || HreflangToken(a, b) is not null)
-                        && !rejected.Contains(PairingDecisions.Ordered(a.TranslationKey, b.TranslationKey)))
-                    .ToList();
-
-                var best = candidates
-                    .Select(b => (Group: b, Evidence: Evaluate(a, b)))
-                    .Where(c => c.Evidence.Count > 0)
-                    .OrderByDescending(c => Score(c.Evidence))
-                    .ThenBy(c => c.Group.TranslationKey, StringComparer.Ordinal)
+                var best = Ranked(a, pool.Where(b => !taken.Contains(b.TranslationKey)
+                                                     && (!requireHreflang || HreflangToken(a, b) is not null)), rejected)
                     .FirstOrDefault();
-                if (best.Group is null)
+                if (best is null)
                 {
                     continue;
                 }
 
                 taken.Add(a.TranslationKey);
                 taken.Add(best.Group.TranslationKey);
-                suggestions.Add(new PairSuggestion(
-                    a.TranslationKey, best.Group.TranslationKey,
-                    string.Join(';', best.Evidence.Select(e => $"{e.Key}={e.Value}"))));
+                suggestions.Add(new PairSuggestion(a.TranslationKey, best.Group.TranslationKey, best.EvidenceText));
             }
         }
+    }
+
+    /// <summary>一個候選:對方、命中的證據、排序分數。</summary>
+    internal sealed record Candidate(UnpairedGroup Group, List<KeyValuePair<string, string>> Evidence, long Score)
+    {
+        public string EvidenceText => string.Join(';', Evidence.Select(e => $"{e.Key}={e.Value}"));
+    }
+
+    /// <summary>
+    /// <paramref name="a"/> 的所有候選,好的在前——貪婪配對與 <see cref="Candidates"/> 共用這一份,兩邊的排序才不會各說各話。
+    /// 同 section 是啟發式的護欄:共用相簿、同日期、標題像,跨 section 太容易巧合。
+    /// hreflang 不受這條限制——它是作者宣告的,而語言版本換 section 是真的會發生
+    /// (中文在 /ch/news/、英文在 /en/press/),那正是對稱路徑配不起來的原因之一。
+    /// </summary>
+    private IEnumerable<Candidate> Ranked(UnpairedGroup a, IEnumerable<UnpairedGroup> others, IReadOnlySet<(string, string)> rejected) =>
+        others
+            .Where(b => b.TranslationKey != a.TranslationKey
+                        && b.Locale != a.Locale
+                        && (b.Section == a.Section || HreflangToken(a, b) is not null)
+                        && !rejected.Contains(PairingDecisions.Ordered(a.TranslationKey, b.TranslationKey)))
+            .Select(b => (Group: b, Evidence: Evaluate(a, b)))
+            .Where(c => c.Evidence.Count > 0)
+            .Select(c => new Candidate(c.Group, c.Evidence, Score(c.Evidence)))
+            .OrderByDescending(c => c.Score)
+            .ThenBy(c => c.Group.TranslationKey, StringComparer.Ordinal);
+
+    /// <summary>
+    /// 每個 key 的全部候選(好的在前),<b>不管</b>對方是不是已經被別人配走——
+    /// 貪婪配對只出一筆,被搶走的那個更好的對象原本就看不到;覆核時要的正是「還有誰可能是它」。
+    /// 沒有任何候選的 key 不在結果裡。
+    /// </summary>
+    public Dictionary<string, List<Candidate>> Candidates(
+        IEnumerable<UnpairedGroup> unpaired, IReadOnlySet<(string, string)> rejected)
+    {
+        var pool = unpaired.OrderBy(g => g.TranslationKey, StringComparer.Ordinal).ToList();
+        return pool
+            .Select(a => (Key: a.TranslationKey, List: Ranked(a, pool, rejected).ToList()))
+            .Where(x => x.List.Count > 0)
+            .ToDictionary(x => x.Key, x => x.List, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 信心分級:看<b>是哪幾種證據</b>,不是分數——分數只用來排序,換算成百分比會假裝有它沒有的精確度。
+    /// 由高到低:<c>declared</c>(原站作者宣告的 hreflang)、<c>exact_slug</c>(slug 只差分隔符或大小寫,與對稱路徑同級)、
+    /// <c>corroborated</c>(兩種以上互相獨立的啟發式同時成立)、<c>single_signal</c>(只有共用相簿或只有同日期)、
+    /// <c>title_only</c>(只有標題相似——跨語言最弱)。
+    /// </summary>
+    public static string Confidence(IReadOnlyCollection<KeyValuePair<string, string>> evidence)
+    {
+        var kinds = evidence.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+        return kinds.Contains(Hreflang) ? "declared"
+            : kinds.Contains(SlugNormalized) ? "exact_slug"
+            : kinds.Count >= 2 ? "corroborated"
+            : kinds.Contains(TitleSimilarity) ? "title_only"
+            : "single_signal";
     }
 
     /// <summary>

@@ -186,7 +186,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
                     r.TextByLocale.Count == 1 ? r.TextByLocale.Keys.Single() : null)
                 : null,
             locales.Count >= 2) ?? DecisionOutcome.None;
-        var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang, outcome);
+        var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang, outcome, out var candidates);
         // media_manifest 的 sha1 是收尾階段最慢的一段(大媒體目錄可達數十秒):先逐檔算完(每檔一個檢查點),
         // 再開始寫清單——中斷時清單仍是「一份都不寫」,而不是寫了一半
         var manifest = dryRun ? null : BuildMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs, ct);
@@ -203,6 +203,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
         {
             WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions, outcome);
             WriteHreflangMap(paths.OutDir, hreflang);
+            WritePairCandidates(paths.OutDir, candidates, suggestions);
             Csv.Write(Path.Combine(paths.OutDir, "media_manifest.csv"), manifest!.Rows);
             WriteRedirectMap(paths.OutDir, aggregator.Redirects);
             WriteRedirectExports(paths.OutDir, aggregator.Redirects);
@@ -290,10 +291,11 @@ public sealed class ExtractionPipeline(SiteConfig config)
     /// </summary>
     private Dictionary<string, PairSuggestion> SuggestPairs(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales, HreflangIndex hreflang,
-        DecisionOutcome decisions)
+        DecisionOutcome decisions, out Dictionary<string, List<PairingSuggester.Candidate>> candidates)
     {
         if (locales.Count < 2)
         {
+            candidates = [];
             return [];
         }
         var unpaired = inventory
@@ -309,14 +311,53 @@ public sealed class ExtractionPipeline(SiteConfig config)
                 Media = kv.Value.Media,
                 Alternates = hreflang.AlternatesByKey.GetValueOrDefault(kv.Key)
                              ?? new Dictionary<string, string>(StringComparer.Ordinal),
-            });
+            })
+            .ToList();
+        var suggester = new PairingSuggester(config);
         var byKey = new Dictionary<string, PairSuggestion>();
-        foreach (var s in new PairingSuggester(config).Suggest(unpaired, decisions.Rejected))
+        foreach (var s in suggester.Suggest(unpaired, decisions.Rejected))
         {
             byKey[s.KeyA] = s;
             byKey[s.KeyB] = s;
         }
+        candidates = suggester.Candidates(unpaired, decisions.Rejected);
         return byKey;
+    }
+
+    /// <summary><c>pair_candidates.csv</c> 每個 key 列幾名(建議中的那一個若不在前幾名,另外補上)。</summary>
+    private const int CandidatesPerKey = 3;
+
+    /// <summary>
+    /// <c>pair_candidates.csv</c>(4.1 起):還要人工覆核的每個 key,前幾名候選與信心分級。
+    /// content_inventory 的 suggested_pair 是貪婪配對的結果、只有一筆;被別人先配走的更好對象、
+    /// 第二名差多少,原本都看不到。不動 content_inventory 的欄位(欄序是契約),另開一份。
+    /// </summary>
+    private static void WritePairCandidates(
+        string outDir, Dictionary<string, List<PairingSuggester.Candidate>> candidates, Dictionary<string, PairSuggestion> suggestions)
+    {
+        var rows = new List<IReadOnlyList<string>>
+        {
+            new[] { "translation_key", "rank", "candidate", "confidence", "evidence", "suggested" },
+        };
+        foreach (var (key, list) in candidates.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            var suggested = suggestions.GetValueOrDefault(key) is { } s ? (s.KeyA == key ? s.KeyB : s.KeyA) : null;
+            for (var i = 0; i < list.Count; i++)
+            {
+                var c = list[i];
+                if (i >= CandidatesPerKey && c.Group.TranslationKey != suggested)
+                {
+                    continue;   // 名次照實寫:建議中的那一個排第 5,就寫 5——那正是「更好的對象被別人配走了」的訊號
+                }
+                rows.Add(new[]
+                {
+                    key, (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), c.Group.TranslationKey,
+                    PairingSuggester.Confidence(c.Evidence), c.EvidenceText,
+                    c.Group.TranslationKey == suggested ? "True" : "False",
+                });
+            }
+        }
+        Csv.Write(Path.Combine(outDir, "pair_candidates.csv"), rows);
     }
 
     private string PairStatus(string key, InventoryRecord r, List<string> locales,

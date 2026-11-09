@@ -1,0 +1,5 @@
+﻿translation_key,rank,candidate,confidence,evidence,suggested
+events/2026_chanxiu,1,events/enRetreat,declared,hreflang=en;shared_media=1,True
+events/enRetreat,1,events/2026_chanxiu,declared,hreflang=zh-Hant;shared_media=1,True
+news/02142026,1,news/20260214,single_signal,date=2026-02-14,True
+news/20260214,1,news/02142026,single_signal,date=2026-02-14,True
