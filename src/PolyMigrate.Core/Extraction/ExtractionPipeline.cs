@@ -68,12 +68,29 @@ public sealed class ExtractionReport
     /// </summary>
     public List<string> StaleOutputs { get; init; } = [];
 
+    /// <summary>人工決定檔(<c>pairing.decisions</c>)確認的配對組數;沒設決定檔是 0。</summary>
+    public int ConfirmedPairs { get; init; }
+
+    /// <summary>人工確認沒有其他語言版本的 translation_key 數。</summary>
+    public int ConfirmedSingle { get; init; }
+
+    /// <summary>人工否決、這次因此沒再建議的配對數。</summary>
+    public int RejectedPairs { get; init; }
+
+    /// <summary>
+    /// 決定檔裡這次沒套上的列(<c>line N: 原因</c>):key 不在這次的 inventory、已經靠路徑配上了、兩邊同語言…
+    /// 計入 <see cref="HasWarnings"/>:人做過的決定沒生效,不能安靜地略過。只有設了決定檔的人會遇到,
+    /// 既有使用者的 exit code 不變。
+    /// </summary>
+    public List<string> UnappliedDecisions { get; init; } = [];
+
     public int PagesSkippedUnsafe => PathIssues.Count(i => i.Severity == Severity.Error);
 
     public bool HasErrors => PagesSkippedUnsafe > 0;
 
     public bool HasWarnings => MissingImages > 0 || NeedFetchMedia > 0
-        || PathIssues.Any(i => i.Severity == Severity.Warning);
+        || PathIssues.Any(i => i.Severity == Severity.Warning)
+        || UnappliedDecisions.Count > 0;
 }
 
 /// <summary>
@@ -120,6 +137,8 @@ public sealed class ExtractionPipeline(SiteConfig config)
         var extractor = new PageExtractor(config, pageRoutes);
         // config selector 寫壞的話在寫任何檔之前就停(ConfigException),不要半途崩潰留下半套輸出
         extractor.EnsureSelectorsValid(pages);
+        // 決定檔同理:找不到、不是 UTF-8、格式寫壞,在寫任何檔之前就停
+        var decisions = config.Pairing.Decisions is { } decisionsPath ? PairingDecisions.Load(decisionsPath) : null;
 
         var aggregator = new InventoryAggregator(links);
         var pathIssues = new List<PathIssue>();
@@ -159,7 +178,15 @@ public sealed class ExtractionPipeline(SiteConfig config)
         }
 
         var hreflang = HreflangIndex.Build(aggregator.HreflangLinks, aggregator.RouteToKey);
-        var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang);
+        var outcome = decisions?.Resolve(
+            key => aggregator.Inventory.TryGetValue(key, out var r)
+                ? new DecisionKeyState(
+                    key.StartsWith('/'),
+                    locales.All(r.TextByLocale.ContainsKey),
+                    r.TextByLocale.Count == 1 ? r.TextByLocale.Keys.Single() : null)
+                : null,
+            locales.Count >= 2) ?? DecisionOutcome.None;
+        var suggestions = SuggestPairs(aggregator.Inventory, locales, hreflang, outcome);
         // media_manifest 的 sha1 是收尾階段最慢的一段(大媒體目錄可達數十秒):先逐檔算完(每檔一個檢查點),
         // 再開始寫清單——中斷時清單仍是「一份都不寫」,而不是寫了一半
         var manifest = dryRun ? null : BuildMediaManifest(paths.OutDir, paths.MediaDir, aggregator.MediaRefs, ct);
@@ -174,7 +201,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
         }
         if (!dryRun)
         {
-            WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions);
+            WriteContentInventory(paths.OutDir, aggregator.Inventory, locales, suggestions, outcome);
             WriteHreflangMap(paths.OutDir, hreflang);
             Csv.Write(Path.Combine(paths.OutDir, "media_manifest.csv"), manifest!.Rows);
             WriteRedirectMap(paths.OutDir, aggregator.Redirects);
@@ -190,7 +217,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
         return BuildReport(aggregator.Inventory, locales, pagesWritten, aggregator.MediaRefs.Count,
             aggregator.Missing.Count, aggregator.NeedFetch.Count, suggestions.Count / 2, pathIssues,
-            FindStaleOutputs(paths.OutDir, writtenPaths), hreflang);
+            FindStaleOutputs(paths.OutDir, writtenPaths), hreflang, outcome);
     }
 
     private void Checkpoint(string label, CancellationToken ct)
@@ -257,16 +284,21 @@ public sealed class ExtractionPipeline(SiteConfig config)
 
     private static string LocaleColumn(string locale) => locale.Replace('-', '_').ToLowerInvariant();
 
-    /// <summary>對「只有單語」的 key 產生啟發式配對建議(§1.4);回傳 key → 建議,兩端各一筆。</summary>
+    /// <summary>
+    /// 對「只有單語」的 key 產生啟發式配對建議(§1.4);回傳 key → 建議,兩端各一筆。
+    /// 人工已有結論的 key(確認的配對、確定沒有對應)不進候選池;否決過的配對不再建議。
+    /// </summary>
     private Dictionary<string, PairSuggestion> SuggestPairs(
-        SortedDictionary<string, InventoryRecord> inventory, List<string> locales, HreflangIndex hreflang)
+        SortedDictionary<string, InventoryRecord> inventory, List<string> locales, HreflangIndex hreflang,
+        DecisionOutcome decisions)
     {
         if (locales.Count < 2)
         {
             return [];
         }
         var unpaired = inventory
-            .Where(kv => !kv.Key.StartsWith('/') && kv.Value.TextByLocale.Count == 1)
+            .Where(kv => !kv.Key.StartsWith('/') && kv.Value.TextByLocale.Count == 1
+                         && !decisions.Confirmed.ContainsKey(kv.Key) && !decisions.Single.Contains(kv.Key))
             .Select(kv => new UnpairedGroup
             {
                 TranslationKey = kv.Key,
@@ -279,7 +311,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
                              ?? new Dictionary<string, string>(StringComparer.Ordinal),
             });
         var byKey = new Dictionary<string, PairSuggestion>();
-        foreach (var s in new PairingSuggester(config).Suggest(unpaired))
+        foreach (var s in new PairingSuggester(config).Suggest(unpaired, decisions.Rejected))
         {
             byKey[s.KeyA] = s;
             byKey[s.KeyB] = s;
@@ -288,7 +320,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
     }
 
     private string PairStatus(string key, InventoryRecord r, List<string> locales,
-        Dictionary<string, PairSuggestion> suggestions)
+        Dictionary<string, PairSuggestion> suggestions, DecisionOutcome decisions)
     {
         if (locales.Count < 2)
         {
@@ -302,12 +334,37 @@ public sealed class ExtractionPipeline(SiteConfig config)
         {
             return "paired";
         }
+        if (decisions.Confirmed.ContainsKey(key))
+        {
+            return "confirmed";              // 人工確認的配對(pairing.decisions)
+        }
+        if (decisions.Single.Contains(key))
+        {
+            return "confirmed_single";       // 人工確認沒有其他語言版本
+        }
         return suggestions.ContainsKey(key) ? "heuristic_suggested" : "missing";
+    }
+
+    /// <summary>suggested_pair 與 pair_evidence:人工結論優先,其次啟發式建議。</summary>
+    private static (string Pair, string Evidence) PairColumns(
+        string key, Dictionary<string, PairSuggestion> suggestions, DecisionOutcome decisions)
+    {
+        if (decisions.Confirmed.TryGetValue(key, out var other))
+        {
+            return (other, "decision=pair");
+        }
+        if (decisions.Single.Contains(key))
+        {
+            return ("", "decision=single");
+        }
+        return suggestions.GetValueOrDefault(key) is { } s
+            ? (s.KeyA == key ? s.KeyB : s.KeyA, s.Evidence)
+            : ("", "");
     }
 
     private void WriteContentInventory(
         string outDir, SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
-        Dictionary<string, PairSuggestion> suggestions)
+        Dictionary<string, PairSuggestion> suggestions, DecisionOutcome decisions)
     {
         var rows = new List<IReadOnlyList<string>>();
         string[] header =
@@ -322,17 +379,16 @@ public sealed class ExtractionPipeline(SiteConfig config)
         rows.Add(header);
         foreach (var (key, r) in inventory)
         {
-            var suggestion = suggestions.GetValueOrDefault(key);
+            var (pair, evidence) = PairColumns(key, suggestions, decisions);
             string[] row =
             [
                 key, r.Section, r.Slug,
                 .. locales.Select(l => r.TextByLocale.ContainsKey(l) ? "True" : "False"),
                 r.Type, "", string.Join(';', r.Flags),
-                PairStatus(key, r, locales, suggestions),
-                suggestion is null ? "" : (suggestion.KeyA == key ? suggestion.KeyB : suggestion.KeyA),
-                suggestion?.Evidence ?? "",
+                PairStatus(key, r, locales, suggestions, decisions),
+                pair, evidence,
                 .. locales.Select(l => (r.TextByLocale.GetValueOrDefault(l) ?? 0).ToString()),
-                r.ImageCount.ToString(), "",
+                r.ImageCount.ToString(), decisions.Notes.GetValueOrDefault(key, ""),
             ];
             rows.Add(row);
         }
@@ -448,7 +504,7 @@ public sealed class ExtractionPipeline(SiteConfig config)
     private ExtractionReport BuildReport(
         SortedDictionary<string, InventoryRecord> inventory, List<string> locales,
         int pagesWritten, int mediaReferenced, int missingCount, int needFetchCount, int suggestedPairs,
-        List<PathIssue> pathIssues, List<string> staleOutputs, HreflangIndex hreflang)
+        List<PathIssue> pathIssues, List<string> staleOutputs, HreflangIndex hreflang, DecisionOutcome decisions)
     {
         var typeCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var flagCounts = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -482,6 +538,10 @@ public sealed class ExtractionPipeline(SiteConfig config)
             HreflangInFallback = config.Pairing.Fallback.Contains(PairingSuggester.Hreflang),
             PathIssues = pathIssues,
             StaleOutputs = staleOutputs,
+            ConfirmedPairs = decisions.Confirmed.Count / 2,
+            ConfirmedSingle = decisions.Single.Count,
+            RejectedPairs = decisions.Rejected.Count,
+            UnappliedDecisions = [.. decisions.Unapplied],
         };
     }
 }
