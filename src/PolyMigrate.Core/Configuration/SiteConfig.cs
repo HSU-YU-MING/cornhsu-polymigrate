@@ -125,6 +125,14 @@ public sealed class PairingSection
     /// 合法值見 <see cref="PolyMigrate.Core.Pairing.PairingSuggester.KnownHeuristics"/>;空 = 只做對稱路徑、不給建議。
     /// </summary>
     public List<string> Fallback { get; set; } = [];
+
+    /// <summary>
+    /// 人工配對決定檔(CSV,欄位 <c>translation_key,decision,other_key,note</c>;格式見 docs/contracts.md)。
+    /// <c>extract</c> 每次都讀、從不寫:確認的配對、否決的建議、確認沒有對應語言的頁,重跑都保留。
+    /// 相對路徑:<see cref="SiteConfigLoader.LoadFile(string)"/> 以 config 檔所在目錄為準,
+    /// <see cref="SiteConfigLoader.Load(string, string)"/> 與程式內組 config 時以目前工作目錄為準。null = 不用。
+    /// </summary>
+    public string? Decisions { get; set; }
 }
 
 public sealed class MediaSection

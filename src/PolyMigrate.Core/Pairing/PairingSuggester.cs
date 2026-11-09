@@ -48,7 +48,10 @@ internal sealed class PairingSuggester(SiteConfig config)
     /// <summary>title_similarity 低於此值不當證據(跨語言標題相似度本就偏弱)。</summary>
     private const double TitleSimilarityThreshold = 0.5;
 
-    public List<PairSuggestion> Suggest(IEnumerable<UnpairedGroup> unpaired)
+    public List<PairSuggestion> Suggest(IEnumerable<UnpairedGroup> unpaired) => Suggest(unpaired, new HashSet<(string, string)>());
+
+    /// <param name="rejected">人工否決過的配對(<see cref="PairingDecisions.Ordered"/> 的無序一對):不再建議,改找下一個候選。</param>
+    public List<PairSuggestion> Suggest(IEnumerable<UnpairedGroup> unpaired, IReadOnlySet<(string, string)> rejected)
     {
         var pool = unpaired.OrderBy(g => g.TranslationKey, StringComparer.Ordinal).ToList();
         var taken = new HashSet<string>();
@@ -78,7 +81,8 @@ internal sealed class PairingSuggester(SiteConfig config)
                         && b.TranslationKey != a.TranslationKey
                         && b.Locale != a.Locale
                         && (b.Section == a.Section || HreflangToken(a, b) is not null)
-                        && (!requireHreflang || HreflangToken(a, b) is not null))
+                        && (!requireHreflang || HreflangToken(a, b) is not null)
+                        && !rejected.Contains(PairingDecisions.Ordered(a.TranslationKey, b.TranslationKey)))
                     .ToList();
 
                 var best = candidates

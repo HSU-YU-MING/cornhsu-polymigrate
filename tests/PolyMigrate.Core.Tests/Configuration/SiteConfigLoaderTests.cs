@@ -17,6 +17,39 @@ public class SiteConfigLoaderTests
         """;
 
     [Fact]
+    public void PairingDecisions_IsResolvedNextToTheConfigFile_NotTheWorkingDirectory()
+    {
+        // 決定檔與 config 都是站別知識、通常放在一起:從哪個目錄執行都要讀到同一份
+        var dir = Directory.CreateTempSubdirectory("polymigrate-config").FullName;
+        try
+        {
+            var path = Path.Combine(dir, "site.yaml");
+            File.WriteAllText(path, MinimalYaml + "\npairing:\n  decisions: review/pairing_decisions.csv\n");
+            var absolute = Path.Combine(dir, "elsewhere.csv");
+            var absolutePath = Path.Combine(dir, "abs.yaml");
+            File.WriteAllText(absolutePath, MinimalYaml + $"\npairing:\n  decisions: '{absolute}'\n");
+
+            Assert.Equal(Path.Combine(dir, "review", "pairing_decisions.csv"), SiteConfigLoader.LoadFile(path).Pairing.Decisions);
+            Assert.Equal(absolute, SiteConfigLoader.LoadFile(absolutePath).Pairing.Decisions);
+            Assert.Null(SiteConfigLoader.Load(MinimalYaml).Pairing.Decisions);   // 預設不用
+            // 檔案不存在不是載入錯誤:probe、verify 用不到它(extract 才擋)
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PairingDecisions_Blank_IsRefusedAtLoad()
+    {
+        var ex = Assert.Throws<ConfigException>(() =>
+            SiteConfigLoader.Load(MinimalYaml + "\npairing:\n  decisions: '  '\n"));
+
+        Assert.Contains("pairing.decisions must be a file path", ex.Message);
+    }
+
+    [Fact]
     public void MinimalConfig_LoadsWithDefaults()
     {
         var config = SiteConfigLoader.Load(MinimalYaml);

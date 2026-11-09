@@ -38,6 +38,7 @@ exit 1(清單照寫,但可能不完整)。**升級前請先看 CHANGELOG 3.0.0 �
 - 兩者都配不起來的**啟發式建議**:只差分隔符的檔名
   (`2025-light-offering` vs `2025_light_offering`)、共用相簿、
   slug 內日期正規化(`20240121` vs `01212024`)、標題相似度
+- 人工覆核的結論**記在你自己的檔案裡**(`pairing.decisions`):確認的配對、否決的建議、只有一種語言的頁,重跑都不會丟
 - 真的配不到的**誠實列出**,產出待人工覆核的缺漏清單,絕不亂猜
 
 也講清楚 PolyMigrate 刻意**不**做的事:用 URL 字串相似度配語言版本。
@@ -67,6 +68,27 @@ exit 1(清單照寫,但可能不完整)。**升級前請先看 CHANGELOG 3.0.0 �
 配對結果一樣只是**建議**:hreflang 提高的是證據品質,不會讓工具自作主張把兩頁合併。
 這是刻意的,不是還沒做完——背後的量測、以及要重新考慮的話需要什麼條件,
 記在 [docs/hreflang_量測與決策.md](docs/hreflang_量測與決策.md)。
+
+### 記下覆核的決定
+
+`content_inventory.csv` 每次 `extract` 都整份重寫,不能拿來存覆核結果。在 config 設 `pairing.decisions`
+指向一份 CSV(相對路徑以 config 檔所在的目錄為準),把結論寫在那裡:
+
+```csv
+translation_key,decision,other_key,note
+news/20260301,pair,news/event-03012026,same retreat
+news/spring-fair,not_pair,news/03012026-photos,photos are from another day
+news/notice,single,,Chinese only
+```
+
+- `pair`:兩個 key 是同一頁的不同語言版(`pair_status` 變成 `confirmed`)
+- `not_pair`:否決建議,啟發式改找下一個候選
+- `single`:這頁沒有其他語言版本(`confirmed_single`,不再列為 `missing`)
+
+`extract` 每次都讀、從不寫,所以重跑不會丟;備註會出現在清單的 `notes` 欄。套不上的決定(舊站已經沒有這個 key、
+已經靠路徑配上、兩個 key 同語言)會列在摘要裡,`extract` 以 exit 1 結束——人做過的決定不會被安靜地略過。
+檔案寫壞的話,`extract` 在寫任何檔之前就以 exit 2 停下。決定只改覆核狀態,從不改 `translation_key`。
+從 Excel 存檔請選「CSV UTF-8」。
 
 ## 內建的實戰坑
 
@@ -157,6 +179,7 @@ extract:
   content: "section[id]:not(#header):not(#footer)"
 pairing:
   fallback: [hreflang, slug_normalized, shared_media, date, title_similarity]
+  decisions: pairing_decisions.csv      # 人工覆核的決定(見「記下覆核的決定」)
 ```
 
 ## 當函式庫用
