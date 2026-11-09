@@ -178,6 +178,7 @@ dotnet tool install -g Cornhsu.PolyMigrate  # .NET 10
 
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
+polymigrate templates site.yaml             # before tuning the config: page templates + does extract.content catch each?
 polymigrate extract site.yaml               # mirror HTML -> frontmatter Markdown + inventories
 polymigrate verify .                        # link/media/frontmatter/unlinked-page audit, CI exit codes
 polymigrate verify . --redirects _redirects # + redirect table: missing targets, chains, loops, conflicts

@@ -281,6 +281,36 @@ UTF-8 無 BOM、`\n` 分隔、**沒有結尾換行**(0 筆時為空檔);ordinal 
 exit code:0 乾淨 / 1 有 warning / 2 有 error(§3.8)。2.2 新增 `unlinked_page` 之後,
 原本 exit 0 的專案可能變成 exit 1。
 
+## `templates`:`template_report.csv`、`template_pages.csv`(4.1 起)
+
+寫 config 之前用:把鏡像頁依**版面骨架**分群,每一群回報 `extract.content` 抓到多少、並建議內容區 selector。
+只讀 `raw/`(`*.html`,與 extract 對「一個鏡像頁」的定義相同),不碰網路、不寫 `content/`。兩份檔寫到 `--out`(預設 `<root>`),
+每次整份重寫;中斷時兩份都不寫。
+
+**分群規則**:body 底下前 4 層的版面元素(`div section main article header footer nav aside table form ul ol`)
+連同 `#id` 或第一個 `.class` 的路徑集合當骨架,id / class 裡的數字一律視為相同(`post-123` = `post-456`)。
+頁依路徑排序後逐頁比對,與某一群代表頁(第一頁)的骨架 Jaccard 相似度 ≥ 0.8 就歸入最像的那一群,否則自成一群。
+模板依頁數由多到少編號 `T1`、`T2`…(同數依第一頁路徑)。
+
+**內容區候選**(每頁):有 id 或 class、字數(不含 script / style / noscript)至少占整頁一半的元素裡最深的那一個;
+**排除網站外框**——`header` / `footer` / `nav` / `aside`,以及 id 或 class 含 header、footer、nav、menu、sidebar、breadcrumb 的。
+寫成 `#id`,否則 `tag.class`;名字要跳脫的不用。只有圖、沒有字的頁沒有候選。
+
+**`template_report.csv`**(一個模板一列,依模板編號):
+
+| 欄位 | 說明 |
+|---|---|
+| template | `T1`… |
+| pages | 頁數 |
+| sections / locales | `news=12;events=3`:多的在前;根層頁的 section 寫 `(root)` |
+| sample_pages | 前 3 頁的 raw 相對路徑,以 ` \| ` 連接 |
+| content_empty | `extract.content` 一個元素都沒選到的頁數(extract 會寫出只有 frontmatter 的空頁)。選到了但沒有字(只有圖)不算 |
+| content_coverage | `extract.content` 抓到的字數占整頁字數的中位數,0～100;整群都沒有字時留空 |
+| suggested_content | 這群頁最常見的內容區候選;沒有則留空 |
+| suggested_pages | 其中幾頁的候選是它 |
+
+**`template_pages.csv`**(一頁一列,依頁路徑):`page, template, section, lang, content_matches, content_chars, body_chars, content_candidate`。
+
 ## `probe-orphans` → `fetch-orphans`:`orphan_slugs.<section>.txt`
 
 `probe-orphans` 的輸出、`fetch-orphans --slugs` 的預設輸入,**每個 section 一份**:皆預設
@@ -382,6 +412,7 @@ config 的 CSS selector(`extract.content`、每一個 `type_rules.*.title_select
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `verify` | 無 issue | 只有 warning | 有 error;`--allow-unlinked` 檔不存在;`--redirects` 檔不存在或格式不對(4.1 起) | Ctrl-C |
 | `slugs` | 列出成功(含空清單) | — | 找不到該 section 目錄;`--section` / `--lang` 不是單一目錄名 | Ctrl-C |
+| `templates`(4.1 起) | 每一頁 `extract.content` 都選得到元素 | 有頁一個元素都選不到(清單照寫) | 鏡像目錄不存在 | Ctrl-C |
 
 經 npm(`npx cornhsu-polymigrate`、全域安裝的 `polymigrate`)執行時,中間多一層啟動腳本 `bin/polymigrate.js`:
 PolyMigrate 自己的 exit code 原樣轉傳;被訊號中斷時為 128+訊號編號(SIGINT → 130)。

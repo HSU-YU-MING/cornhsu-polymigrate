@@ -30,6 +30,8 @@ public static class Cli
         "polymigrate verify <output-dir> [--media <dir>] [--media-prefix /media/] [--allow-unlinked <file>] [--redirects <file>]";
     private const string SlugsUsage =
         "polymigrate slugs <root> --section <name> [--lang <prefix>] [--raw <dir>]";
+    private const string TemplatesUsage =
+        "polymigrate templates <config.yaml> [--root <dir>] [--raw <dir>] [--out <dir>]";
 
     /// <summary>
     /// --help 裡的語法列:縮排兩格,太長時在 <c>[…]</c> 之間折行,續行對齊到指令名之後。
@@ -83,6 +85,9 @@ public static class Cli
             case "slugs":
                 return RunSlugs(args[1..], ct);
 
+            case "templates":
+                return RunTemplates(args[1..], ct);
+
             case "thumbs":
                 return RunThumbs(args[1..], ct);
 
@@ -133,6 +138,12 @@ public static class Cli
                           (the summary goes to stderr, so stdout stays pipeable). During a
                           parallel run: diff this against the live site's current list, then
                           feed the difference to fetch-orphans --slugs. Local only, no network.
+                    {Synopsis(TemplatesUsage)}
+                          Group mirrored pages by layout skeleton before writing the config: per template,
+                          how many pages and sections, how much text extract.content captures, and a
+                          suggested content selector. Writes template_report.csv and template_pages.csv
+                          to --out (default <root>). Exits 1 when extract.content captures nothing on
+                          some pages. Local only, no network; content/ is not touched.
                       polymigrate --help, -h              Print this help
                       polymigrate --version, -v           Print version
 
@@ -423,6 +434,58 @@ public static class Cli
             Console.Error.WriteLine($"{slugs.Count} slugs mirrored under {section}"
                 + (langPrefix is null ? " (all langs)." : $" ({langPrefix})."));
             return 0;
+        }
+        catch (Exception ex) when (IsHandled(ex))
+        {
+            return Report(ex);
+        }
+    }
+
+    private static int RunTemplates(string[] args, CancellationToken ct)
+    {
+        if (ParseArgs(args, "Usage: " + TemplatesUsage, "--root", "--raw", "--out") is not var (configPath, options))
+        {
+            return 2;
+        }
+        try
+        {
+            var config = LoadConfig(configPath);
+            var root = ResolveRoot(configPath, options);
+            var rawDir = Path.GetFullPath(options.GetValueOrDefault("--raw", Path.Combine(root, "raw")));
+            var outDir = Path.GetFullPath(options.GetValueOrDefault("--out", root));
+            if (!Directory.Exists(rawDir))
+            {
+                Console.Error.WriteLine($"Raw mirror directory not found: {rawDir}");
+                return 2;
+            }
+
+            var survey = new PolyMigrate.Core.Templates.TemplateSurvey(config);
+            var report = survey.Run(rawDir, ct);
+            ct.ThrowIfCancellationRequested();   // 中斷時兩份清單都不寫
+            PolyMigrate.Core.Templates.TemplateSurvey.Write(outDir, report);
+
+            Console.WriteLine(new string('=', 50));
+            Console.WriteLine("Templates done.");
+            Console.WriteLine($"  pages     : {report.PagesSurveyed}");
+            Console.WriteLine($"  templates : {report.Groups.Count} (same template = layout skeletons at least "
+                + $"{PolyMigrate.Core.Templates.TemplateSurvey.SameTemplate:P0} alike)");
+            Console.WriteLine($"  content   : extract.content = {config.Extract.Content}; captures nothing on {report.ContentEmpty} page(s)");
+            foreach (var g in report.Groups.Take(10))
+            {
+                var coverage = g.ContentCoverage is { } c ? $"{c}% of the text" : "pages have no text";
+                var suggested = g.Suggested is { } s ? $"; suggested {s.Selector} ({s.Pages}/{g.Pages.Count})" : "";
+                var empty = g.ContentEmpty > 0 ? $", nothing on {g.ContentEmpty}" : "";
+                Console.WriteLine($"  [{PolyMigrate.Core.Templates.TemplateSurvey.Name(g.Id)}] {g.Pages.Count} page(s), "
+                    + $"e.g. {g.Pages[0].Page} — content captures {coverage}{empty}{suggested}");
+            }
+            if (report.Groups.Count > 10)
+            {
+                Console.WriteLine($"  … {report.Groups.Count - 10} more in template_report.csv");
+            }
+            Console.WriteLine($"  report    : {Path.Combine(outDir, "template_report.csv")} (per page: template_pages.csv)");
+            Console.WriteLine(new string('=', 50));
+            // 抓不到東西的頁,extract 會寫出只有 frontmatter 的空 Markdown——在寫 config 這一步就該知道
+            return report.ContentEmpty > 0 ? 1 : 0;
         }
         catch (Exception ex) when (IsHandled(ex))
         {
