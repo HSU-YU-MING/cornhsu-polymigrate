@@ -86,14 +86,14 @@ documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,o
 | section / slug | string | 首見版本的 section 與 slug |
 | has_{locale}… | True/False | 每個 locale 一欄,欄名由 lang_map 值展開(`zh-Hant` → `has_zh_hant`) |
 | suggested_type | string | 工具判的頁型 |
-| final_type | string | 留空,人工覆核填 |
+| final_type | string | 留空(每次重寫,人工結論請記在 `pairing.decisions`) |
 | flags | string | `;` 分隔(如 `needs_rebuild;text_in_image`) |
-| pair_status | enum | `paired` / `missing` / `heuristic_suggested` / `site_level`;單語站留空 |
-| suggested_pair | string | 啟發式建議的對方 translation_key(§1.4;僅 heuristic_suggested 有值) |
+| pair_status | enum | `paired` / `missing` / `heuristic_suggested` / `site_level`;單語站留空。4.1 起多兩個值,**只在設了 `pairing.decisions` 時出現**:`confirmed`(人工確認的配對)、`confirmed_single`(人工確認沒有其他語言版本) |
+| suggested_pair | string | 啟發式建議的對方 translation_key(§1.4;heuristic_suggested 有值);`confirmed` 時是人工配上的對方 |
 | pair_evidence | string | 證據,`;` 分隔(如 `shared_media=3;date=2026-01-21`);數值與執行機器的文化無關:日期為 ISO `yyyy-MM-dd`(西曆)、相似度兩位小數並以 `.` 為小數點 |
 | text_len_{locale}… | int | 每個 locale 一欄;缺該語版 = 0 |
 | image_count | int | 各語版取最大 |
-| notes | string | 留空,人工覆核填 |
+| notes | string | `pairing.decisions` 裡套上的決定的備註(同一個 key 有多筆時以 `; ` 串接);沒有則留空 |
 
 配對線索只「建議」不自動合併,順序由 config `pairing.fallback` 決定,也決定 `pair_evidence` 的加權:
 
@@ -109,6 +109,31 @@ documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,o
 配對分兩趟:先把 `hreflang` 配得起來的配完,啟發式才上場——同一趟內是貪婪、先到先得,
 一趟做完的話宣告關係會被字典序在前的推測關係搶走對象。
 無任何證據就不硬配(missing),最終決定權在人。
+
+`pair_evidence` 在 `confirmed` 時是 `decision=pair`、`confirmed_single` 時是 `decision=single`。
+
+**`pairing.decisions`**(4.1 起;**人工維護的輸入檔**,`extract` 每次都讀、從不寫):
+
+`translation_key, decision, other_key, note`,UTF-8(有無 BOM 皆可)、第一行必須是這個表頭,欄位值前後空白不計。
+
+| decision | other_key | 效果 |
+|---|---|---|
+| `pair` | 必填 | 兩個 key 標為 `confirmed`,不再進啟發式的候選池 |
+| `not_pair` | 必填 | 這一對不再建議,啟發式改找下一個候選;同一個 key 可以否決很多個 |
+| `single` | 留空 | 標為 `confirmed_single`,不再進候選池 |
+
+decision 不分大小寫;全空的列略過(Excel 會在檔尾留下)。從 `content_inventory.csv` 複製來的公式防護單引號
+(`'-foo`)會去掉。**不改寫 `translation_key`**:frontmatter、`redirect_map.csv` 照舊(理由見 hreflang 決策文件)。
+
+讀檔時的檢查(任一條不過 → `ConfigException`,exit 2,**在寫任何檔之前**,訊息點名行號、一次列出全部):
+檔案不存在(訊息附表頭);不是 UTF-8(Excel 的「CSV」在繁中 Windows 存成 Big5);表頭不對;
+decision 不是三者之一;`pair` / `not_pair` 沒給 other_key、`single` 給了 other_key;兩個 key 相同;
+translation_key 空白;超過四欄(備註含逗號要加引號);同一個 key 有兩個結論(`pair` / `single`);
+同一對既 `pair` 又 `not_pair`。
+
+套用時套不上的(**不是錯,是 warning**,`extract` exit 1,摘要逐筆列出 `[decision not applied] line N: 原因`,
+不寫進任何檔案):key 不在這次的 inventory(舊站下架或打錯);站級頁;已經靠對稱路徑配上;`pair` 的兩個 key 同語言;
+單語站。
 
 **`hreflang_map.csv`**(2.3 起;原站宣告的 hreflang 全紀錄,**含不可用的**):
 
@@ -305,6 +330,7 @@ stderr 印一則 `note:` 說明怎麼遷移:新檔還不存在時,它是哪個 s
 | `extract.type_rules.*` | `title_selector` 與每一個 `remove_selectors` 是合法的 CSS selector(頁型寫了但沒給規則 = 沒有規則) |
 | `extract.text_in_image_max_length` | ≥ 0 |
 | `pairing.fallback` | 已知的啟發式名稱,不重複 |
+| `pairing.decisions` | 不是空白、不含路徑不允許的字元(4.1 起)。**檔案存不存在不在載入時驗**:只有 `extract` 讀它 |
 | `media.web_prefix` | 以 `/` 開頭的根相對路徑或絕對 http(s) 網址,不含空白、引號、`<` `>` `?` `#` |
 | `media.pdf_labels` | key 是形狀正確的 BCP-47 標記;不在 `lang_map` 裡的(含大小寫不同)只**警告**——查表是精確比對,那條用不到;值不可空 |
 | `media.thumbnails` | `max_width` ≥ 1;`quality` 1～100 |
@@ -334,7 +360,7 @@ config 的 CSS selector(`extract.content`、每一個 `type_rules.*.title_select
 
 | 指令 | 0 | 1 | 2(除上述共通情況) | 130 |
 |---|---|---|---|---|
-| `extract` | 乾淨 | 壞圖、待補媒體、超長路徑 | 不安全路徑拒寫、鏡像目錄不存在 | Ctrl-C |
+| `extract` | 乾淨 | 壞圖、待補媒體、超長路徑、`pairing.decisions` 有套不上的決定(4.1 起,只有設了決定檔才會) | 不安全路徑拒寫、鏡像目錄不存在、`pairing.decisions` 找不到或寫壞(4.1 起) | Ctrl-C |
 | `thumbs` | 全部建立或已存在 | 任一張失敗(含寬 × 高超過 178,956,970 像素〔約 179 MP〕的靜態圖:解碼前只讀標頭就擋下,不做縮圖) | 媒體目錄不存在;影像庫的原生檔載入不了(Intel Mac〔`osx-x64`〕一律如此,4.0 起) | Ctrl-C |
 | `probe-orphans` | 跑完、每個候選都拿到回答(不論命中幾筆) | 部分候選沒拿到回答(清單照寫,可能不完整) | `--years` 不合法;一個回答都沒拿到(不寫清單,見上);沒給 `--out` 而 `--section` 拼不出預設檔名 | Ctrl-C |
 | `fetch-orphans` | 沒有任何頁出錯 | 任一頁出錯(非 200、非 HTML、連線失敗、逾時) | slug 清單不存在;沒給 `--slugs` 而 `--section` 拼不出預設檔名 | Ctrl-C |

@@ -41,7 +41,15 @@ public static class SiteConfigLoader
         {
             throw new ConfigException($"Config file not found: {path}");
         }
-        return Load(File.ReadAllText(path), path, warnings);
+        var config = Load(File.ReadAllText(path), path, warnings);
+        // 決定檔跟著 config 走(兩者都是站別知識、通常放在一起):從哪個目錄執行都讀到同一份。
+        // 絕對路徑照用——Path.Combine 遇到絕對的後段本來就丟掉前段,這裡正是要那個行為
+        if (config.Pairing.Decisions is { } decisions)
+        {
+            config.Pairing.Decisions = Path.GetFullPath(
+                Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, decisions));
+        }
+        return config;
     }
 
     public static SiteConfig Load(string yaml, string sourceName = "<string>") => Load(yaml, sourceName, []);
@@ -186,6 +194,12 @@ public static class SiteConfigLoader
             {
                 errors.Add($"pairing.fallback lists '{h.Key}' more than once.");
             }
+        }
+        if (c.Pairing?.Decisions is { } decisionsPath
+            && (string.IsNullOrWhiteSpace(decisionsPath) || decisionsPath.IndexOfAny(Path.GetInvalidPathChars()) >= 0))
+        {
+            // 檔案存不存在留給 extract 判斷:probe、verify 等指令用不到它,不該因為它還沒建而載入失敗
+            errors.Add("pairing.decisions must be a file path (a CSV of manual pairing decisions), or be left out.");
         }
         if (Present(errors, c.Media, "media") is { } media)
         {

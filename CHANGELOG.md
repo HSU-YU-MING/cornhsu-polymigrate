@@ -4,6 +4,28 @@
 
 ## 未發佈
 
+**新功能:人工配對決定檔 `pairing.decisions`。** `content_inventory.csv` 每次 `extract` 都整份重寫,
+人工覆核的結論原本沒有地方放(`final_type`、`notes` 欄寫了也會在下一次重跑時被蓋掉)。現在在 config 指一份 CSV
+(`translation_key,decision,other_key,note`),`extract` 每次都讀、從不寫:
+
+- `pair`:確認兩個 key 是同一頁的不同語言版 → `pair_status` 為 `confirmed`,不再進啟發式候選池;
+- `not_pair`:否決一筆建議 → 不再建議這一對,啟發式改找下一個候選;
+- `single`:確認這頁沒有其他語言版本 → `confirmed_single`,不再列為 `missing`。
+
+備註寫進清單的 `notes` 欄。套不上的決定(key 已不在舊站、已靠路徑配上、兩個 key 同語言)逐筆列在摘要、`extract` exit 1;
+檔案找不到、不是 UTF-8 或格式寫壞,在寫任何檔之前 exit 2。相對路徑以 config 檔所在的目錄為準。
+決定只改覆核狀態,**不改寫 `translation_key`**。
+
+沒設 `pairing.decisions` 的使用者:輸出、摘要、exit code 逐位元不變(golden 沒動)。
+四面契約都只有加法:YAML 多一個選用欄位;`content_inventory.csv` 的 `pair_status` 多兩個值、`notes` 欄有值
+(都只在設了決定檔時出現);`extract` 的 exit 1／2 多了上述情境(同樣只在設了決定檔時)。
+函式庫:`PairingSection.Decisions`,`ExtractionReport` 多 `ConfirmedPairs`、`ConfirmedSingle`、`RejectedPairs`、
+`UnappliedDecisions`(`HasWarnings` 計入最後一項)。
+*New: `pairing.decisions` — a CSV of review decisions (`pair` / `not_pair` / `single`) that `extract` reads on every
+run and never writes, so confirmed pairs, rejected suggestions and one-language pages stay settled across re-runs.
+Decisions that no longer apply are listed and make `extract` exit 1; a malformed file exits 2 before anything is
+written. `translation_key` is never rewritten. Nothing changes unless the field is set.*
+
 **新功能:`verify --redirects <file>`,離線檢查轉址表。** 原本 `verify` 不讀轉址表,而轉址表是搬遷最容易手改出錯的檔案。
 給 `redirect_map.csv` 或 `_redirects`(Netlify / Cloudflare Pages)就多查四件事,逐條點名行號:
 

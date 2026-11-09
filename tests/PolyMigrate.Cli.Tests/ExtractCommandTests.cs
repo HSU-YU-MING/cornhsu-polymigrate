@@ -49,6 +49,40 @@ public class ExtractCommandTests : CliTestBase
     }
 
     [Fact]
+    public async Task PairingDecisions_AreSummarised_AndOneThatNoLongerApplies_IsAWarning()
+    {
+        // 決定檔放在 config 旁邊、用相對路徑寫:從別的目錄執行也讀得到
+        var config = Write("site/site.yaml", Config(langMap: "{ ch: zh-Hant, en: en }",
+            extraTop: "pairing:\n  decisions: pairing_decisions.csv"));
+        Write("site/raw/ch/news/a.php.html", Page("中文"));
+        Write("site/raw/en/news/b.php.html", Page("English"));
+        Write("site/pairing_decisions.csv",
+            "translation_key,decision,other_key,note\r\nnews/a,pair,news/b,\r\nnews/gone,single,,\r\n");
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(1, r.Exit);   // 沒套上的決定 = warning
+        Assert.Contains("  decisions        : 1 confirmed pairs, 0 confirmed single, 0 rejected, 1 not applied (pairing_decisions.csv)\n", r.Out);
+        Assert.Contains("  [decision not applied] line 3: news/gone is not in this run's inventory (removed from the old site, or mistyped)\n", r.Out);
+        var row = File.ReadAllLines(PathOf("site/content_inventory.csv")).Single(l => l.StartsWith("news/a,", StringComparison.Ordinal));
+        Assert.Contains(",confirmed,news/b,decision=pair,", row);
+    }
+
+    [Fact]
+    public async Task PairingDecisions_FileMissing_ExitsTwo_BeforeWritingAnything()
+    {
+        var config = Write("site/site.yaml", Config(langMap: "{ ch: zh-Hant, en: en }",
+            extraTop: "pairing:\n  decisions: pairing_decisions.csv"));
+        Write("site/raw/ch/news/a.php.html", Page("中文"));
+
+        var r = await Run("extract", config);
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("pairing.decisions file not found", r.Err);
+        Assert.False(File.Exists(PathOf("site/content_inventory.csv")));
+    }
+
+    [Fact]
     public async Task HreflangNotInFallback_SummarySaysItWasNotUsed()
     {
         // CLAUDE.md「地雷」:hreflang 預設不啟用。查證照做、數字照印,但摘要必須講明這次沒拿它配對——

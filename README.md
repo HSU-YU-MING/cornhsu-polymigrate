@@ -52,6 +52,8 @@ the pairing to you. PolyMigrate:
 - **suggests pairs heuristically** where neither applies — slugs that differ only in separators
   (`2025-light-offering` vs `2025_light_offering`), shared photo albums, normalized dates hidden
   in slugs (`20240121` vs `01212024`), title similarity,
+- **keeps your review decisions** in a file you own (`pairing.decisions`), so confirmed pairs,
+  rejected suggestions and one-language pages stay settled across re-runs,
 - **honestly reports what it cannot pair**, producing a review-ready gap inventory instead of
   guessing wrong.
 
@@ -89,6 +91,29 @@ Pairs are still only ever *suggested*: `hreflang` raises the evidence quality, i
 switch the tool into merging pages on its own. That is a deliberate call, not an unfinished
 one — the measurement behind it, and what would have to change to revisit it, are recorded in
 [docs/hreflang_量測與決策.md](https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/docs/hreflang_%E9%87%8F%E6%B8%AC%E8%88%87%E6%B1%BA%E7%AD%96.md).
+
+### Recording review decisions
+
+`content_inventory.csv` is rewritten on every `extract`, so it is no place to keep your review.
+Point `pairing.decisions` at a CSV (relative paths are resolved next to the config file) and record
+each conclusion there:
+
+```csv
+translation_key,decision,other_key,note
+news/20260301,pair,news/event-03012026,same retreat
+news/spring-fair,not_pair,news/03012026-photos,photos are from another day
+news/notice,single,,Chinese only
+```
+
+- `pair` — the two keys are the same page in different languages (`pair_status` becomes `confirmed`);
+- `not_pair` — reject a suggestion; the heuristics move on to the next candidate;
+- `single` — the page has no other language version (`confirmed_single`, no longer listed as `missing`).
+
+`extract` reads the file on every run and never writes it, so decisions survive re-runs; notes appear in the
+inventory's `notes` column. A decision that no longer applies (the key is gone from the old site, it is already
+paired by path, or both keys are in the same language) is listed in the summary and makes `extract` exit 1 —
+a review decision is never dropped silently. A malformed file stops `extract` with exit 2 before anything is
+written. Decisions change the review state only, never `translation_key`. From Excel, save as "CSV UTF-8".
 
 ## Battle-tested defaults
 
@@ -194,6 +219,7 @@ extract:
   content: "section[id]:not(#header):not(#footer)"
 pairing:
   fallback: [hreflang, slug_normalized, shared_media, date, title_similarity]
+  decisions: pairing_decisions.csv      # your review decisions (see "Recording review decisions")
 ```
 
 ## Use as a library

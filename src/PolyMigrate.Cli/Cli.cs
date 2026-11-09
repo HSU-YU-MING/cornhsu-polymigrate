@@ -212,6 +212,12 @@ public static class Cli
             Console.WriteLine($"  flags            : {Format(report.FlagCounts)}");
             Console.WriteLine($"  single-locale    : {Format(report.OnlyInLocale)}");
             Console.WriteLine($"  suggested pairs  : {report.SuggestedPairs} (heuristic, review in content_inventory.csv)");
+            // 只在設了決定檔時才印:沒設的人輸出逐行不變
+            if (config.Pairing.Decisions is { } decisionsPath)
+            {
+                Console.WriteLine($"  decisions        : {report.ConfirmedPairs} confirmed pairs, {report.ConfirmedSingle} confirmed single, "
+                    + $"{report.RejectedPairs} rejected, {report.UnappliedDecisions.Count} not applied ({Path.GetFileName(decisionsPath)})");
+            }
             // 「passed validation」不等於「配到了對象」,更不等於「有被用」——
             // pairing.fallback 沒列 hreflang 的話,這兩個數字純粹是觀察,必須講出來
             var hreflangUse = report.HreflangInFallback
@@ -232,6 +238,11 @@ public static class Cli
             foreach (var (severity, pagePath, issue) in report.PathIssues.Take(10))
             {
                 Console.WriteLine($"  [{severity.Wire()}] {pagePath}: {issue}");
+            }
+            // 沒套上的決定不寫進任何檔案(決定檔是人的、extract 不寫),全部列出來——只截前 10 筆的話,其餘的就無處可查
+            foreach (var unapplied in report.UnappliedDecisions)
+            {
+                Console.WriteLine($"  [decision not applied] {unapplied}");
             }
             Console.WriteLine(new string('=', 50));
             return report.HasErrors ? 2 : report.HasWarnings ? 1 : 0;

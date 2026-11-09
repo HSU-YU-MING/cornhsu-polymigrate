@@ -31,6 +31,7 @@
 
 ## sealed class PolyMigrate.Core.Configuration.PairingSection
    public ctor()
+   public string? Decisions { get; set; }
    public List<string> Fallback { get; set; }
 
 ## sealed class PolyMigrate.Core.Configuration.PoliteSection
@@ -112,6 +113,8 @@
 
 ## sealed class PolyMigrate.Core.Extraction.ExtractionReport
    public ctor()
+   public int ConfirmedPairs { get; init; }
+   public int ConfirmedSingle { get; init; }
    public required SortedDictionary<string, int> FlagCounts { get; init; }
    public bool HasErrors { get; }
    public bool HasWarnings { get; }
@@ -125,10 +128,12 @@
    public int PagesSkippedUnsafe { get; }
    public int PagesWritten { get; init; }
    public required List<PolyMigrate.Core.Diagnostics.PathIssue> PathIssues { get; init; }
+   public int RejectedPairs { get; init; }
    public List<string> StaleOutputs { get; init; }
    public int SuggestedPairs { get; init; }
    public int TranslationKeys { get; init; }
    public required SortedDictionary<string, int> TypeCounts { get; init; }
+   public List<string> UnappliedDecisions { get; init; }
 
 ## sealed class PolyMigrate.Core.Media.ThumbnailGenerator
    public ctor(PolyMigrate.Core.Configuration.SiteConfig config)
