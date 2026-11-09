@@ -49,6 +49,14 @@ targets, loops, conflicting rules (errors) and chains (warning). Opt-in: nothing
 *New: `pair_candidates.csv` lists the top candidates for every key still under review — including ones another key already
 took — with a rule-based confidence label instead of a percentage. Existing output files are unchanged.*
 
+**新指令:`polymigrate templates <config.yaml>`,模板分群報告。** `extract.content` 只有一個 selector,舊站卻常有好幾種版面;
+原本要整份 extract 跑完、一頁一頁看 Markdown 才知道哪一種漏了。`templates` 只讀鏡像,把頁依版面骨架分群
+(id / class 裡的數字視為相同),每一群回報頁數、section、`extract.content` 抓到的字數比例、一個元素都沒選到的頁數,
+並建議內容區 selector(頁首頁尾選單不列入)。寫 `template_report.csv` 與 `template_pages.csv`;
+有頁一個元素都選不到時 exit 1。不碰網路、不寫 `content/`。既有指令不變。
+*New command: `polymigrate templates` groups mirrored pages by layout skeleton and reports, per template, how much text
+`extract.content` captures and a suggested content selector — before you run a full extract.*
+
 ## 4.0.0 — 2026-11-03
 
 **Major:縮圖用的影像庫升到 Magick.NET 15,帶進 ImageMagick 的安全修正;代價是 Intel Mac 上不能再跑 `thumbs`。**

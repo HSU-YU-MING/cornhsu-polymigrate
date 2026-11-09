@@ -144,6 +144,7 @@ dotnet tool install -g Cornhsu.PolyMigrate  # 有 .NET 10
 
 ```
 dotnet tool install -g Cornhsu.PolyMigrate
+polymigrate templates site.yaml             # 調 config 之前:舊站有幾種版面、extract.content 在每一種抓不抓得到
 polymigrate extract site.yaml               # 鏡像 HTML → frontmatter Markdown + 清單
 polymigrate verify .                        # 連結/媒體/frontmatter/孤島頁巡檢,exit code 可接 CI
 polymigrate verify . --redirects _redirects # 再加轉址表:目標不存在、連鎖、迴圈、同來源兩個目標
