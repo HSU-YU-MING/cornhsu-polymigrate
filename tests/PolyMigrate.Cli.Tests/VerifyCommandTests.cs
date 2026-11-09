@@ -25,6 +25,107 @@ public class VerifyCommandTests : CliTestBase
         return PathOf("out");
     }
 
+    /// <summary>站根 + /ch/news/a,兩頁互連(沒有孤島),給轉址檢查當目標。</summary>
+    private string WriteTwoPages()
+    {
+        var outDir = WriteSite("[a](/ch/news/a)");
+        Write("out/content/ch/news/a.md",
+            """
+            ---
+            source_url: https://example.invalid/ch/news/a.php
+            lang: zh-Hant
+            slug: a
+            translation_key: news/a
+            title: a
+            page_type: article
+            ---
+
+            [home](/)
+
+            """);
+        return outDir;
+    }
+
+    [Fact]
+    public async Task Redirects_NotGiven_SummaryUnchanged()
+    {
+        // 選用:沒給 --redirects 的人,摘要逐行不變、exit code 不變
+        var r = await Run("verify", WriteTwoPages());
+
+        Assert.Equal(0, r.Exit);
+        Assert.DoesNotContain("redirects", r.Out);
+    }
+
+    [Fact]
+    public async Task Redirects_RedirectMapCsv_CleanTable_ExitsZero()
+    {
+        var outDir = WriteTwoPages();
+        Write("out/redirect_map.csv",
+            "old_url,new_path,lang,translation_key\r\n"
+            + "https://example.invalid/ch/news/a.php,/ch/news/a,zh-Hant,news/a\r\n"
+            + "https://example.invalid/ch/index.php,/,zh-Hant,/index\r\n");
+
+        var r = await Run("verify", outDir, "--redirects", PathOf("out/redirect_map.csv"));
+
+        Assert.Equal(0, r.Exit);
+        Assert.Contains("  redirects       : 2 rules checked, 0 skipped (wildcards, placeholders, non-3xx; redirect_map.csv)\n", r.Out);
+    }
+
+    [Fact]
+    public async Task Redirects_EveryProblem_IsReportedWithItsLine()
+    {
+        var outDir = WriteTwoPages();
+        Write("out/_redirects",
+            """
+            # 註解與空行略過
+            /old/a.php       /ch/news/a     301
+            /old/gone.php    /ch/news/gone  301
+            /older/a.php     /old/a.php     301
+            /loop1           /loop2
+            /loop2           /loop1/
+            /self            /self          302
+            /old/a.php       /ch/news/b     301
+            /news/*          /ch/news/:splat 301
+            /news/:id        /ch/news/:id   301
+            /app/*           /index.html    200
+            /ext             https://example.org/x 301
+            /via-ext         /ext           301
+            broken-line-without-target
+            """);
+
+        var r = await Run("verify", outDir, "--redirects", PathOf("out/_redirects"));
+
+        Assert.Equal(2, r.Exit);
+        Assert.Contains("  redirects       : 9 rules checked, 3 skipped", r.Out);
+        var report = File.ReadAllText(PathOf("out/verify_report.csv"));
+        Assert.Contains("error,_redirects:3,redirect_target_missing,/old/gone.php → /ch/news/gone", report);
+        Assert.Contains("warning,_redirects:4,redirect_chain,/older/a.php → /old/a.php → /ch/news/a", report);
+        Assert.Contains("error,_redirects:5,redirect_loop,/loop1 → /loop2 → /loop1/", report);
+        Assert.DoesNotContain("_redirects:6,", report);   // 同一個迴圈只報一次
+        Assert.Contains("error,_redirects:7,redirect_loop,/self → /self", report);
+        Assert.Contains("error,_redirects:8,redirect_conflict,\"/old/a.php → /ch/news/b, but line 2 sends it to /ch/news/a\"", report);
+        Assert.DoesNotContain("_redirects:12,", report);  // 外站目標:離線無從檢查
+        Assert.Contains("warning,_redirects:13,redirect_chain,/via-ext → /ext → https://example.org/x", report);   // 終點在外站:是連鎖,不是不存在
+        Assert.Contains("error,_redirects:14,redirect_unreadable", report);
+        Assert.DoesNotContain("_redirects:2,", report);
+    }
+
+    [Fact]
+    public async Task Redirects_FileMissing_OrNotARedirectMap_ExitsTwo()
+    {
+        var outDir = WriteTwoPages();
+        Write("out/other.csv", "a,b\r\n1,2\r\n");
+
+        var missing = await Run("verify", outDir, "--redirects", PathOf("out/nope"));
+        var wrong = await Run("verify", outDir, "--redirects", PathOf("out/other.csv"));
+
+        Assert.Equal(2, missing.Exit);
+        Assert.Contains("Redirect table not found", missing.Err);
+        Assert.Equal(2, wrong.Exit);
+        Assert.Contains("needs the redirect_map.csv columns old_url and new_path", wrong.Err);
+        Assert.False(File.Exists(PathOf("out/verify_report.csv")));   // 讀不到轉址表就在巡檢之前停
+    }
+
     [Fact]
     public async Task KeptIframe_ToAMigratedPage_IsNotABrokenLink()
     {
@@ -247,6 +348,7 @@ public class VerifyCommandTests : CliTestBase
     [InlineData("--media")]
     [InlineData("--media-prefix")]
     [InlineData("--allow-unlinked")]
+    [InlineData("--redirects")]
     public async Task OptionWithoutValue_ExitsTwo(string option)
     {
         // verify 的解析不吃「下一個是旗標」的值:缺值時該旗標本身被當成未知參數

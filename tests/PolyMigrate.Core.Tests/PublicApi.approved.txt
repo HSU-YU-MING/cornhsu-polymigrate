@@ -190,11 +190,13 @@
    public Task<PolyMigrate.Core.Orphans.ProbeReport> ProbeOrphansAsync(string root, string section, int yearFrom, int yearTo, string? langPrefix = null, Action<string>? progress = null, CancellationToken ct = default)
    public static PolyMigrate.Core.Verify.VerifyReport Verify(string outputDir, string? mediaDir = null, string mediaPrefix = "/media/", IReadOnlyCollection<string>? allowUnlinked = null)
    public static PolyMigrate.Core.Verify.VerifyReport Verify(string outputDir, string? mediaDir, string mediaPrefix, IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct)
+   public static PolyMigrate.Core.Verify.VerifyReport Verify(string outputDir, string? mediaDir, string mediaPrefix, IReadOnlyCollection<string>? allowUnlinked, string? redirects, CancellationToken ct)
 
 ## sealed class PolyMigrate.Core.Verify.OutputVerifier
    public ctor()
    public PolyMigrate.Core.Verify.VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix = "/media/", IReadOnlyCollection<string>? allowUnlinked = null)
    public PolyMigrate.Core.Verify.VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix, IReadOnlyCollection<string>? allowUnlinked, CancellationToken ct)
+   public PolyMigrate.Core.Verify.VerifyReport Run(string outDir, string? mediaDir, string mediaPrefix, IReadOnlyCollection<string>? allowUnlinked, string? redirects, CancellationToken ct)
 
 ## sealed record PolyMigrate.Core.Verify.VerifyIssue : IEquatable<PolyMigrate.Core.Verify.VerifyIssue>
    public ctor(PolyMigrate.Core.Diagnostics.Severity Severity, string Page, string Kind, string Detail)
@@ -219,4 +221,6 @@
    public int MediaChecked { get; init; }
    public bool MediaChecksSkipped { get; init; }
    public int PagesChecked { get; init; }
+   public int RedirectsChecked { get; init; }
+   public int RedirectsSkipped { get; init; }
    public int Warnings { get; }

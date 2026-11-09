@@ -78,6 +78,15 @@ public sealed class PolyMigrator(SiteConfig config)
         new OutputVerifier().Run(outputDir, mediaDir ?? Path.Combine(outputDir, "media"), mediaPrefix, allowUnlinked, ct);
 
     /// <summary>
+    /// 同上,另外離線檢查一份轉址表(4.1 起;CLI 的 <c>--redirects</c>):目標頁存在、沒有連鎖、沒有迴圈、
+    /// 同一個來源沒有兩個目標。<paramref name="redirects"/> 是 <c>redirect_map.csv</c>(.csv)或 <c>_redirects</c> 格式;
+    /// null 等同上一個多載。
+    /// </summary>
+    public static VerifyReport Verify(string outputDir, string? mediaDir, string mediaPrefix,
+        IReadOnlyCollection<string>? allowUnlinked, string? redirects, CancellationToken ct) =>
+        new OutputVerifier().Run(outputDir, mediaDir ?? Path.Combine(outputDir, "media"), mediaPrefix, allowUnlinked, redirects, ct);
+
+    /// <summary>
     /// 鏡像裡已有的 slug(<c>raw/{lang}/{section}/</c> 檔名),字典序、跨語言去重;
     /// 純本地、不碰網路、不需 config。並行期用來跟舊站的現況求差集,
     /// 差集再餵給 <c>fetch-orphans --slugs</c>。

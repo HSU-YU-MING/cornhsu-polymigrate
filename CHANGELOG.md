@@ -26,6 +26,21 @@ run and never writes, so confirmed pairs, rejected suggestions and one-language 
 Decisions that no longer apply are listed and make `extract` exit 1; a malformed file exits 2 before anything is
 written. `translation_key` is never rewritten. Nothing changes unless the field is set.*
 
+**新功能:`verify --redirects <file>`,離線檢查轉址表。** 原本 `verify` 不讀轉址表,而轉址表是搬遷最容易手改出錯的檔案。
+給 `redirect_map.csv` 或 `_redirects`(Netlify / Cloudflare Pages)就多查四件事,逐條點名行號:
+
+- `redirect_target_missing`(error):目標是站內頁、卻不在 `content/` 裡 → 上線就是 404;
+- `redirect_loop`(error):轉一圈回到原點,或轉到自己;
+- `redirect_conflict`(error):同一個來源兩條規則、目標不同;
+- `redirect_chain`(warning):目標又是另一條規則的來源,多一跳。
+
+萬用字元、具名參數、非 3xx(改寫、自訂錯誤頁)略過、列在摘要;外站目標離線查不到,不查。
+**選用**:沒給 `--redirects` 的人,`verify` 的輸出與 exit code 逐位元不變。函式庫:`PolyMigrator.Verify` 與
+`OutputVerifier.Run` 各多一個帶 `redirects` 的多載(以新增多載的方式加,沒有替既有方法加參數),
+`VerifyReport` 多 `RedirectsChecked`、`RedirectsSkipped`。
+*New: `verify --redirects <file>` checks a redirect table (`redirect_map.csv` or a `_redirects` file) offline for missing
+targets, loops, conflicting rules (errors) and chains (warning). Opt-in: nothing changes unless the flag is given.*
+
 **新功能:`pair_candidates.csv`,候選名次與信心分級。** `content_inventory.csv` 的 `suggested_pair` 是貪婪配對的結果,
 只有一筆:配對照字典序走,字典序在前、只有日期相同的頁會先把對象配走,日期與標題都對得上的那一頁只剩 `missing`,
 從清單上看不出來。新檔列出每個待覆核 key 的前 3 名候選(**不管對方是不是已被別人配走**;建議中的那一個排在後面時照實際名次另列),
