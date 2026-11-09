@@ -112,6 +112,22 @@ documents: [...]      # PDF iframe:每筆 {src, orig}(src = 媒體網路路徑,o
 
 `pair_evidence` 在 `confirmed` 時是 `decision=pair`、`confirmed_single` 時是 `decision=single`。
 
+**`pair_candidates.csv`**(4.1 起;恆輸出,單語站或沒有任何候選時只有表頭):
+
+`translation_key, rank, candidate, confidence, evidence, suggested`。
+還要覆核的每個 key(只有單語、沒有人工結論)的候選,**不管對方是不是已經被別的 key 配走**——
+`content_inventory.csv` 的 `suggested_pair` 是貪婪配對的結果、只有一筆,被先配走的更好對象在那裡看不到。
+每個 key 列前 3 名;建議中的那一個若排在後面,另外照實際名次列出(排第 5 就寫 5)。
+排序:`translation_key` ordinal → `rank`。沒有任何候選的 key 不列。否決過的配對(`not_pair`)不列。
+
+| 欄位 | 說明 |
+|---|---|
+| rank | 名次,1 起;排序依據與配對建議相同(`pairing.fallback` 越前面的證據權重越高) |
+| candidate | 候選的 translation_key |
+| confidence | 信心分級,**依哪幾種證據成立命名、不是機率**:`declared`(有 hreflang)> `exact_slug`(有 slug_normalized)> `corroborated`(兩種以上啟發式同時成立)> `single_signal`(只有 shared_media 或只有 date)> `title_only`(只有標題相似)。**開放集合**,消費端須容忍沒見過的值 |
+| evidence | 與 `pair_evidence` 同格式,但從這一列的 translation_key 看出去(hreflang 的值是這一頁宣告的語言,反方向那一列可能不同) |
+| suggested | `True` = 這就是 `content_inventory.csv` 裡的建議 |
+
 **`pairing.decisions`**(4.1 起;**人工維護的輸入檔**,`extract` 每次都讀、從不寫):
 
 `translation_key, decision, other_key, note`,UTF-8(有無 BOM 皆可)、第一行必須是這個表頭,欄位值前後空白不計。

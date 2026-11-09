@@ -39,6 +39,9 @@ exit 1(清單照寫,但可能不完整)。**升級前請先看 CHANGELOG 3.0.0 �
   (`2025-light-offering` vs `2025_light_offering`)、共用相簿、
   slug 內日期正規化(`20240121` vs `01212024`)、標題相似度
 - 人工覆核的結論**記在你自己的檔案裡**(`pairing.decisions`):確認的配對、否決的建議、只有一種語言的頁,重跑都不會丟
+- **落選候選也列出來**(`pair_candidates.csv`):每個待覆核的頁列出前幾名候選,附依證據種類命名的信心分級
+  (`declared`、`exact_slug`、`corroborated`、`single_signal`、`title_only`),不給假裝精確的百分比——
+  已經被別的頁配走的候選也照列
 - 真的配不到的**誠實列出**,產出待人工覆核的缺漏清單,絕不亂猜
 
 也講清楚 PolyMigrate 刻意**不**做的事:用 URL 字串相似度配語言版本。

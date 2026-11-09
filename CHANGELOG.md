@@ -26,6 +26,14 @@ run and never writes, so confirmed pairs, rejected suggestions and one-language 
 Decisions that no longer apply are listed and make `extract` exit 1; a malformed file exits 2 before anything is
 written. `translation_key` is never rewritten. Nothing changes unless the field is set.*
 
+**新功能:`pair_candidates.csv`,候選名次與信心分級。** `content_inventory.csv` 的 `suggested_pair` 是貪婪配對的結果,
+只有一筆:配對照字典序走,字典序在前、只有日期相同的頁會先把對象配走,日期與標題都對得上的那一頁只剩 `missing`,
+從清單上看不出來。新檔列出每個待覆核 key 的前 3 名候選(**不管對方是不是已被別人配走**;建議中的那一個排在後面時照實際名次另列),
+附信心分級——依哪幾種證據成立命名,不是機率:`declared`、`exact_slug`、`corroborated`、`single_signal`、`title_only`。
+既有輸出檔逐位元不變(golden 只多了這一份);`extract` 每次都會寫它。
+*New: `pair_candidates.csv` lists the top candidates for every key still under review — including ones another key already
+took — with a rule-based confidence label instead of a percentage. Existing output files are unchanged.*
+
 ## 4.0.0 — 2026-11-03
 
 **Major:縮圖用的影像庫升到 Magick.NET 15,帶進 ImageMagick 的安全修正;代價是 Intel Mac 上不能再跑 `thumbs`。**
