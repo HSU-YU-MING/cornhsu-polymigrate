@@ -14,7 +14,7 @@ public class TemplatesCommandTests : CliTestBase
         Assert.Contains("Templates done.", r.Out);
         Assert.Contains("  pages     : 13\n", r.Out);
         Assert.Contains("captures nothing on 0 page(s)", r.Out);
-        Assert.Contains("[T1] 4 page(s), e.g. ch/news/20260214.php.html — content captures 88% of the text; suggested #main (4/4)", r.Out);
+        Assert.Contains("[T1] 4 page(s), e.g. ch/news/20260214.php.html: content captures 88% of the text; suggested #main (4/4)", r.Out);
         Assert.True(File.Exists(PathOf("site/template_report.csv")));
         Assert.True(File.Exists(PathOf("site/template_pages.csv")));
         Assert.False(Directory.Exists(PathOf("site/content")));   // 只讀鏡像,不抽取

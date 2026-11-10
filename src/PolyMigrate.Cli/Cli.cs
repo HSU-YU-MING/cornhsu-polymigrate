@@ -476,7 +476,7 @@ public static class Cli
                 var suggested = g.Suggested is { } s ? $"; suggested {s.Selector} ({s.Pages}/{g.Pages.Count})" : "";
                 var empty = g.ContentEmpty > 0 ? $", nothing on {g.ContentEmpty}" : "";
                 Console.WriteLine($"  [{PolyMigrate.Core.Templates.TemplateSurvey.Name(g.Id)}] {g.Pages.Count} page(s), "
-                    + $"e.g. {g.Pages[0].Page} — content captures {coverage}{empty}{suggested}");
+                    + $"e.g. {g.Pages[0].Page}: content captures {coverage}{empty}{suggested}");
             }
             if (report.Groups.Count > 10)
             {
