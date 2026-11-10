@@ -12,15 +12,19 @@
 把老舊動態網站(舊 PHP 站等)搬成乾淨、可餵給靜態網站產生器的 Markdown,
 並把「多語言」當成核心而非外掛。Config 驅動、全程離線可重跑,以 .NET 實作。
 
-**狀態:3.0。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
+**狀態:4.1。** 抽取管線、雙語配對、全站巡檢、縮圖、孤兒頁找回皆已完成,
 並以一次真實的整站搬遷驗證(見下)。**CLI 介面、exit code、Phase 輸出契約與 YAML config 在同一個 major 內凍結**:
-新功能升 minor、修正升 patch,動到這四面的改動留到下一個 major。**3.0 就是這樣的一版**——幾個情境的 exit code
+新功能升 minor、修正升 patch,動到這四面的改動留到下一個 major。**4.1** 加的是覆核工具,既有用法都不變:
+重跑不會丟的配對決定檔(`pairing.decisions`)、附信心分級的落選候選(`pair_candidates.csv`)、
+轉址表離線檢查(`verify --redirects`)、寫 config 用的模板分群(`polymigrate templates`)。
+**4.0** 只改一個 exit code:Magick.NET 15 不支援 Intel Mac,那裡的 `thumbs` 改成 exit 2。
+**3.0** 是最後一次大範圍改契約——幾個情境的 exit code
 改成符合 0 / 1 / 2 / 130 的契約(孤兒頁探測一個回答都沒拿到、npm 啟動腳本失敗、指令被中斷,都不再看起來像成功)、
 孤兒頁清單改成每個 section 一份(`orphan_slugs.<section>.txt`)、動畫 GIF / WebP 縮圖保留動畫,
 函式庫則多了 probe / fetch 入口與可取消的 overload。config 欄位、CSV 欄位、frontmatter 欄位都沒有變,
 但有寫壞的值(CSS selector、regex、不是單一路徑段的名稱、格式不對的網址或語言標記、寫了 key 卻沒給值…)的 config,
 現在任何指令一載入就擋下,不再等到哪一頁、哪個指令剛好用到才炸;孤兒頁探測有部分候選沒拿到回答時
-exit 1(清單照寫,但可能不完整)。**升級前請先看 CHANGELOG 3.0.0 的「升級必做」**。更早的沿革:2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
+exit 1(清單照寫,但可能不完整)。**從 2.x 升級的話,請先看 CHANGELOG 3.0.0 的「升級必做」**。更早的沿革:2.0 是工程版:把 `Cornhsu.PolyMigrate.Core` 的公開 .NET API
 收束到意圖中的進入點、移除未使用的 config 欄位;2.1 修補發佈管線(arm64 的 npm 平台包、
 符號套件),不過 Windows / Linux 的 arm64 平台包要到 2.3.1 修好啟動腳本才真的跑得起來;
 2.2 補上 `verify` 的盲點——沒有任何頁連過去的孤兒頁,因為巡檢是「跟著連結走」

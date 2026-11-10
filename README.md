@@ -13,11 +13,16 @@ PolyMigrate turns legacy dynamic sites (old PHP sites and the like) into clean, 
 Markdown — and it treats multilingual content as a first-class concern, not an afterthought.
 Config-driven, fully offline-rerunnable, built on .NET.
 
-**Status: 3.0.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
+**Status: 4.1.** The extraction pipeline, pairing, verification, thumbnails and orphan-page
 recovery are complete and validated against a real full-site migration (see below). The **CLI
 surface, exit codes, Phase output contracts and YAML config are frozen within a major version**:
 new features bump the minor version, fixes bump the patch, and anything that changes one of those
-four surfaces waits for a major. **3.0 is such a release** — it changes exit codes in a few cases
+four surfaces waits for a major. **4.1** adds review tooling without changing anything you already
+use: a pairing decisions file that survives re-runs (`pairing.decisions`), runner-up candidates with
+confidence labels (`pair_candidates.csv`), an offline redirect-table check (`verify --redirects`) and
+a template survey for writing the config (`polymigrate templates`). **4.0** changed one exit code:
+`thumbs` exits 2 on Intel Macs, which Magick.NET 15 no longer supports.
+**3.0** was the last broad contract change — it changed exit codes in a few cases
 so they follow the 0 / 1 / 2 / 130 contract (an orphan probe that got no usable answer, a failed
 npm launcher and an interrupted command no longer look like success), gives each section its own
 orphan slug list (`orphan_slugs.<section>.txt`), keeps animated GIF/WebP thumbnails animated, and
@@ -26,7 +31,7 @@ and frontmatter fields are unchanged, but a config with an invalid value (a CSS 
 path that isn't a single segment, a malformed URL or language tag, a key left without a value…) is now
 rejected when it is loaded, by every command, instead of when some page or command happens to use it, and a probe in
 which only some candidates got no answer exits 1 (the list is written, but may be incomplete).
-**Read the 3.0 upgrade checklist in the CHANGELOG before upgrading**.
+**Upgrading from 2.x? Read the 3.0 upgrade checklist in the CHANGELOG first**.
 Earlier history: 2.0 was an engineering release — it narrowed the
 `Cornhsu.PolyMigrate.Core` public .NET API to its intended entry points and removed unused
 config fields; 2.1 fixed up the release pipeline (arm64 npm packages, symbol packages) — though

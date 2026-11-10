@@ -2,7 +2,20 @@
 
 版本規則:preview 期間破壞性修改不另行公告;1.0 起新功能升 minor,修正升 patch。
 
-## 未發佈
+## 4.1.0 — 2026-11-10
+
+**新功能為主的 minor:四個覆核工具,外加套件說明與標籤。** 四面契約(CLI、exit code、輸出檔、YAML)都只有加法;
+沒用到新功能的人,輸出與 exit code 逐位元不變,只多一份 `pair_candidates.csv`。不用改任何設定。
+
+- `pairing.decisions`:人工配對決定檔,重跑保留(`pair` / `not_pair` / `single`)。
+- `pair_candidates.csv`:每個待覆核頁的前幾名候選與信心分級,看得出貪婪配對選錯的情況。
+- `verify --redirects <file>`:離線檢查轉址表(目標不存在、迴圈、衝突、連鎖)。
+- `polymigrate templates <config>`:寫 config 之前先看舊站有幾種版面、`extract.content` 在每一種抓不抓得到。
+
+*Minor release: a pairing decisions file, runner-up candidates with confidence labels, an offline redirect-table
+check and a template survey. Every contract only gained additions; nothing changes unless you use the new features,
+apart from the new `pair_candidates.csv` file.*
+
 
 **新功能:人工配對決定檔 `pairing.decisions`。** `content_inventory.csv` 每次 `extract` 都整份重寫,
 人工覆核的結論原本沒有地方放(`final_type`、`notes` 欄寫了也會在下一次重跑時被蓋掉)。現在在 config 指一份 CSV
