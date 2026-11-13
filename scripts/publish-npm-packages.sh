@@ -46,6 +46,7 @@ entry="$dist/cornhsu-polymigrate"
 field() { node -p "require(require('node:path').resolve(process.argv[1]))[process.argv[2]]" "$1" "$2" | tr -d '\r'; }
 
 version=$(field "$entry/package.json" version)
+[ -n "$version" ] || { echo "✗ 讀不出 $entry/package.json 的 version" >&2; exit 1; }
 
 # 平台子套件以入口套件自己寫的為準,不另外維護一份清單——發的就是使用者安裝時會去要的那幾個
 names=()
