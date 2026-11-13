@@ -14,16 +14,28 @@ internal sealed class MediaPaths(MediaSection media)
     public static string? RelativeFromUrl(string absoluteUrl)
     {
         // §3.4:先取 AbsolutePath 再解碼會把 %2e%2e%2f 之類的「編碼後穿越」還原成 ../,
-        // 而 Uri 的正規化只吃字面的 ../。解碼後逐段檢查,含 . / .. 或反斜線分段一律拒絕
+        // 而 Uri 的正規化只吃字面的 ../。解碼後逐段檢查,含 . / .. / 反斜線 / 冒號的分段一律拒絕
         // (拒寫 = 當成缺圖記錄,不寫到 media 根目錄外)。
+        //
+        // ⚠ 2026-11-13 修:這裡曾經只擋 . 與 ..,而且檢查的是 Replace 之後的**複本**、
+        //   回傳的卻是原文,所以上面那句「含反斜線分段一律拒絕」當時沒有實作。
+        //   兩種實測逃得出 media 根目錄的輸入:
+        //     /C:/temp/x.png           分段 "C:" 含冒號,Path.Combine 遇到 rooted 的第二段
+        //                              會把 mediaRoot 整個丟掉
+        //     /%5C%5Chost%5Cs%5Cx.png  解碼後是 UNC 路徑,File.Exists 與寫檔會打到對方的
+        //                              SMB 伺服器,Windows 帳號的 NetNTLMv2 雜湊就送出去了
+        //   規則與 Inventory/MirrorSlugs.cs 的 EnsurePathSegment 一致:一段目錄名不得含
+        //   斜線、反斜線、冒號,不得是 ..。刻意不用 Path.IsPathRooted——它在 Linux 認不出
+        //   磁碟機代號,同一個輸入會因平台而有不同結果,而 §3.4 的家規是「Windows 會炸的
+        //   路徑在任何平台都一致地拒絕」。
         var path = Uri.UnescapeDataString(new Uri(absoluteUrl).AbsolutePath).TrimStart('/');
         if (path.Length == 0)
         {
             return null;
         }
-        foreach (var segment in path.Replace('\\', '/').Split('/'))
+        foreach (var segment in path.Split('/'))
         {
-            if (segment is "." or "..")
+            if (segment is "." or ".." || segment.AsSpan().IndexOfAny('\\', ':') >= 0)
             {
                 return null;
             }
