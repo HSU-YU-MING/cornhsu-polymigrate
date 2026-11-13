@@ -121,6 +121,31 @@ public class NpmLauncherTests : CliTestBase
     }
 
     [Fact]
+    public async Task UnderNpx_TheMessageNamesTheCachedFolder_BecauseReinstallingCannotFixIt()
+    {
+        // npx 不是裝到 node_modules,是裝到 npm-cache/_npx/<hash>/。平台包還沒同步完就跑過一次 npx,
+        // 那份半成品會留在快取裡一直被重用 —— registry 補齊之後它還是壞的,而「npm install」修的是
+        // 別的地方(Parity 2.3.1 在同一個 registry 上實測)。所以在 npx 底下訊息要改叫人刪快取資料夾。
+        //
+        // 這裡把啟動腳本複製到一條含 _npx/<hash>/ 的路徑底下再跑:平台包一樣找不到,但走的是 npx 那一支。
+        var binDir = PathOf(Path.Combine("npm-cache", "_npx", "a1b2c3d4", "node_modules", "cornhsu-polymigrate", "bin"));
+        Directory.CreateDirectory(binDir);
+        var copied = Path.Combine(binDir, "polymigrate.js");
+        File.Copy(Launcher, copied);
+
+        var (exit, stdout, stderr) = await Node(null, copied, "--version");
+
+        Assert.Equal(2, exit);
+        Assert.Empty(stdout);
+        AssertLauncherFailure(stderr);
+        Assert.Contains("npx cached this incomplete install", stderr);
+        // 指的要是那個 hash 資料夾本身,不是它底下的 bin —— 使用者要刪的是整包
+        Assert.Contains(PathOf(Path.Combine("npm-cache", "_npx", "a1b2c3d4")), stderr);
+        // 這條路徑上「npm install」是誤導,不該再出現
+        Assert.DoesNotContain("npm install cornhsu-polymigrate", stderr);
+    }
+
+    [Fact]
     public async Task CtrlC_LeavesTheLauncherAlive_SoTheChildsExitCodeIsPassedOn()
     {
         // 主控台的 Ctrl-C 同時送給 node 與子行程。node 沒有 SIGINT 處理器的話會先被結束——Windows 上結束碼是

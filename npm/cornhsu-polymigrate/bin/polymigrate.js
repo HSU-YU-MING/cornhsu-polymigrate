@@ -64,10 +64,17 @@ try {
   const manifest = require.resolve(`${target.pkg}/package.json`);
   binary = path.join(path.dirname(manifest), "bin", target.bin);
 } catch {
+  // npx 不是裝到 node_modules,是裝到 npm-cache/_npx/<hash>/。半成品會一直被重用:
+  // registry 同步完成之後那份還是壞的,而「npm install」修的是別的地方,修不到它
+  // (Parity 2.3.1 在同一個 registry 上實測)。所以在 npx 底下要改叫人刪快取。
+  const npxCache = __dirname.match(/^(.*[\\/]_npx[\\/][^\\/]+)[\\/]/)?.[1];
   fail(
     `the platform package ${target.pkg} is not installed.`,
-    "It is an optional dependency: --no-optional / --omit=optional skips it, or the install was interrupted.",
-    "Reinstall: npm install cornhsu-polymigrate"
+    "It is an optional dependency: --no-optional / --omit=optional skips it, the install was interrupted, " +
+      "or a new release has not finished reaching the npm registry.",
+    npxCache
+      ? `npx cached this incomplete install, so running it again will not help. Delete this folder, then run npx again:\n  ${npxCache}`
+      : "Reinstall: npm install cornhsu-polymigrate"
   );
 }
 
