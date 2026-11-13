@@ -66,6 +66,31 @@ public class NpmPublishOrderTests
     }
 
     [Fact]
+    public void The_release_notes_are_extracted_before_anything_is_published()
+    {
+        // GitHub Release 的內容取自 CHANGELOG 對應那一節。抽取原本放在最後一步「Create GitHub Release」,
+        // 抽不到就安靜退回一句 "See CHANGELOG.md."。問題是那一步跑到的時候套件已經推上 nuget.org、
+        // 不可逆了 —— 在那裡失敗救不回任何東西,只會變成「套件出去了,但 Releases 頁是空的」。
+        // 現在抽取搬進最前面那個 CHANGELOG 守門:抽不到就擋,此時刪 tag 重來還救得回來。
+        var release = Read(".github", "workflows", "release.yml");
+
+        var gate = release.IndexOf("Assert CHANGELOG top entry matches the tag", StringComparison.Ordinal);
+        var extract = release.IndexOf("$RUNNER_TEMP/release-notes.md", StringComparison.Ordinal);
+        var push = release.IndexOf("- name: Push to NuGet", StringComparison.Ordinal);
+        var create = release.IndexOf("- name: Create GitHub Release", StringComparison.Ordinal);
+
+        Assert.True(gate >= 0, "release.yml 找不到 CHANGELOG 守門");
+        Assert.True(extract >= 0, "release.yml 沒有把 Release 內容抽出來存檔");
+        Assert.True(gate < extract, "抽取要在守門那一步裡");
+        Assert.True(extract < push, "抽取必須排在推上 nuget.org 之前,否則擋了也來不及");
+        Assert.True(push < create, "建 Release 本來就該是最後一步");
+
+        Assert.DoesNotContain("See CHANGELOG.md.", release);
+        Assert.Contains("--notes-file", release);
+        Assert.Single(Regex.Matches(release, "awk -v v="));   // 抽兩次遲早漂開
+    }
+
+    [Fact]
     public void The_token_guard_runs_before_anything_is_published()
     {
         // npm token 與 provenance 互斥:走 token 認證時憑證申請會 403(2.1.0 實際踩到)。
