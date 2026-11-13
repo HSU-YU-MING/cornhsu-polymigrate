@@ -73,8 +73,15 @@ rm -rf ./artifacts                             # artifacts/ 在 .gitignore 裡;�
 - **只有 CLI 上 npm**;`Cornhsu.PolyMigrate.Core` 是給 .NET 開發者的函式庫,受眾在 NuGet。
 - 認證只走 OIDC 信任發布(零長效金鑰)。七個套件(`cornhsu-polymigrate` 與六個 `@cornhsu/polymigrate-*`)
   都已存在、信任發布都已設定。workflow 沒有 token 通道:環境或 `.npmrc` 裡出現 npm token 時,
-  `Publish to npm` 那一步直接失敗。
+  `Refuse to publish with an npm token` 那一步直接失敗(排在所有發佈動作之前)。
 - 發布冪等:已存在的版本跳過而非報錯,某包失敗重跑不會被前面已成功的擋住。
+- **順序是三段的,不是一次發完**(4.1.2 起,`scripts/publish-npm-packages.sh`):
+  平台包先發 → 等每一包的壓縮檔**真的下載得到** → 入口套件最後發。
+  入口套件先上架、子套件還沒同步好的那段時間,`npm install` 不報錯、默默跳過選用相依,
+  裝完一執行才 exit 2;`npx` 還會把半成品留在快取裡重複使用。4.1.1 是平台包發完 13 秒就發入口套件,
+  而同一個 registry 上 Parity 量到最慢的一包要 61 分鐘才下載得到。
+  **所以這個 job 可能跑很久(腳本自己 180 分鐘逾時),那是正常的,不要以為它卡住了。**
+  逾時或任何一包失敗 → 入口套件不會發,使用者照樣裝到上一版;修好後重跑該 job 即可。
 
 一次性設定(已完成):在 npmjs.org 為 `cornhsu-polymigrate` 與 `@cornhsu/polymigrate-*` 設 trusted publisher
 (repo `HSU-YU-MING/cornhsu-polymigrate`、workflow `release.yml`)。

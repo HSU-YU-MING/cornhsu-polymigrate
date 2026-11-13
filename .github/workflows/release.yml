@@ -185,10 +185,9 @@ jobs:
       #     會讓 npm 拿空 token 去驗證而不改走 OIDC(actions/setup-node#1551)。
       #   - token 認證和 provenance 互斥:workflow 有 id-token: write,npm 會自動嘗試簽 provenance,
       #     認證若走 token,憑證申請就 403(CA_CREATE_SIGNING_CERTIFICATE_ERROR,2.1.0 實際踩到)。
-      # 所以下面先守門:環境或 .npmrc 裡出現 npm token 就直接失敗,不讓 npm 拿它去認證。
-      - name: Publish to npm
+      # 所以下面先守門:環境或 .npmrc 裡出現 npm token 就直接失敗,不讓 npm 拿它去認證。      # 守門先跑一次就好:環境或 .npmrc 裡出現 npm token 就直接失敗,不讓 npm 拿它去認證。
+      - name: Refuse to publish with an npm token
         run: |
-          # 刻意不用 -e:單一套件失敗要讓迴圈跑完再統一回報(見下方 failed 陣列)
           set -uo pipefail
           # 只看有沒有,不印出內容
           for v in $(compgen -e); do
@@ -205,36 +204,21 @@ jobs:
             fi
           done
           echo "認證:OIDC 信任發布"
-          # 冪等發布:已存在的版本跳過而不是報錯,某一包失敗時重跑不會被
-          # 前面已發成功的那幾包擋住(cornhsu-parity v0.9.6 實際踩過)。
-          # 2.1.0 又補上一課:失敗的那一包也不該擋住「排在它後面」的其餘套件,
-          # 否則一次失敗就要重跑很多趟才推得完。
-          failed=()
-          publish() {
-            local dir="$1" name version
-            name=$(node -p "require('./$dir/package.json').name")
-            version=$(node -p "require('./$dir/package.json').version")
-            if npm view "$name@$version" version >/dev/null 2>&1; then
-              echo "↷ $name@$version 已存在,跳過"
-              return 0
-            fi
-            echo "::group::publish $name@$version"
-            if ! npm publish "$dir" --access public; then
-              echo "::endgroup::"
-              echo "::warning::$name@$version 發布失敗,繼續處理其餘套件"
-              failed+=("$name@$version")
-              return 0
-            fi
-            echo "::endgroup::"
-          }
-          # 平台包要先上架,主套件的 optionalDependencies 才解析得到
-          for dir in npm/dist/polymigrate-*; do publish "$dir"; done
-          publish npm/dist/cornhsu-polymigrate
 
-          if [ ${#failed[@]} -gt 0 ]; then
-            echo "::error::${#failed[@]} 個套件未發布:${failed[*]}"
-            echo "重跑本 job 即可(已發布的會自動跳過);若失敗原因是認證,"
-            echo "先到 npmjs 確認該套件的信任發布設定(repo、workflow release.yml)再跑。"
-            exit 1
-          fi
-          echo "✔ npm 全數發布完成"
+      # 順序是重點,不是風格:使用者裝的是入口套件,平台子套件是它的選用相依。入口套件先上架、
+      # 子套件還沒好的那段時間,npm 不報錯、默默跳過,裝完一執行才 exit 2,而 npx 還會把半成品
+      # 留在快取裡,同步完成之後那份仍然是壞的(啟動腳本會叫人刪快取,但最好根本別讓人踩到)。
+      # 4.1.1 以前是平台包發完 13 秒就發入口套件;同一個 registry 上 Parity 量到子套件最久要 61 分鐘
+      # 才真的下載得到,等於每次發版都開一個那麼長的空窗。
+      # 所以子套件先發 → 等到壓縮檔真的下載得到 → 入口套件最後發(細節見 scripts/publish-npm-packages.sh)。
+      # 逾時或失敗:入口套件還沒發,使用者照樣裝到上一版;晚一點重跑這個 job(已發佈的會跳過)。
+      - name: Publish the npm platform packages (OIDC trusted publishing)
+        run: bash scripts/publish-npm-packages.sh platform npm/dist
+
+      - name: Wait until npm serves every platform package
+        timeout-minutes: 190
+        run: bash scripts/publish-npm-packages.sh wait npm/dist
+
+      - name: Publish the npm entry package (what users install)
+        timeout-minutes: 190
+        run: bash scripts/publish-npm-packages.sh entry npm/dist
