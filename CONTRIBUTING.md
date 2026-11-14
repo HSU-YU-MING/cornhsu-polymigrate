@@ -1,5 +1,27 @@
 # Contributing to PolyMigrate
 
+## Reporting
+
+The most useful thing you can send is not a pull request — it is **a report from a site I have
+never seen**. Every default in PolyMigrate was shaped by migrating real sites, and your URL scheme,
+your languages and your CMS's quirks are a sample I don't have.
+
+**A wrong pairing or verdict** is the most valuable report: two pages paired that aren't the same,
+a pair it should have found, or `verify` calling a page fine when it's broken (or the reverse). A
+confident-looking wrong pair is worse than an honest "couldn't pair". Use the
+[misjudgment form](https://github.com/HSU-YU-MING/cornhsu-polymigrate/issues/new?template=1-misjudgment.yml);
+it asks for the page keys, the rows from `pair_candidates.csv` or `verify_report.csv`, and why
+they're wrong. Masked placeholders for keys and titles are fine.
+
+**A bug** — a crash, a wrong exit code, broken output — goes in the
+[bug form](https://github.com/HSU-YU-MING/cornhsu-polymigrate/issues/new?template=2-bug-report.yml),
+which asks for the exact command and config, because migration bugs are almost never reproducible
+from a description alone.
+
+**Write in English or 中文, whichever is easier.** Security problems go privately through
+[SECURITY.md](SECURITY.md), not a public issue.
+
+
 ## Dev setup
 
 Requires the .NET 10 SDK. Everything runs from the repo root against `PolyMigrate.slnx`.

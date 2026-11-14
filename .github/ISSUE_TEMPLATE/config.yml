@@ -1,0 +1,19 @@
+# 檔名的數字前綴是排序用的：GitHub 照檔名字母排。順序是價值由高到低 ——「判斷錯了」（配錯對、verify 判錯）
+# 比「工具壞了」值錢（同 XamlContrast、Parity）。新增表單時記得加前綴，否則它會排到最前面。
+# 2026-11-14：原本只有 bug_report.yml，改名 2-bug-report.yml，並加上 1-misjudgment.yml。
+#
+# 空白 issue 保持開啟：表單不可能涵蓋所有情況，「沒有適合的表單」是人放棄回報最常見的理由。
+#
+# 參考 Ruff、typescript-eslint、ESLint 的表單補了：搜尋過舊 issue 的勾選、「可以在自己的站上試修正版」、
+# AI 協助聲明（後兩個選填）。
+blank_issues_enabled: true
+contact_links:
+  - name: How pairing works — read this first
+    url: https://github.com/HSU-YU-MING/cornhsu-polymigrate#why
+    about: Pairs are only ever suggested; what it cannot pair is reported honestly. Many surprises are explained here.
+  - name: How to report and contribute
+    url: https://github.com/HSU-YU-MING/cornhsu-polymigrate/blob/main/CONTRIBUTING.md
+    about: What makes a migration report reproducible, and how the golden tests guard the output.
+  - name: Security issue — report privately
+    url: https://github.com/HSU-YU-MING/cornhsu-polymigrate/security/advisories/new
+    about: Please don't open a public issue for a vulnerability. See SECURITY.md for what is in scope.

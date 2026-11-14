@@ -1,0 +1,93 @@
+name: Wrong pairing or verdict — it judged a page wrongly
+description: PolyMigrate paired two pages that aren't the same, missed a pair it should have found, or verify called a page fine (or broken) when it isn't.
+labels: ["misjudgment"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most valuable report this project receives. Pairing exists to save a human from matching
+        hundreds of pages by hand — a confident-looking wrong pair is worse than an honest "couldn't pair".
+
+        **Mask what you would not post publicly.** Page keys, slugs and titles can be shortened or replaced
+        with placeholders; what matters is the shape (which language, which section, what the two pages share).
+
+        Write in English or 中文, whichever is easier.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the [existing issues](https://github.com/HSU-YU-MING/cornhsu-polymigrate/issues?q=is%3Aissue) and this hasn't been reported.
+          required: true
+        - label: I read how pairing works and what `hreflang` can and can't do ([Why](https://github.com/HSU-YU-MING/cornhsu-polymigrate#why), [About hreflang](https://github.com/HSU-YU-MING/cornhsu-polymigrate#about-hreflang)).
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `polymigrate --version`
+      placeholder: "4.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong?
+      options:
+        - "Suggested or made a pair — but the pages are not the same page"
+        - "Missed a pair — the pages are the same, but it left them unpaired"
+        - "Wrong confidence label in pair_candidates.csv"
+        - "hreflang declaration was used (or dropped) wrongly"
+        - "verify called a page fine, but it is broken / missing / unlinked"
+        - "verify called a page broken, but it is fine"
+        - "Something else"
+    validations:
+      required: true
+
+  - type: textarea
+    id: pages
+    attributes:
+      label: The two pages (or the one page) involved
+      description: The page keys as PolyMigrate prints them, with their languages. Masked placeholders are fine.
+      placeholder: |
+        zh-Hant  news/20260301
+        en       news/event-03012026
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: What PolyMigrate reported
+      description: The matching rows of `pair_candidates.csv` or `verify_report.csv`, or the lines from the console summary.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: reality
+    attributes:
+      label: Why it's wrong
+      description: For example — the titles mean different things, one page is a photo gallery of a different day, the link is in a menu PolyMigrate can't see, the redirect target exists.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: The pairing part of your site config, if you changed it
+      description: Language prefixes, `pairing.decisions` path, anything you tuned. No URLs or credentials needed.
+      render: json
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: participation
+    attributes:
+      label: Optional
+      options:
+        - label: I can re-run a build with a fix on this site to confirm it.
+        - label: AI helped write this report, and I've checked it against what I actually ran.

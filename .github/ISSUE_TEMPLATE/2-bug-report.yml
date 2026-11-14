@@ -8,6 +8,16 @@ body:
         Migration bugs are almost never reproducible from a description alone — what makes them
         fixable is the config and the exact command. Thanks for taking the time to include them.
 
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the [existing issues](https://github.com/HSU-YU-MING/cornhsu-polymigrate/issues?q=is%3Aissue) and this hasn't been reported.
+          required: true
+        - label: This is the tool misbehaving, not a page paired or verified wrongly (that one has its own form above).
+          required: true
+
   - type: input
     id: version
     attributes:
